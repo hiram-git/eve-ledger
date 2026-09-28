@@ -2,6 +2,15 @@ import { API_URL } from 'astro:env/server';
 
 export type Flow = { income: number; expenses: number; net: number };
 
+export type MarketItem = {
+  typeId: number;
+  name: string | null;
+  quantity: number;
+  isk: number;
+  trades: number;
+  avgPrice: number;
+};
+
 export type Summary = {
   period: { days: number; from: string; to: string };
   totals: Flow;
@@ -16,6 +25,7 @@ export type Summary = {
   })[];
   byRefType: (Flow & { refType: string; count: number })[];
   daily: (Flow & { date: string })[];
+  market: { sold: MarketItem[]; bought: MarketItem[] };
 };
 
 export type SyncAllResult = { inserted: number; errors: number };

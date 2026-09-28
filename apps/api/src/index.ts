@@ -6,6 +6,7 @@ import { characterRoutes } from './routes/characters';
 import { summaryRoutes } from './routes/summary';
 import { startScheduler } from './services/scheduler';
 import { syncRoutes } from './routes/sync';
+import { transactionRoutes } from './routes/transactions';
 
 runMigrations();
 
@@ -19,6 +20,7 @@ const app = new Elysia()
   .use(characterRoutes)
   .use(syncRoutes)
   .use(summaryRoutes)
+  .use(transactionRoutes)
   .listen(env.port);
 
 console.log(`EVE Ledger API en http://localhost:${app.server?.port}`);

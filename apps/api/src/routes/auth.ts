@@ -3,7 +3,7 @@ import { db } from '../db/client';
 import { characters } from '../db/schema';
 import { encrypt } from '../lib/crypto';
 import { buildAuthorizeUrl, exchangeCode, verifyAccessToken } from '../lib/sso';
-import { syncJournal } from '../services/sync';
+import { syncCharacter } from '../services/sync';
 
 // Estados pendientes en memoria (app local, un solo usuario)
 const pendingStates = new Map<string, number>();
@@ -49,7 +49,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         .onConflictDoUpdate({ target: characters.id, set: values });
 
       // Primer sync en segundo plano: el journal solo guarda ~30 días, cuanto antes mejor
-      syncJournal(id.characterId).then(
+      syncCharacter(id.characterId).then(
         (r) => console.log(`[auth] sync inicial de ${id.name}: ${r.error ?? `${r.inserted} movimientos`}`),
         (err) => console.error(`[auth] sync inicial de ${id.name} falló:`, err),
       );
@@ -58,7 +58,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         <img src="https://images.evetech.net/characters/${id.characterId}/portrait?size=128" style="border-radius:8px">
         <h2>${id.name} vinculado ✔</h2>
         <p>Scopes: ${id.scopes.join(', ')}</p>
-        <p>Sincronizando su wallet journal en segundo plano…</p>
+        <p>Sincronizando su wallet (journal y transacciones) en segundo plano…</p>
         <p><a href="/auth/login">Vincular otro personaje</a> · <a href="/characters">Ver personajes</a></p>`);
     },
     { query: t.Object({ code: t.String(), state: t.String() }) },

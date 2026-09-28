@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, walletJournal } from '../db/schema';
+import { topItems } from './transactions';
 
 const DAY_MS = 86_400_000;
 
@@ -91,5 +92,6 @@ export async function getSummary(days: number) {
     characters: perCharacter,
     byRefType: byRefType.map(withNet).sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
     daily,
+    market: await topItems(from),
   };
 }
