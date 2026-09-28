@@ -10,10 +10,11 @@
 5. `bun run dev`
 6. Abre http://localhost:3000/auth/login y entra con un personaje
 7. Prueba: http://localhost:3000/characters/<id>/wallet
-8. Sincroniza el wallet journal:
+8. Sincroniza el wallet (journal + transacciones + nombres de ítems):
    - `curl -X POST http://localhost:3000/sync/<id>` (un personaje)
    - `curl -X POST http://localhost:3000/sync/all` (todos, en secuencia)
    - `curl http://localhost:3000/sync/log` (últimas ejecuciones y errores)
 9. Sync automático: la API sincroniza todos los personajes cada `SYNC_INTERVAL_MIN` minutos (60 por defecto; `0` lo desactiva).
    Estado en http://localhost:3000/sync/status. Al vincular un personaje se sincroniza enseguida.
 10. Resumen consolidado: http://localhost:3000/summary?days=30 (lo consume el dashboard de `apps/web`)
+11. Transacciones con nombres: http://localhost:3000/transactions?days=30 (filtros opcionales: `characterId`, `typeId`, `limit`)

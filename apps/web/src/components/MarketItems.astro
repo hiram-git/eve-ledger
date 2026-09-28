@@ -1,0 +1,77 @@
+---
+// Tabla de ítems del mercado: nombre, cantidad, ISK movido y precio medio
+import type { MarketItem } from '../lib/api';
+import { isk, iskFull } from '../lib/format';
+
+interface Props {
+  title: string;
+  items: MarketItem[];
+}
+const { title, items } = Astro.props;
+const qty = new Intl.NumberFormat('es');
+---
+
+<section class="card">
+  <h2>{title}</h2>
+  {
+    items.length === 0 ? (
+      <p class="empty">Sin transacciones en el período.</p>
+    ) : (
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Ítem</th>
+              <th>Cantidad</th>
+              <th>ISK</th>
+              <th>Precio medio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it) => (
+              <tr>
+                <td>
+                  <span class="item">
+                    <img
+                      src={`https://images.evetech.net/types/${it.typeId}/icon?size=32`}
+                      alt=""
+                      width="24"
+                      height="24"
+                      loading="lazy"
+                      onerror="this.style.visibility='hidden'"
+                    />
+                    <span class="name">{it.name ?? `#${it.typeId}`}</span>
+                  </span>
+                </td>
+                <td>{qty.format(it.quantity)}</td>
+                <td title={iskFull(it.isk)}>{isk(it.isk)}</td>
+                <td title={iskFull(it.avgPrice)}>{isk(it.avgPrice)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</section>
+
+<style>
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 16rem;
+  }
+  .item img {
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .empty {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+</style>

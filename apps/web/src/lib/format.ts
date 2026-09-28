@@ -6,7 +6,8 @@ export function isk(value: number, { sign = false } = {}): string {
   const abs = Math.abs(value);
   const [div, suffix] = abs >= 1e9 ? [1e9, ' B'] : abs >= 1e6 ? [1e6, ' M'] : abs >= 1e3 ? [1e3, ' k'] : [1, ''];
   const scaled = abs / div;
-  const digits = div === 1 ? 0 : scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  // Por debajo de 1000 se muestran decimales si los hay (precios unitarios de minerales, p. ej.)
+  const digits = div === 1 ? (Number.isInteger(abs) ? 0 : 2) : scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
   const prefix = value < 0 ? '−' : sign && value > 0 ? '+' : '';
   return `${prefix}${num(digits).format(scaled)}${suffix}`;
 }

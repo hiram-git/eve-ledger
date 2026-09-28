@@ -1,5 +1,6 @@
 ---
 import DailyChart from '../components/DailyChart.astro';
+import MarketItems from '../components/MarketItems.astro';
 import RefTypeBars from '../components/RefTypeBars.astro';
 import { getSummary, getSyncStatus, loginUrl, type Summary, type SyncStatus } from '../lib/api';
 import { ago, isk, iskFull, until } from '../lib/format';
@@ -136,6 +137,13 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
               <RefTypeBars title="En qué se va" kind="expenses" rows={expenseRows} />
             </div>
 
+            {(summary.market.sold.length > 0 || summary.market.bought.length > 0) && (
+              <div class="split">
+                <MarketItems title="Mercado: lo más vendido" items={summary.market.sold} />
+                <MarketItems title="Mercado: lo más comprado" items={summary.market.bought} />
+              </div>
+            )}
+
             <section class="card">
               <h2>Personajes</h2>
               <div class="scroll">
@@ -161,6 +169,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
                               width="28"
                               height="28"
                               loading="lazy"
+                              onerror="this.style.visibility='hidden'"
                             />
                             {c.name}
                           </span>
@@ -410,6 +419,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
   }
   th,
   td {
+    vertical-align: middle;
     padding: 8px 12px;
     text-align: right;
     border-bottom: 1px solid var(--grid);
@@ -428,7 +438,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
     border-bottom: none;
   }
   .who {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 10px;
   }

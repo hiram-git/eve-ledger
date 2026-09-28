@@ -54,18 +54,26 @@ async function waitIfPaused() {
   if (ms > 0) await Bun.sleep(ms);
 }
 
-export async function esiGet<T>(path: string, characterId?: number): Promise<{ data: T; headers: Headers }> {
+type EsiResponse<T> = { data: T; headers: Headers };
+
+async function esiRequest<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  { characterId, body }: { characterId?: number; body?: unknown } = {},
+): Promise<EsiResponse<T>> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'X-Compatibility-Date': env.esiCompatDate,
     'User-Agent': env.esiUserAgent,
   };
   if (characterId) headers.Authorization = `Bearer ${await getAccessToken(characterId)}`;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const payload = body === undefined ? undefined : JSON.stringify(body);
 
   // Como mucho un reintento, y solo tras esperar lo que pidió ESI (420/429)
   for (let attempt = 0; ; attempt++) {
     await waitIfPaused();
-    const res = await fetch(`${BASE}${path}`, { headers });
+    const res = await fetch(`${BASE}${path}`, { method, headers, body: payload });
     trackLimits(res);
 
     if (res.ok) return { data: (await res.json()) as T, headers: res.headers };
@@ -73,3 +81,8 @@ export async function esiGet<T>(path: string, characterId?: number): Promise<{ d
     throw new EsiError(res.status, path, await res.text());
   }
 }
+
+export const esiGet = <T>(path: string, characterId?: number) => esiRequest<T>('GET', path, { characterId });
+
+export const esiPost = <T>(path: string, body: unknown, characterId?: number) =>
+  esiRequest<T>('POST', path, { characterId, body });

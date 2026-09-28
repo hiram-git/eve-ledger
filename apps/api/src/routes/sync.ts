@@ -3,7 +3,7 @@ import { desc } from 'drizzle-orm';
 import { db } from '../db/client';
 import { syncLog } from '../db/schema';
 import { schedulerStatus } from '../services/scheduler';
-import { syncAll, syncJournal } from '../services/sync';
+import { syncAll, syncCharacter } from '../services/sync';
 
 export const syncRoutes = new Elysia({ prefix: '/sync' })
   .post('/all', async () => {
@@ -17,7 +17,7 @@ export const syncRoutes = new Elysia({ prefix: '/sync' })
   .post(
     '/:characterId',
     async ({ params, status }) => {
-      const result = await syncJournal(params.characterId);
+      const result = await syncCharacter(params.characterId);
       return result.error ? status(502, result) : result;
     },
     { params: t.Object({ characterId: t.Numeric() }) },
