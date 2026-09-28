@@ -2,7 +2,9 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, syncLog, walletJournal, walletTransactions } from '../db/schema';
 import { esiGet } from '../lib/esi';
-import { resolveTransactionNames } from './names';
+import { ASSETS_SCOPE, fetchAssets } from './assets';
+import { resolvePendingNames } from './names';
+import { refreshPricesIfStale } from './prices';
 
 // GET /characters/{id}/wallet/journal (solo los campos que guardamos)
 type EsiJournalEntry = {
@@ -31,16 +33,18 @@ type EsiTransaction = {
   journal_ref_id: number;
 };
 
-type Kind = 'journal' | 'transactions';
+type Kind = 'journal' | 'transactions' | 'assets';
 
 export type StepResult = { pages: number; fetched: number; inserted: number; error?: string };
 
 export type SyncResult = {
   characterId: number;
   name?: string;
-  inserted: number; // journal + transacciones
+  inserted: number; // movimientos nuevos: journal + transacciones
   journal?: StepResult;
   transactions?: StepResult;
+  assets?: StepResult; // foto completa: inserted = ítems guardados, no "nuevos"
+  skipped?: string[];
   namesResolved?: number;
   error?: string;
 };
@@ -166,7 +170,19 @@ export const syncJournal = (characterId: number) => logged(characterId, 'journal
 export const syncTransactions = (characterId: number) =>
   logged(characterId, 'transactions', (r) => fetchTransactions(characterId, r));
 
-// Journal + transacciones de un personaje, y después los nombres que falten
+export const syncAssets = (characterId: number) => logged(characterId, 'assets', (r) => fetchAssets(characterId, r));
+
+// Tareas públicas (sin token) tras sincronizar: fallan sin invalidar los datos ya guardados
+// y se reintentan en el próximo sync
+async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.warn(`[${label}] falló:`, err instanceof Error ? err.message : err);
+  }
+}
+
+// Journal + transacciones + inventario de un personaje; después precios y nombres que falten
 export async function syncCharacter(characterId: number): Promise<SyncResult> {
   const ch = await db.query.characters.findFirst({ where: eq(characters.id, characterId) });
   if (!ch) throw new Error(`Personaje ${characterId} no vinculado`);
@@ -180,21 +196,23 @@ export async function syncCharacter(characterId: number): Promise<SyncResult> {
   try {
     result.journal = await syncJournal(characterId);
     // Si el token falló en el journal, fallará igual aquí: no gastar errores de ESI
-    result.transactions = result.journal.error ? undefined : await syncTransactions(characterId);
+    const tokenOk = !result.journal.error;
+    if (tokenOk) {
+      result.transactions = await syncTransactions(characterId);
+      // Personajes vinculados antes de pedir este scope: hay que revincularlos
+      if (ch.scopes.split(' ').includes(ASSETS_SCOPE)) result.assets = await syncAssets(characterId);
+      else result.skipped = [`inventario: falta el scope ${ASSETS_SCOPE}, vuelve a vincular el personaje`];
+    }
     result.inserted = result.journal.inserted + (result.transactions?.inserted ?? 0);
 
-    const errors = [result.journal.error, result.transactions?.error].filter(Boolean);
+    const errors = [result.journal.error, result.transactions?.error, result.assets?.error].filter(Boolean);
     if (errors.length) result.error = errors.join(' | ');
     else await db.update(characters).set({ lastSyncAt: new Date() }).where(eq(characters.id, characterId));
 
-    // Consulta local; solo llama a ESI si hay IDs sin nombre (también reintenta fallos anteriores)
-    if (result.transactions) {
-      try {
-        result.namesResolved = await resolveTransactionNames();
-      } catch (err) {
-        // Los nombres se reintentan en el próximo sync; no invalida los datos ya guardados
-        console.warn(`[names] no se pudieron resolver:`, err instanceof Error ? err.message : err);
-      }
+    if (tokenOk) {
+      // Solo llaman a ESI si hace falta: precios de más de 1 h, IDs sin nombre (reintenta fallos anteriores)
+      if (result.assets && !result.assets.error) await bestEffort('prices', refreshPricesIfStale);
+      result.namesResolved = await bestEffort('names', resolvePendingNames);
     }
   } finally {
     running.delete(characterId);

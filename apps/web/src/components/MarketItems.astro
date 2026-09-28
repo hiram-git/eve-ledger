@@ -1,21 +1,34 @@
 ---
-// Tabla de ítems del mercado: nombre, cantidad, ISK movido y precio medio
-import type { MarketItem } from '../lib/api';
+// Tabla de ítems: nombre, cantidad, ISK total y precio unitario
 import { isk, iskFull } from '../lib/format';
+
+export type ItemRow = { typeId: number; name: string | null; quantity: number; isk: number; unitPrice: number };
 
 interface Props {
   title: string;
-  items: MarketItem[];
+  items: ItemRow[];
+  iskLabel?: string;
+  priceLabel?: string;
+  empty?: string;
 }
-const { title, items } = Astro.props;
+const {
+  title,
+  items,
+  iskLabel = 'ISK',
+  priceLabel = 'Precio medio',
+  empty = 'Sin transacciones en el período.',
+} = Astro.props;
 const qty = new Intl.NumberFormat('es');
 ---
 
-<section class="card">
-  <h2>{title}</h2>
+<section class="panel">
+  <div class="panel-heading">
+    <h3>{title}</h3>
+    {items.length > 0 && <span class="meta">Top {items.length}</span>}
+  </div>
   {
     items.length === 0 ? (
-      <p class="empty">Sin transacciones en el período.</p>
+      <p class="empty panel-body">{empty}</p>
     ) : (
       <div class="scroll">
         <table>
@@ -23,8 +36,8 @@ const qty = new Intl.NumberFormat('es');
             <tr>
               <th>Ítem</th>
               <th>Cantidad</th>
-              <th>ISK</th>
-              <th>Precio medio</th>
+              <th>{iskLabel}</th>
+              <th>{priceLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -32,20 +45,31 @@ const qty = new Intl.NumberFormat('es');
               <tr>
                 <td>
                   <span class="item">
-                    <img
-                      src={`https://images.evetech.net/types/${it.typeId}/icon?size=32`}
-                      alt=""
-                      width="24"
-                      height="24"
-                      loading="lazy"
-                      onerror="this.style.visibility='hidden'"
-                    />
+                    <span class="thumb">
+                      <img
+                        src={`https://images.evetech.net/types/${it.typeId}/icon?size=32`}
+                        alt=""
+                        width="24"
+                        height="24"
+                        loading="lazy"
+                        onerror="this.style.visibility='hidden'"
+                      />
+                    </span>
                     <span class="name">{it.name ?? `#${it.typeId}`}</span>
                   </span>
                 </td>
                 <td>{qty.format(it.quantity)}</td>
-                <td title={iskFull(it.isk)}>{isk(it.isk)}</td>
-                <td title={iskFull(it.avgPrice)}>{isk(it.avgPrice)}</td>
+                {it.unitPrice > 0 ? (
+                  <>
+                    <td title={`${iskFull(it.isk)} · ${iskFull(it.unitPrice)} c/u`}>{isk(it.isk)}</td>
+                    <td title={iskFull(it.unitPrice)}>{isk(it.unitPrice)}</td>
+                  </>
+                ) : (
+                  <>
+                    <td class="muted" title="Sin precio">—</td>
+                    <td class="muted" title="Sin precio en ESI o copia de blueprint">—</td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
@@ -56,15 +80,29 @@ const qty = new Intl.NumberFormat('es');
 </section>
 
 <style>
+  table th:first-child,
+  table td:first-child {
+    padding-left: 22px;
+  }
+  table th:last-child,
+  table td:last-child {
+    padding-right: 22px;
+  }
   .item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     max-width: 16rem;
   }
-  .item img {
-    border-radius: 4px;
+  .thumb {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
+    border: 1px solid #2b4251;
+    border-radius: 5px;
+    background: #162834;
   }
   .name {
     overflow: hidden;
@@ -73,5 +111,27 @@ const qty = new Intl.NumberFormat('es');
   .empty {
     color: var(--text-muted);
     font-size: 13px;
+  }
+  /* En móvil: sin precio unitario (queda en el tooltip del total) y celdas más compactas */
+  @media (max-width: 480px) {
+    th:nth-child(4),
+    td:nth-child(4) {
+      display: none;
+    }
+    th,
+    td {
+      padding: 8px 6px;
+    }
+    table th:first-child,
+    table td:first-child {
+      padding-left: 16px;
+    }
+    table th:nth-child(3),
+    table td:nth-child(3) {
+      padding-right: 16px;
+    }
+    .item {
+      max-width: 9rem;
+    }
   }
 </style>

@@ -15,6 +15,13 @@
       "when": 1790580049920,
       "tag": "0001_military_frog_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790580428252,
+      "tag": "0002_ambitious_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }

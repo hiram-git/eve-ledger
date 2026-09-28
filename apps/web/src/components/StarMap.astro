@@ -1,0 +1,175 @@
+---
+// Fondo de la cabecera: mapa esquemático de New Eden con rutas comerciales y
+// naves de transporte recorriéndolas. Puramente decorativo
+const W = 1200;
+const H = 170;
+
+// [nombre, x, y, sec]; las posiciones son estéticas, no geográficas
+const systems: [string, number, number, string][] = [
+  ['JITA', 610, 70, '0.9'],
+  ['PERIMETER', 560, 42, '1.0'],
+  ['NEW CALDARI', 668, 34, '1.0'],
+  ['UEDAMA', 700, 118, '0.5'],
+  ['NIARJA', 790, 104, '0.5'],
+  ['AMARR', 900, 64, '1.0'],
+  ['ASHAB', 850, 138, '0.6'],
+  ['SIVALA', 760, 150, '0.6'],
+  ['DODIXIE', 330, 118, '0.9'],
+  ['BOTANE', 420, 138, '0.5'],
+  ['OURSULAERT', 470, 96, '0.8'],
+  ['RENS', 180, 56, '0.9'],
+  ['HEK', 250, 26, '0.5'],
+  ['AMAMAKE', 118, 132, '0.4'],
+  ['TAMA', 1010, 128, '0.3'],
+  ['RANCER', 1080, 70, '0.4'],
+  ['HED-GP', 1140, 30, '-0.2'],
+];
+const at = (name: string) => systems.find((s) => s[0] === name)!;
+
+const links: [string, string][] = [
+  ['PERIMETER', 'JITA'], ['JITA', 'NEW CALDARI'], ['JITA', 'UEDAMA'], ['UEDAMA', 'NIARJA'], ['NIARJA', 'AMARR'],
+  ['NIARJA', 'ASHAB'], ['ASHAB', 'AMARR'], ['UEDAMA', 'SIVALA'], ['JITA', 'OURSULAERT'], ['OURSULAERT', 'BOTANE'],
+  ['BOTANE', 'DODIXIE'], ['DODIXIE', 'RENS'], ['RENS', 'HEK'], ['HEK', 'PERIMETER'], ['RENS', 'AMAMAKE'],
+  ['AMARR', 'TAMA'], ['TAMA', 'RANCER'], ['RANCER', 'HED-GP'], ['AMARR', 'RANCER'], ['OURSULAERT', 'PERIMETER'],
+];
+
+// Rutas de transporte: Jita ↔ Amarr y Jita ↔ Dodixie ↔ Rens
+const route = (names: string[]) => 'M ' + names.map((n) => `${at(n)[1]} ${at(n)[2]}`).join(' L ');
+const routes = [
+  { d: route(['JITA', 'UEDAMA', 'NIARJA', 'AMARR']), dur: '26s', begin: '0s' },
+  { d: route(['RENS', 'DODIXIE', 'BOTANE', 'OURSULAERT', 'JITA']), dur: '32s', begin: '-12s' },
+  { d: route(['AMARR', 'NIARJA', 'UEDAMA', 'JITA', 'PERIMETER']), dur: '38s', begin: '-20s' },
+];
+
+// Estrellas de fondo deterministas (mismo cielo en cada carga)
+let seed = 42;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r: rnd() * 0.9 + 0.2, o: rnd() * 0.5 + 0.15 }));
+---
+
+<div class="star-map" aria-hidden="true">
+  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice">
+    <g class="stars">{stars.map((s) => <circle cx={s.x} cy={s.y} r={s.r} opacity={s.o} />)}</g>
+    <g class="links">
+      {links.map(([a, b]) => <line x1={at(a)[1]} y1={at(a)[2]} x2={at(b)[1]} y2={at(b)[2]} />)}
+    </g>
+    <g class="routes">{routes.map((r) => <path d={r.d} />)}</g>
+    <g class="nodes">
+      {
+        systems.map(([name, x, y, sec]) => (
+          <g class:list={{ hub: name === 'JITA' || name === 'AMARR', low: Number(sec) < 0.5 }}>
+            <circle cx={x} cy={y} r={name === 'JITA' ? 3.2 : 2} />
+            <text x={x + 7} y={y + 3}>
+              {name}
+            </text>
+            <text class="sec" x={x + 7} y={y + 12}>
+              {sec}
+            </text>
+          </g>
+        ))
+      }
+    </g>
+    <circle class="ping" cx={at('JITA')[1]} cy={at('JITA')[2]} r="4"></circle>
+    {
+      routes.map((r) => (
+        <g class="courier">
+          <path d="M -5 -2.5 L 5 0 L -5 2.5 L -3 0 Z" />
+          <animateMotion dur={r.dur} begin={r.begin} repeatCount="indefinite" rotate="auto" path={r.d} />
+        </g>
+      ))
+    }
+  </svg>
+</div>
+
+<style>
+  .star-map {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.75;
+    /* Tenue detrás del título (izquierda), nítido a la derecha */
+    mask-image: linear-gradient(90deg, #0000 0, #0002 30%, #000 48%, #000 92%, #0000);
+  }
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+  .stars {
+    fill: #9cc4dc;
+  }
+  .links line {
+    stroke: #2b3d4b;
+    stroke-width: 0.8;
+  }
+  .routes path {
+    fill: none;
+    stroke: #3e7f96;
+    stroke-width: 1;
+    stroke-dasharray: 3 5;
+    opacity: 0.7;
+    animation: flow 14s linear infinite;
+  }
+  .nodes circle {
+    fill: #577689;
+  }
+  .nodes text {
+    font: 9px var(--mono);
+    letter-spacing: 0.08em;
+    fill: #6c8698;
+  }
+  .nodes text.sec {
+    font-size: 7px;
+    fill: #4c6474;
+  }
+  .nodes .hub circle {
+    fill: var(--cyan);
+  }
+  .nodes .hub text:not(.sec) {
+    fill: #9fd3e3;
+  }
+  .nodes .low circle {
+    fill: #9a5a5a;
+  }
+  .ping {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-width: 1;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: ping 3s ease-out infinite;
+  }
+  .courier path {
+    fill: #a9e7f3;
+    opacity: 0.8;
+  }
+  @keyframes flow {
+    to {
+      stroke-dashoffset: -80;
+    }
+  }
+  @keyframes ping {
+    from {
+      transform: scale(1);
+      opacity: 0.9;
+    }
+    to {
+      transform: scale(5);
+      opacity: 0;
+    }
+  }
+  /* En móvil el título ocupa casi todo el ancho: el mapa queda como textura */
+  @media (max-width: 750px) {
+    .star-map {
+      opacity: 0.35;
+      mask-image: linear-gradient(90deg, #0002, #000 60%);
+    }
+    .nodes text {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .courier {
+      display: none;
+    }
+  }
+</style>

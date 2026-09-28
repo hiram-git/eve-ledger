@@ -5,7 +5,8 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 
 ## Stack
 - `apps/api`: Bun + Elysia + Drizzle + SQLite (`bun:sqlite`)
-- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`
+- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`. Tema oscuro tipo HUD en `src/styles/theme.css`. Fuentes autoalojadas con `@fontsource` (Inter para la interfaz, IBM Plex Mono solo para cifras y datos, Barlow Condensed solo para el logotipo). Colores de datos: ingresos `#2a98c0`, gastos `#e8604c`, inventario `#9a7cf0`, validados sobre el fondo de los paneles; no reutilizarlos como colores de interfaz.
+- Diseño: skill **impeccable** instalado en `.claude/skills/impeccable` (versión y origen en `UPSTREAM`; agentes en `.claude/agents/`). Sin sus hooks automáticos: tras cambiar UI, correr `.claude/skills/impeccable/scripts/impeccable detect --json <archivos>`. Reglas adoptadas: sin eyebrows sobre títulos ni números de sección, el cian solo para acciones/estado, movimiento solo en el mapa estelar y el ticker.
 - Un solo usuario, sin multitenant ni login propio. Si crece: migrar a PostgreSQL con Drizzle.
 
 ## Decisiones tomadas (no cambiar sin preguntar)
@@ -17,11 +18,14 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Sincronización idempotente: los IDs de ESI (`journal_id`, `transaction_id`) son PK; insertar con `onConflictDoNothing`.
 - Nombres de ESI (ítems, estaciones…) en la tabla `names`, resueltos con `POST /universe/names` (`src/services/names.ts`). Los IDs que ESI no reconoce se guardan como `unknown` para no repetir el 404. Las estructuras de jugadores (IDs > 1e12) quedan sin nombre: requieren el scope `esi-universe.read_structures.v1`.
 - Las compras/ventas entre personajes propios (`client_id` vinculado) se excluyen del top de ítems.
+- Inventario (`assets`): es una foto, no un historial. En cada sync se reemplazan los assets del personaje (upsert por `item_id`, así un ítem que pasa a otro personaje se mueve). `root_location_id` = estación/estructura/sistema final, subiendo por naves y contenedores.
+- Valoración: precio medio global de `GET /markets/prices` (tabla `market_prices`, refresco como mucho cada hora). No es el precio de venta de Jita. Las copias de blueprint valen 0.
+- Si un personaje no tiene el scope `esi-assets.read_assets.v1`, se salta su inventario (hay que revincularlo).
 - `/summary` excluye las transferencias internas (ambas partes son personajes vinculados): en el consolidado se anulan. El saldo por personaje es el `balance` del último movimiento del journal.
 - Migraciones: `bun run db:generate` las crea; se aplican solas al arrancar (`runMigrations()`).
 
 ## Esquema (`src/db/schema.ts`)
-`characters`, `wallet_journal`, `wallet_transactions` (con `client_id` y `journal_ref_id`), `names`, `sync_log` (con `kind`: `journal` | `transactions`).
+`characters`, `wallet_journal`, `wallet_transactions` (con `client_id` y `journal_ref_id`), `names`, `assets`, `market_prices`, `sync_log` (con `kind`: `journal` | `transactions` | `assets`).
 
 ## Estado
 - [x] 1. App registrada en developers.eveonline.com (scopes: `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`)
@@ -32,7 +36,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - [x] 6b. Cron dentro de la API (`src/services/scheduler.ts`): `syncAll()` cada `SYNC_INTERVAL_MIN` (60 por defecto, 0 lo desactiva). Al arrancar retoma el ritmo desde el último `sync_log`; estado en `GET /sync/status`. Al vincular un personaje se lanza su primer sync en segundo plano.
 - [ ] 6a. Vincular los 5 personajes (manual: `http://localhost:3000/auth/login` con cada uno)
 - [x] 7. Wallet transactions + nombres de ítems: `syncCharacter()` hace journal → transacciones (paginando con `from_id`) → nombres pendientes. `GET /transactions`, `market` en `/summary` y tablas de ítems en el dashboard.
-- [ ] 8. Inventario con `/characters/{id}/assets`
+- [x] 8. Inventario + precios: `syncCharacter()` añade assets → precios (si tienen > 1 h) → nombres. `GET /inventory` (valor por personaje, ubicación e ítem), `GET /assets` (detalle) y sección de inventario en el dashboard.
 
 ## Paso 4 — especificación
 - `src/services/sync.ts`: `syncJournal(characterId)`
