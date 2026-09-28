@@ -12,7 +12,8 @@ export function isk(value: number, { sign = false } = {}): string {
   return `${prefix}${num(digits).format(scaled)}${suffix}`;
 }
 
-export const iskFull = (value: number) => `${num(2).format(value)} ISK`;
+// Signo menos tipográfico (U+2212), igual que en las cifras abreviadas
+export const iskFull = (value: number) => `${num(2).format(value).replace('-', '−')} ISK`;
 
 export const shortDate = (iso: string) =>
   new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(iso));

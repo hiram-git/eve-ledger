@@ -9,7 +9,7 @@ const locationName = alias(names, 'location_name');
 
 // Precio unitario: medio de ESI (o el ajustado si no hay medio). Las copias de blueprint
 // no se venden en el mercado y su average_price es el del original: valen 0
-const unitPrice = sql<number>`(case when ${a.isBlueprintCopy} then 0 else coalesce(${p.averagePrice}, ${p.adjustedPrice}, 0) end)`;
+export const unitPrice = sql<number>`(case when ${a.isBlueprintCopy} then 0 else coalesce(${p.averagePrice}, ${p.adjustedPrice}, 0) end)`;
 const value = sql<number>`coalesce(sum(${a.quantity} * ${unitPrice}), 0)`;
 const priced = eq(p.typeId, a.typeId);
 

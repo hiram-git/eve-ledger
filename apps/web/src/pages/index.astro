@@ -7,11 +7,22 @@ import '@fontsource/barlow-condensed/700.css';
 import '../styles/theme.css';
 import DailyChart from '../components/DailyChart.astro';
 import Icon from '../components/Icon.astro';
-import StarMap from '../components/StarMap.astro';
+import NewEdenMap from '../components/NewEdenMap.astro';
 import MarketItems from '../components/MarketItems.astro';
 import BarList, { type BarRow } from '../components/BarList.astro';
-import { getInventory, getSummary, getSyncStatus, loginUrl, type Inventory, type Summary, type SyncStatus } from '../lib/api';
-import { ago, isk, iskFull, refTypeLabel, until } from '../lib/format';
+import {
+  getInventory,
+  getMap,
+  getSummary,
+  getSyncStatus,
+  loginUrl,
+  syncLogUrl,
+  type GeoMap,
+  type Inventory,
+  type Summary,
+  type SyncStatus,
+} from '../lib/api';
+import { ago, isk, iskFull, refTypeLabel, shortDate, until } from '../lib/format';
 
 const PERIODS = [7, 30, 90];
 const q = Astro.url.searchParams;
@@ -20,13 +31,16 @@ const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 3
 let summary: Summary | undefined;
 let status: SyncStatus | undefined;
 let inventory: Inventory | undefined;
+let geo: GeoMap | undefined;
 let apiError: string | undefined;
 try {
-  // El inventario es opcional: si falla, el resto del dashboard se muestra igual
-  [summary, status, inventory] = await Promise.all([
+  // Inventario y mapa son opcionales: si fallan, el resto del dashboard se muestra igual
+  const optional = <T,>(p: Promise<T>) => p.catch((err) => (console.error(err), undefined));
+  [summary, status, inventory, geo] = await Promise.all([
     getSummary(days),
     getSyncStatus(),
-    getInventory().catch((err) => (console.error(err), undefined)),
+    optional(getInventory()),
+    optional(getMap()),
   ]);
 } catch (err) {
   apiError = err instanceof Error ? err.message : String(err);
@@ -40,7 +54,7 @@ const syncFailed = q.get('syncFailed');
 const cron = !status
   ? undefined
   : !status.enabled
-    ? { cls: 'off', text: 'Sync auto desactivado' }
+    ? { cls: 'off', text: 'Sync automático desactivado' }
     : status.running
       ? { cls: 'busy', text: 'Sincronizando…' }
       : {
@@ -65,25 +79,18 @@ const lastSync = summary?.characters
   .sort()
   .at(-1);
 
-// Telemetría para el ticker: neto por piloto, mayor fuente de ingresos, inventario
-type Tick = { label: string; value: string; trend?: 'up' | 'down' };
-const ticks: Tick[] = [];
-if (summary) {
-  for (const c of summary.characters) {
-    ticks.push({ label: c.name.toUpperCase(), value: isk(c.net, { sign: true }), trend: c.net >= 0 ? 'up' : 'down' });
-  }
-  const topIncome = [...summary.byRefType].sort((a, b) => b.income - a.income)[0];
-  if (topIncome?.income) ticks.push({ label: `TOP INGRESO · ${refTypeLabel(topIncome.refType).toUpperCase()}`, value: isk(topIncome.income) });
-  const topSold = summary.market.sold[0];
-  if (topSold) ticks.push({ label: `MÁS VENDIDO · ${(topSold.name ?? `#${topSold.typeId}`).toUpperCase()}`, value: isk(topSold.isk) });
-}
-if (inventory?.stacks) {
-  ticks.push({ label: 'INVENTARIO', value: isk(inventory.value) });
-  if (inventory.byLocation[0]) {
-    ticks.push({ label: `HUB PRINCIPAL · ${(inventory.byLocation[0].name ?? 'ESTRUCTURA').split(' - ')[0].toUpperCase()}`, value: isk(inventory.byLocation[0].value) });
-  }
-}
-if (lastSync) ticks.push({ label: 'ÚLTIMO SYNC', value: ago(lastSync).toUpperCase() });
+// Antigüedad: datos «viejos» cuando superan dos intervalos de sync (o 2 h si el cron está apagado)
+const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const isStale = (iso: string | null | undefined) => !iso || Date.now() - new Date(iso).getTime() > staleAfterMs;
+const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
+const partialHistory = summary && summary.coverage.firstEntryAt && summary.coverage.coveredDays < days;
+
+// Signo del neto como estado semántico (verde/rojo + flecha), no como decoración
+const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
+const delta = summary && summary.previous.complete ? summary.totals.net - summary.previous.net : undefined;
+
+// Rango real del período en hora de EVE, para el subtítulo de la navegación
+const range = summary ? `${shortDate(summary.period.from)} – ${shortDate(summary.period.to)}` : undefined;
 
 const refRows = (pick: (r: Summary['byRefType'][number]) => number): BarRow[] =>
   summary?.byRefType.map((r) => ({ label: refTypeLabel(r.refType), value: pick(r), detail: `${r.count} movimientos` })) ?? [];
@@ -112,11 +119,11 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     <meta name="theme-color" content="#070c13" />
     <title>EVE Ledger</title>
   </head>
-  <body>
+  <body data-last-run={status?.lastRun?.finishedAt ?? ''}>
     <header class="utility shell">
       <div class="micro-brand">
-        <span class="brand-square">E</span>
-        EVE LEDGER
+        <span class="brand-square" aria-hidden="true">E</span>
+        <h1 class="wordmark">EVE Ledger</h1>
         <span class="muted">· {summary ? `${summary.characters.length} pilotos` : 'sin conexión'}</span>
       </div>
       <div class="utility-right">
@@ -138,15 +145,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       </div>
     </header>
 
-    <section class="hero">
-      <StarMap />
-      <div class="hero-lockup shell">
-        <div class="hero-title">
-          <h1>EVE <span>Ledger</span><i>_</i></h1>
-          <p>Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI</p>
-        </div>
-      </div>
-    </section>
 
     <nav class="main-nav shell" aria-label="Período">
       <div class="nav-tabs">
@@ -159,57 +157,28 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
           ))
         }
       </div>
-      <a class="secondary-button" href={loginUrl}>
-        <Icon name="plus" />
-        Vincular piloto
-      </a>
+      <p class="period-meta">
+        {range && <span>{range} · hora EVE</span>}
+        {
+          partialHistory && (
+            <span class="coverage" title="ESI solo guarda ~30 días del journal: el historial crece desde el primer sync">
+              <Icon name="info" />
+              Historial desde {shortDate(summary!.coverage.firstEntryAt!)} ({summary!.coverage.coveredDays} de {days} días)
+            </span>
+          )
+        }
+        {
+          lastSync && (
+            <span class:list={['fresh', { stale: isStale(lastSync) }]}>
+              <Icon name={isStale(lastSync) ? 'alert' : 'activity'} />
+              Actualizado <time datetime={lastSync} data-ago={lastSync}>{ago(lastSync)}</time>
+            </span>
+          )
+        }
+      </p>
     </nav>
 
-    {
-      ticks.length > 0 && (
-        <div class="shell">
-          <div class="ticker" role="marquee" aria-label="Telemetría">
-            <span class="ticker-label">
-              <Icon name="signal" />
-              <span>TELEMETRÍA</span>
-            </span>
-            <div class="ticker-window">
-              <div class="ticker-track">
-                {/* Contenido duplicado: la animación desplaza -50% y el bucle no se nota */}
-                {[0, 1].map((copy) =>
-                  ticks.map((t) => (
-                    <>
-                      <span aria-hidden={copy === 1 ? 'true' : undefined}>
-                        {t.label} <b class:list={{ up: t.trend === 'up', down: t.trend === 'down' }}>{t.value}</b>
-                      </span>
-                      <span class="sep" aria-hidden="true" />
-                    </>
-                  )),
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
     <main class="shell">
-      <div class="page-heading">
-        <div>
-          <h2>Estado <span>de la flota</span></h2>
-          <p class="subtitle">
-            <span>Últimos {days} días</span>
-            {
-              lastSync && (
-                <span class="fresh">
-                  <Icon name="activity" />
-                  Datos de ESI {ago(lastSync)}
-                </span>
-              )
-            }
-          </p>
-        </div>
-      </div>
 
       {
         synced !== null && (
@@ -217,7 +186,27 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             <Icon name="info" />
             <p>
               Sincronización completa: {synced} movimientos nuevos
-              {syncErrors && <strong> · {syncErrors} personaje(s) con error (revisa /sync/log en la API)</strong>}
+              {syncErrors && (
+                <strong>
+                  {' '}
+                  · {syncErrors} {syncErrors === '1' ? 'piloto con error' : 'pilotos con error'}: revisa el{' '}
+                  <a href={syncLogUrl}>registro de sync</a>
+                </strong>
+              )}
+            </p>
+          </div>
+        )
+      }
+      {
+        summary && summary.characters.length > 0 && isStale(lastSync) && (
+          <div class="notice warning" role="status">
+            <Icon name="alert" />
+            <p>
+              <strong>Datos desactualizados:</strong> el último sync fue {lastSync ? ago(lastSync) : 'nunca'}.
+              {status && !status.enabled
+                ? ' El sync automático está desactivado (SYNC_INTERVAL_MIN=0); '
+                : ' El sync automático no ha podido completarse; '}
+              pulsa «Sincronizar» o revisa el <a href={syncLogUrl}>registro de sync</a>.
             </p>
           </div>
         )
@@ -261,20 +250,35 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       {
         summary && summary.characters.length > 0 && (
           <>
-            <section class="stats">
+            <section class="glance" aria-label="Resumen">
               <div class="panel stat hero-stat">
-                <span class="glow-line" />
                 <span class="label">
                   <Icon name="activity" />
-                  Neto del período
+                  Neto · últimos {days} días
                 </span>
-                <span class="value" title={iskFull(summary.totals.net)}>
+                <span class:list={['value', 'signed', sign(summary.totals.net)]} title={iskFull(summary.totals.net)}>
+                  {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
                   {isk(summary.totals.net, { sign: true })}
                   <small>ISK</small>
+                  <span class="sr-only">{summary.totals.net >= 0 ? '(ganancia)' : '(pérdida)'}</span>
                 </span>
+                <p class="versus">
+                  {delta !== undefined ? (
+                    <>
+                      <span class:list={['delta', sign(delta)]}>{isk(delta, { sign: true })}</span> frente a los {days} días
+                      anteriores ({isk(summary.previous.net, { sign: true })})
+                    </>
+                  ) : (
+                    <>Sin {days} días anteriores completos para comparar todavía</>
+                  )}
+                </p>
                 <div class="ratio" aria-hidden="true">
-                  {summary.totals.income > 0 && <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />}
-                  {summary.totals.expenses > 0 && <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />}
+                  {summary.totals.income > 0 && (
+                    <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />
+                  )}
+                  {summary.totals.expenses > 0 && (
+                    <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />
+                  )}
                 </div>
                 <dl class="breakdown">
                   <div>
@@ -292,43 +296,70 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                     <dd title={iskFull(-summary.totals.expenses)}>{isk(-summary.totals.expenses)}</dd>
                   </div>
                 </dl>
+                <div class="today" title={`Desde las 00:00 EVE (UTC): ${iskFull(summary.today.net)}`}>
+                  <span class="today-label">
+                    <Icon name="clock" />
+                    Hoy (EVE)
+                  </span>
+                  <span class:list={['today-value', sign(summary.today.net)]}>{isk(summary.today.net, { sign: true })}</span>
+                  <span class="today-detail">
+                    {isk(summary.today.income)} entran · {isk(summary.today.expenses)} salen
+                  </span>
+                </div>
                 {summary.internalTransfers > 0 && (
                   <span class="sub">No incluye {isk(summary.internalTransfers)} ISK movidos entre tus pilotos</span>
                 )}
               </div>
-              <div class="panel stat">
-                <span class="label">
-                  <Icon name="wallet" />
-                  Patrimonio
-                </span>
-                <span class="value" title={iskFull(netWorth)}>
-                  {isk(netWorth)}
-                  <small>ISK</small>
-                </span>
-                <div class="ratio" aria-hidden="true">
-                  {summary.balance > 0 && <i class="balance" style={`flex-grow:${share(summary.balance, netWorth)}`} />}
-                  {inventoryValue > 0 && <i class="inventory" style={`flex-grow:${share(inventoryValue, netWorth)}`} />}
+              <div class="panel stat worth">
+                <div class="worth-head">
+                  <div>
+                    <span class="label">
+                      <Icon name="wallet" />
+                      Patrimonio
+                    </span>
+                    <span class="value" title={iskFull(netWorth)}>
+                      {isk(netWorth)}
+                      <small>ISK</small>
+                    </span>
+                  </div>
+                  <dl class="breakdown">
+                    <div>
+                      <dt>
+                        <i class="key balance" />
+                        Wallets
+                      </dt>
+                      <dd title={iskFull(summary.balance)}>{isk(summary.balance)}</dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <i class="key inventory" />
+                        Inventario
+                      </dt>
+                      <dd title={inventoryValue ? iskFull(inventoryValue) : 'Sin inventario sincronizado'}>
+                        {inventoryValue ? isk(inventoryValue) : '—'}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
-                <dl class="breakdown">
-                  <div>
-                    <dt>
-                      <i class="key balance" />
-                      Saldo en wallets
-                    </dt>
-                    <dd title={iskFull(summary.balance)}>{isk(summary.balance)}</dd>
-                  </div>
-                  <div>
-                    <dt>
-                      <i class="key inventory" />
-                      Inventario
-                    </dt>
-                    <dd title={inventoryValue ? iskFull(inventoryValue) : 'Sin inventario sincronizado'}>
-                      {inventoryValue ? isk(inventoryValue) : '—'}
-                    </dd>
-                  </div>
-                </dl>
+                {geo && <NewEdenMap map={geo} />}
               </div>
             </section>
+
+            <ul class="pilot-strip" aria-label="Neto por piloto">
+              {summary.characters.map((c) => (
+                <li>
+                  <a
+                    href="#pilotos"
+                    class:list={{ stale: isStale(c.lastSyncAt) }}
+                    title={`${c.name}: neto ${iskFull(c.net)} en ${days} días` + (isStale(c.lastSyncAt) ? ` · sin sync ${ago(c.lastSyncAt)}` : '')}
+                  >
+                    {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
+                    <span class="pilot-name">{c.name}</span>
+                    <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>{isk(c.net, { sign: true })}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
 
             <section class="panel">
               <div class="panel-heading">
@@ -336,7 +367,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                 <span class="meta">Hora de EVE (UTC)</span>
               </div>
               <div class="panel-body">
-                <DailyChart daily={summary.daily} />
+                <DailyChart daily={summary.daily} firstDate={firstDate} />
               </div>
             </section>
 
@@ -373,7 +404,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             <section class="panel">
               <div class="panel-heading">
-                <h3>Pilotos</h3>
+                <h3 id="pilotos">Pilotos</h3>
                 <a class="meta link" href={loginUrl}>
                   <Icon name="plus" />
                   Vincular piloto
@@ -421,7 +452,10 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                         <td>{isk(c.income)}</td>
                         <td>{isk(-c.expenses)}</td>
                         <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{isk(c.net, { sign: true })}</td>
-                        <td class="muted">{ago(c.lastSyncAt)}</td>
+                        <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
+                          {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
+                          {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{ago(c.lastSyncAt)}</time> : 'nunca'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -454,6 +488,33 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 </html>
 
 <script>
+  // Tiempos relativos vivos: la página puede quedarse horas abierta en el segundo monitor
+  const ago = (iso: string) => {
+    const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+    if (min < 1) return 'ahora';
+    if (min < 60) return `hace ${min} min`;
+    const h = Math.round(min / 60);
+    return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
+  };
+  const tick = () => {
+    for (const el of document.querySelectorAll<HTMLElement>('[data-ago]')) el.textContent = ago(el.dataset.ago!);
+  };
+  setInterval(tick, 30_000);
+
+  // Auto-refresco: cuando termina un sync automático nuevo, recargar para mostrar los datos
+  const lastRunAt = document.body.dataset.lastRun || null;
+  setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const res = await fetch('/status.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const s = (await res.json()) as { running: boolean; lastRunAt: string | null };
+      if (!s.running && s.lastRunAt && s.lastRunAt !== lastRunAt) location.reload();
+    } catch {
+      // API caída: se reintenta en el siguiente ciclo
+    }
+  }, 60_000);
+
   // Estado de carga: el sync de todos los pilotos puede tardar; evita envíos dobles
   const form = document.getElementById('sync-form') as HTMLFormElement | null;
   form?.addEventListener('submit', () => {
@@ -465,8 +526,152 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 </script>
 
 <style>
-  .stats {
-    grid-template-columns: 1.15fr 1fr;
+  .glance {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: 16px;
+  }
+  .today {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 2px 12px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .today-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .today-label .icon {
+    width: 14px;
+    height: 14px;
+  }
+  .today-value {
+    font: 500 22px var(--mono);
+    letter-spacing: -0.03em;
+    color: var(--text);
+  }
+  .signed {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .signed .trend {
+    align-self: center;
+    width: 28px;
+    height: 28px;
+    stroke-width: 2;
+  }
+  .pos,
+  .stat .value.pos {
+    color: var(--positive);
+  }
+  .neg,
+  .stat .value.neg {
+    color: var(--critical);
+  }
+  .hero-stat .value.zero {
+    color: var(--text);
+  }
+  .versus {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .delta {
+    font: 500 12px var(--mono);
+  }
+  .today-detail {
+    grid-column: 2;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .worth-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+  }
+  .worth-head > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .worth .breakdown {
+    grid-template-columns: repeat(2, auto);
+    gap: 20px;
+  }
+  .pilot-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .pilot-strip a {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel-2);
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .pilot-strip a:hover {
+    border-color: var(--line-strong);
+    color: var(--text);
+  }
+  .stale,
+  .period-meta .fresh.stale {
+    color: var(--warning);
+  }
+  .pilot-strip a.stale {
+    border-color: #6b5530;
+  }
+  .stale-icon {
+    width: 13px;
+    height: 13px;
+    color: var(--warning);
+  }
+  td.last-sync {
+    color: var(--text-muted);
+  }
+  td.last-sync.stale {
+    color: var(--warning);
+  }
+  td.last-sync .stale-icon {
+    margin-right: 6px;
+    vertical-align: -2px;
+  }
+  .period-meta .coverage {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+  }
+  .period-meta .coverage .icon {
+    width: 14px;
+    height: 14px;
+    color: var(--cyan-dim);
+  }
+  .pilot-net {
+    font: 500 13px var(--mono);
+    color: var(--text);
+  }
+  .pilot-net.pos {
+    color: var(--positive);
+  }
+  .pilot-net.neg {
+    color: var(--critical);
   }
   .ratio {
     display: flex;
@@ -533,7 +738,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     height: 14px;
   }
   @media (max-width: 1040px) {
-    .stats {
+    .glance {
       grid-template-columns: 1fr;
     }
   }
