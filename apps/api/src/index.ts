@@ -3,6 +3,7 @@ import { runMigrations } from './db/client';
 import { env } from './lib/env';
 import { authRoutes } from './routes/auth';
 import { characterRoutes } from './routes/characters';
+import { syncRoutes } from './routes/sync';
 
 runMigrations();
 
@@ -14,6 +15,7 @@ const app = new Elysia()
   .get('/', ({ redirect }) => redirect('/characters'))
   .use(authRoutes)
   .use(characterRoutes)
+  .use(syncRoutes)
   .listen(env.port);
 
 console.log(`EVE Ledger API en http://localhost:${app.server?.port}`);

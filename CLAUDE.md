@@ -24,7 +24,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - [x] 1. App registrada en developers.eveonline.com (scopes: `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`)
 - [x] 2. Esquema Drizzle + migración
 - [x] 3. Flujo SSO (`/auth/login`, `/auth/callback`) + `GET /characters` + `GET /characters/:id/wallet`
-- [ ] 4. Sync del wallet journal
+- [x] 4. Sync del wallet journal (`src/services/sync.ts`, `POST /sync/:characterId`, `POST /sync/all`, `GET /sync/log`)
 - [ ] 5. `GET /summary` + dashboard mínimo en Astro
 - [ ] 6. Vincular los 5 personajes + cron cada 60 min (`POST /sync/all`)
 - [ ] Después: wallet transactions con nombres de ítems (`/universe/names` o SDE), inventario con `/characters/{id}/assets`
@@ -37,6 +37,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Rutas: `POST /sync/:characterId` y `POST /sync/all` (secuencial, un personaje tras otro).
 - ESI cachea el journal ~1 h y solo retiene ~30 días: el valor está en acumular historial desde ya.
 - Respetar errores 420/429 de ESI (rate limit): leer headers y esperar, no reintentar en bucle.
+  - Implementado en `esiGet()`: pausa global según `X-ESI-Error-Limit-Remain/Reset` (también preventiva si quedan < 10 errores) y `Retry-After` en 429; como mucho un reintento.
 
 ## Comandos
 - `bun install` · `bun run db:generate` · `bun run dev`

@@ -10,3 +10,7 @@
 5. `bun run dev`
 6. Abre http://localhost:3000/auth/login y entra con un personaje
 7. Prueba: http://localhost:3000/characters/<id>/wallet
+8. Sincroniza el wallet journal:
+   - `curl -X POST http://localhost:3000/sync/<id>` (un personaje)
+   - `curl -X POST http://localhost:3000/sync/all` (todos, en secuencia)
+   - `curl http://localhost:3000/sync/log` (últimas ejecuciones y errores)
