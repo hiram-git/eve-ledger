@@ -1,10 +1,5 @@
 ---
-import '@fontsource-variable/inter';
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/500.css';
-import '@fontsource/barlow-condensed/500.css';
-import '@fontsource/barlow-condensed/700.css';
-import '../styles/theme.css';
+import Base from '../layouts/Base.astro';
 import DailyChart from '../components/DailyChart.astro';
 import Icon from '../components/Icon.astro';
 import NewEdenMap from '../components/NewEdenMap.astro';
@@ -22,7 +17,7 @@ import {
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { ago, isk, iskFull, refTypeLabel, shortDate, until } from '../lib/format';
+import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 
 const PERIODS = [7, 30, 90];
 const q = Astro.url.searchParams;
@@ -49,22 +44,6 @@ try {
 const synced = q.get('synced');
 const syncErrors = q.get('syncErrors');
 const syncFailed = q.get('syncFailed');
-
-// Estado del sync automático para la barra superior
-const cron = !status
-  ? undefined
-  : !status.enabled
-    ? { cls: 'off', text: 'Sync automático desactivado' }
-    : status.running
-      ? { cls: 'busy', text: 'Sincronizando…' }
-      : {
-          cls: '',
-          text: `Sync auto · ${status.intervalMin} min` + (status.nextRunAt ? ` · próximo ${until(status.nextRunAt)}` : ''),
-        };
-const cronTitle = status?.lastRun
-  ? `Último sync automático ${ago(status.lastRun.finishedAt)}: ${status.lastRun.inserted} movimientos nuevos` +
-    (status.lastRun.errors ? `, ${status.lastRun.errors} personaje(s) con error` : '')
-  : undefined;
 
 // Patrimonio consolidado y proporciones para las barras de desglose
 const inventoryValue = inventory && inventory.stacks > 0 ? inventory.value : 0;
@@ -111,42 +90,8 @@ const valuableItems = inventory?.topItems.map((i) => ({ ...i, isk: i.value })) ?
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 ---
 
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#070c13" />
-    <title>EVE Ledger</title>
-  </head>
-  <body data-last-run={status?.lastRun?.finishedAt ?? ''}>
-    <header class="utility shell">
-      <div class="micro-brand">
-        <span class="brand-square" aria-hidden="true">E</span>
-        <h1 class="wordmark">EVE Ledger</h1>
-        <span class="muted">· {summary ? `${summary.characters.length} pilotos` : 'sin conexión'}</span>
-      </div>
-      <div class="utility-right">
-        {
-          cron && (
-            <span class:list={['status-badge', cron.cls]} title={cronTitle}>
-              <i class="dot" />
-              <span class="text">{cron.text}</span>
-            </span>
-          )
-        }
-        <form method="post" action="/sync" id="sync-form">
-          <input type="hidden" name="days" value={days} />
-          <button type="submit" class="primary-button">
-            <Icon name="refresh" />
-            <span class="label">Sincronizar</span>
-          </button>
-        </form>
-      </div>
-    </header>
-
-
-    <nav class="main-nav shell" aria-label="Período">
+<Base section="resumen" status={status} pilots={summary?.characters.length}>
+    <nav class="main-nav shell" aria-label="Período" slot="nav">
       <div class="nav-tabs">
         {
           PERIODS.map((p) => (
@@ -178,7 +123,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       </p>
     </nav>
 
-    <main class="shell">
+      <h1 class="sr-only">Resumen de los últimos {days} días</h1>
 
       {
         synced !== null && (
@@ -405,9 +350,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             <section class="panel">
               <div class="panel-heading">
                 <h3 id="pilotos">Pilotos</h3>
-                <a class="meta link" href={loginUrl}>
-                  <Icon name="plus" />
-                  Vincular piloto
+                <a class="meta link" href="/pilotos">
+                  <Icon name="users" />
+                  Gestionar pilotos
                 </a>
               </div>
               <div class="scroll">
@@ -478,52 +423,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
           </>
         )
       }
-    </main>
-
-    <footer class="shell">
-      <span class="footer-brand">EVE LEDGER · localhost</span>
-      <span>Datos vía ESI. EVE Online y todo lo relacionado son marcas de CCP hf.</span>
-    </footer>
-  </body>
-</html>
-
-<script>
-  // Tiempos relativos vivos: la página puede quedarse horas abierta en el segundo monitor
-  const ago = (iso: string) => {
-    const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-    if (min < 1) return 'ahora';
-    if (min < 60) return `hace ${min} min`;
-    const h = Math.round(min / 60);
-    return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
-  };
-  const tick = () => {
-    for (const el of document.querySelectorAll<HTMLElement>('[data-ago]')) el.textContent = ago(el.dataset.ago!);
-  };
-  setInterval(tick, 30_000);
-
-  // Auto-refresco: cuando termina un sync automático nuevo, recargar para mostrar los datos
-  const lastRunAt = document.body.dataset.lastRun || null;
-  setInterval(async () => {
-    if (document.hidden) return;
-    try {
-      const res = await fetch('/status.json', { cache: 'no-store' });
-      if (!res.ok) return;
-      const s = (await res.json()) as { running: boolean; lastRunAt: string | null };
-      if (!s.running && s.lastRunAt && s.lastRunAt !== lastRunAt) location.reload();
-    } catch {
-      // API caída: se reintenta en el siguiente ciclo
-    }
-  }, 60_000);
-
-  // Estado de carga: el sync de todos los pilotos puede tardar; evita envíos dobles
-  const form = document.getElementById('sync-form') as HTMLFormElement | null;
-  form?.addEventListener('submit', () => {
-    const button = form.querySelector('button')!;
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
-    button.querySelector('.label')!.textContent = 'Sincronizando…';
-  });
-</script>
+</Base>
 
 <style>
   .glance {

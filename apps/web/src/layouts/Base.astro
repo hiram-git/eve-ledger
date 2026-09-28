@@ -1,0 +1,191 @@
+---
+// Marco común de las páginas: barra superior (marca, secciones, estado del sync, botón), pie y scripts
+import '@fontsource-variable/inter';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/barlow-condensed/500.css';
+import '@fontsource/barlow-condensed/700.css';
+import '../styles/theme.css';
+import Icon from '../components/Icon.astro';
+import type { SyncStatus } from '../lib/api';
+import { ago, until } from '../lib/format';
+
+interface Props {
+  title?: string;
+  section: 'resumen' | 'pilotos';
+  status?: SyncStatus;
+  pilots?: number;
+}
+const { title, section, status, pilots } = Astro.props;
+
+// Tras sincronizar se vuelve a la misma página (sin los parámetros de un aviso anterior)
+const back = new URL(Astro.url);
+for (const k of ['synced', 'syncErrors', 'syncFailed', 'linked', 'error', 'detail']) back.searchParams.delete(k);
+const backPath = back.pathname + back.search;
+
+const cron = !status
+  ? undefined
+  : !status.enabled
+    ? { cls: 'off', text: 'Sync automático desactivado' }
+    : status.running
+      ? { cls: 'busy', text: 'Sincronizando…' }
+      : {
+          cls: '',
+          text: `Sync auto · ${status.intervalMin} min` + (status.nextRunAt ? ` · próximo ${until(status.nextRunAt)}` : ''),
+        };
+const cronTitle = status?.lastRun
+  ? `Último sync automático ${ago(status.lastRun.finishedAt)}: ${status.lastRun.inserted} movimientos nuevos` +
+    (status.lastRun.errors ? `, ${status.lastRun.errors} personaje(s) con error` : '')
+  : undefined;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070c13" />
+    <title>{title ? `${title} · EVE Ledger` : 'EVE Ledger'}</title>
+  </head>
+  <body data-last-run={status?.lastRun?.finishedAt ?? ''}>
+    <header class="utility shell">
+      <div class="micro-brand">
+        <span class="brand-square" aria-hidden="true">E</span>
+        <span class="wordmark">EVE Ledger</span>
+      </div>
+      <nav class="sections" aria-label="Secciones">
+        <a href="/" aria-current={section === 'resumen' ? 'page' : undefined}>Resumen</a>
+        <a href="/pilotos" aria-current={section === 'pilotos' ? 'page' : undefined}>
+          Pilotos{pilots !== undefined && <span class="count">{pilots}</span>}
+        </a>
+      </nav>
+      <div class="utility-right">
+        {
+          cron && (
+            <span class:list={['status-badge', cron.cls]} title={cronTitle}>
+              <i class="dot" />
+              <span class="text">{cron.text}</span>
+            </span>
+          )
+        }
+        <form method="post" action="/sync" class="sync-form">
+          <input type="hidden" name="back" value={backPath} />
+          <button type="submit" class="primary-button" title="Sincronizar todos los pilotos">
+            <Icon name="refresh" />
+            <span class="label">Sincronizar</span>
+          </button>
+        </form>
+      </div>
+    </header>
+
+    <slot name="nav" />
+
+    <main class="shell">
+      <slot />
+    </main>
+
+    <footer class="shell">
+      <span class="footer-brand">EVE LEDGER · localhost</span>
+      <span>Datos vía ESI. EVE Online y todo lo relacionado son marcas de CCP hf.</span>
+    </footer>
+  </body>
+</html>
+
+<script>
+  // Tiempos relativos vivos: la página puede quedarse horas abierta en el segundo monitor
+  const ago = (iso: string) => {
+    const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+    if (min < 1) return 'ahora';
+    if (min < 60) return `hace ${min} min`;
+    const h = Math.round(min / 60);
+    return h < 48 ? `hace ${h} h` : `hace ${Math.round(h / 24)} días`;
+  };
+  const tick = () => {
+    for (const el of document.querySelectorAll<HTMLElement>('[data-ago]')) el.textContent = ago(el.dataset.ago!);
+  };
+  setInterval(tick, 30_000);
+
+  // Auto-refresco: cuando termina un sync automático nuevo, recargar para mostrar los datos
+  const lastRunAt = document.body.dataset.lastRun || null;
+  setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const res = await fetch('/status.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const s = (await res.json()) as { running: boolean; lastRunAt: string | null };
+      if (!s.running && s.lastRunAt && s.lastRunAt !== lastRunAt) location.reload();
+    } catch {
+      // API caída: se reintenta en el siguiente ciclo
+    }
+  }, 60_000);
+
+  // Estado de carga en cualquier formulario de sync: puede tardar; evita envíos dobles
+  for (const form of document.querySelectorAll<HTMLFormElement>('form.sync-form')) {
+    form.addEventListener('submit', () => {
+      const button = form.querySelector('button')!;
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      const label = button.querySelector('.label');
+      if (label) label.textContent = 'Sincronizando…';
+    });
+  }
+</script>
+
+<style>
+  .sections {
+    display: flex;
+    align-self: stretch;
+    gap: 4px;
+    margin-right: auto;
+    margin-left: 20px;
+  }
+  .sections a {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 550;
+    color: #93a6b7;
+    text-decoration: none;
+  }
+  .sections a:hover {
+    color: var(--text);
+  }
+  .sections a[aria-current='page'] {
+    color: var(--text);
+  }
+  .sections a[aria-current='page']::after {
+    content: '';
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: -1px;
+    height: 2px;
+    background: var(--cyan);
+  }
+  .count {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: #1b2c3a;
+    font: 500 11px/18px var(--mono);
+    color: var(--text-secondary);
+    text-align: center;
+  }
+  @media (max-width: 750px) {
+    .sections {
+      order: 3;
+      width: 100%;
+      margin: 0;
+      height: 36px;
+    }
+    .sections a:first-child {
+      padding-left: 0;
+    }
+    .sections a:first-child[aria-current='page']::after {
+      left: 0;
+    }
+  }
+</style>

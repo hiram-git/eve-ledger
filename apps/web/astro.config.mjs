@@ -9,6 +9,8 @@ export default defineConfig({
   env: {
     schema: {
       API_URL: envField.string({ context: 'server', access: 'public', default: 'http://localhost:3000' }),
+      // Plazas de piloto que muestra la página de pilotos (tus personajes)
+      PILOT_SLOTS: envField.number({ context: 'server', access: 'public', default: 5 }),
     },
   },
 });

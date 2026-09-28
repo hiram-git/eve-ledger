@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { db } from '../db/client';
 import { characters } from '../db/schema';
 import { encrypt } from '../lib/crypto';
+import { env } from '../lib/env';
 import { buildAuthorizeUrl, exchangeCode, verifyAccessToken } from '../lib/sso';
 import { syncCharacter } from '../services/sync';
 
@@ -9,11 +10,8 @@ import { syncCharacter } from '../services/sync';
 const pendingStates = new Map<string, number>();
 const STATE_TTL_MS = 10 * 60_000;
 
-const html = (body: string, status = 200) =>
-  new Response(`<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:2rem">${body}</body>`, {
-    status,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
+// El resultado se muestra en el dashboard (apps/web/src/pages/pilotos.astro), con el tema del proyecto
+const toPilots = (params: Record<string, string>) => `${env.webUrl}/pilotos?${new URLSearchParams(params)}`;
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   .get('/login', ({ redirect }) => {
@@ -26,40 +24,52 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   })
   .get(
     '/callback',
-    async ({ query }) => {
-      const exp = pendingStates.get(query.state);
-      pendingStates.delete(query.state);
-      if (!exp || exp < Date.now()) return html('<h2>State inválido o expirado.</h2><a href="/auth/login">Reintentar</a>', 400);
+    async ({ query, redirect }) => {
+      // El usuario canceló en la pantalla de EVE (o EVE devolvió un error)
+      if (!query.code) return redirect(toPilots({ error: 'denied' }));
 
-      const tokens = await exchangeCode(query.code);
-      const id = await verifyAccessToken(tokens.access_token);
+      const exp = query.state ? pendingStates.get(query.state) : undefined;
+      if (query.state) pendingStates.delete(query.state);
+      if (!exp || exp < Date.now()) return redirect(toPilots({ error: 'state' }));
 
-      const values = {
-        name: id.name,
-        ownerHash: id.ownerHash,
-        scopes: id.scopes.join(' '),
-        refreshToken: await encrypt(tokens.refresh_token),
-        accessToken: await encrypt(tokens.access_token),
-        tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-      };
+      let characterId: number;
+      try {
+        const tokens = await exchangeCode(query.code);
+        const id = await verifyAccessToken(tokens.access_token);
+        characterId = id.characterId;
 
-      await db
-        .insert(characters)
-        .values({ id: id.characterId, ...values })
-        .onConflictDoUpdate({ target: characters.id, set: values });
+        const values = {
+          name: id.name,
+          ownerHash: id.ownerHash,
+          scopes: id.scopes.join(' '),
+          refreshToken: await encrypt(tokens.refresh_token),
+          accessToken: await encrypt(tokens.access_token),
+          tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+        };
 
-      // Primer sync en segundo plano: el journal solo guarda ~30 días, cuanto antes mejor
-      syncCharacter(id.characterId).then(
-        (r) => console.log(`[auth] sync inicial de ${id.name}: ${r.error ?? `${r.inserted} movimientos`}`),
-        (err) => console.error(`[auth] sync inicial de ${id.name} falló:`, err),
-      );
+        await db
+          .insert(characters)
+          .values({ id: id.characterId, ...values })
+          .onConflictDoUpdate({ target: characters.id, set: values });
 
-      return html(`
-        <img src="https://images.evetech.net/characters/${id.characterId}/portrait?size=128" style="border-radius:8px">
-        <h2>${id.name} vinculado ✔</h2>
-        <p>Scopes: ${id.scopes.join(', ')}</p>
-        <p>Sincronizando su wallet (journal y transacciones) en segundo plano…</p>
-        <p><a href="/auth/login">Vincular otro personaje</a> · <a href="/characters">Ver personajes</a></p>`);
+        // Primer sync en segundo plano: el journal solo guarda ~30 días, cuanto antes mejor
+        syncCharacter(id.characterId).then(
+          (r) => console.log(`[auth] sync inicial de ${id.name}: ${r.error ?? `${r.inserted} movimientos`}`),
+          (err) => console.error(`[auth] sync inicial de ${id.name} falló:`, err),
+        );
+      } catch (err) {
+        console.error('[auth] callback:', err);
+        const detail = err instanceof Error ? err.message : String(err);
+        return redirect(toPilots({ error: 'sso', detail: detail.slice(0, 200) }));
+      }
+
+      return redirect(toPilots({ linked: String(characterId) }));
     },
-    { query: t.Object({ code: t.String(), state: t.String() }) },
+    {
+      query: t.Object({
+        code: t.Optional(t.String()),
+        state: t.Optional(t.String()),
+        error: t.Optional(t.String()),
+      }),
+    },
   );

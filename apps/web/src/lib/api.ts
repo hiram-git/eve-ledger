@@ -81,5 +81,26 @@ export const getInventory = () => call<Inventory>('/inventory');
 export const getMap = () => call<GeoMap>('/map');
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
+
+// Un solo piloto: la API responde 502 con el resultado si el sync falló, no es un error de transporte
+export async function syncOne(characterId: number): Promise<SyncAllResult> {
+  const res = await fetch(`${API_URL}/sync/${characterId}`, { method: 'POST' });
+  const body = (await res.json().catch(() => ({}))) as { inserted?: number; error?: string };
+  if (!res.ok && res.status !== 502) throw new Error(`API ${res.status}: ${body.error ?? 'error'}`);
+  return { inserted: body.inserted ?? 0, errors: body.error ? 1 : 0 };
+}
+
+export type Pilot = {
+  id: number;
+  name: string;
+  scopes: string[];
+  missingScopes: string[];
+  lastSyncAt: string | null;
+  createdAt: string;
+  lastError: { at: string | null; kind: string; message: string } | null;
+};
+
+// Accept JSON explícito: en el navegador /characters redirige a la página de pilotos
+export const getPilots = () => call<Pilot[]>('/characters', { headers: { Accept: 'application/json' } });
 export const loginUrl = `${API_URL}/auth/login`;
 export const syncLogUrl = `${API_URL}/sync/log`;
