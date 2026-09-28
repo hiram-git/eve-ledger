@@ -25,6 +25,9 @@ export type Summary = {
   })[];
   byRefType: (Flow & { refType: string; count: number })[];
   daily: (Flow & { date: string })[];
+  today: Flow;
+  previous: Flow & { complete: boolean };
+  coverage: { firstEntryAt: string | null; coveredDays: number };
   market: { sold: MarketItem[]; bought: MarketItem[] };
 };
 
@@ -38,6 +41,23 @@ export type Inventory = {
   byCharacter: { characterId: number; name: string; value: number; updatedAt: string }[];
   byLocation: { locationId: number; name: string | null; value: number; stacks: number }[];
   topItems: { typeId: number; name: string | null; quantity: number; unitPrice: number; value: number }[];
+};
+
+export type GeoNode = {
+  systemId: number;
+  name: string;
+  security: number;
+  x: number;
+  z: number;
+  inventory: number;
+  earnedToday: number;
+};
+
+export type GeoMap = {
+  nodes: GeoNode[];
+  unplaced: { value: number; locations: number };
+  pending: number;
+  todayStart: string;
 };
 
 export type SyncAllResult = { inserted: number; errors: number };
@@ -58,6 +78,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getSummary = (days: number) => call<Summary>(`/summary?days=${days}`);
 export const getInventory = () => call<Inventory>('/inventory');
+export const getMap = () => call<GeoMap>('/map');
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
 export const loginUrl = `${API_URL}/auth/login`;
+export const syncLogUrl = `${API_URL}/sync/log`;

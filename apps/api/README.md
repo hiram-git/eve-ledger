@@ -19,3 +19,4 @@
 10. Resumen consolidado: http://localhost:3000/summary?days=30 (lo consume el dashboard de `apps/web`)
 11. Transacciones con nombres: http://localhost:3000/transactions?days=30 (filtros opcionales: `characterId`, `typeId`, `limit`)
 12. Inventario valorado: http://localhost:3000/inventory · detalle en http://localhost:3000/assets (filtros: `characterId`, `locationId`, `typeId`, `limit`)
+13. Mapa «tu New Eden»: http://localhost:3000/map (sistemas con inventario y ganancias de hoy, con coordenadas de ESI)

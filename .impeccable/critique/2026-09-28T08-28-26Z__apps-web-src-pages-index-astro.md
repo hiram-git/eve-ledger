@@ -10,6 +10,7 @@ target_fingerprint: "sha256:e9236cd27a5a5a1b465daad4583c6b57deb65786b9907a981814
 target_path: /home/user/eve-ledger/apps/web/src/pages/index.astro
 timestamp: 2026-09-28T08-28-26Z
 slug: apps-web-src-pages-index-astro
+closed: true
 ---
 # Crítica: dashboard de EVE Ledger (apps/web/src/pages/index.astro)
 

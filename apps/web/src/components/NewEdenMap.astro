@@ -1,0 +1,314 @@
+---
+// «Tu New Eden»: dónde está tu inventario (tamaño = valor) y dónde ganaste ISK hoy.
+// Posiciones reales de ESI proyectadas sobre el plano galáctico (x, z), norte arriba
+import type { GeoMap } from '../lib/api';
+import { isk, iskFull } from '../lib/format';
+
+interface Props {
+  map: GeoMap;
+}
+const { map } = Astro.props;
+
+const W = 560;
+const H = 230;
+const PAD = 44; // margen para que las etiquetas no se corten
+
+const nodes = map.nodes;
+const xs = nodes.map((n) => n.x);
+const zs = nodes.map((n) => n.z);
+const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
+const [minZ, maxZ] = [Math.min(...zs), Math.max(...zs)];
+// Misma escala en ambos ejes para no deformar la galaxia
+const span = Math.max(maxX - minX, (maxZ - minZ) * ((W - 2 * PAD) / (H - 2 * PAD)), 1);
+const scale = (W - 2 * PAD) / span;
+const cx = (minX + maxX) / 2;
+const cz = (minZ + maxZ) / 2;
+const px = (x: number) => W / 2 + (x - cx) * scale;
+const py = (z: number) => H / 2 - (z - cz) * scale;
+
+const maxInv = Math.max(1, ...nodes.map((n) => n.inventory));
+const radius = (v: number) => (v > 0 ? 3 + 11 * Math.sqrt(v / maxInv) : 2.5);
+
+// Etiquetas solo para lo que importa: los 4 sistemas con más inventario y los que dieron ISK hoy
+const labelled = new Set([
+  ...nodes.filter((n) => n.inventory > 0).slice(0, 4).map((n) => n.systemId),
+  ...nodes.filter((n) => n.earnedToday > 0).map((n) => n.systemId),
+]);
+
+type Box = { x1: number; y1: number; x2: number; y2: number };
+const hit = (a: Box, b: Box) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+const taken: Box[] = [];
+
+const placed = nodes.map((n) => {
+  const x = px(n.x);
+  const y = py(n.z);
+  const r = radius(n.inventory);
+  const lines = [n.inventory > 0 ? isk(n.inventory) : null, n.earnedToday > 0 ? `+${isk(n.earnedToday)} hoy` : null].filter(
+    Boolean,
+  ) as string[];
+  const title = [
+    `${n.name} (${n.security.toFixed(1)})`,
+    n.inventory > 0 ? `Inventario: ${iskFull(n.inventory)}` : null,
+    n.earnedToday > 0 ? `Ganado hoy: ${iskFull(n.earnedToday)}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return { ...n, x, y, r, lines, title };
+});
+
+// Los nodos ocupan su sitio antes que cualquier etiqueta
+for (const n of placed) taken.push({ x1: n.x - n.r - 6, y1: n.y - n.r - 6, x2: n.x + n.r + 6, y2: n.y + n.r + 6 });
+
+type Label = { anchor: 'start' | 'end' | 'middle'; tx: number; ty: number };
+const labels = new Map<number, Label>();
+const inside = (b: Box) => b.x1 >= 2 && b.x2 <= W - 2 && b.y1 >= 2 && b.y2 <= H - 2;
+// Prioridad: primero lo ganado hoy (la historia del día), después el inventario por valor
+const order = [...placed].sort((a, b) => b.earnedToday - a.earnedToday || b.inventory - a.inventory);
+for (const n of order) {
+  if (!labelled.has(n.systemId)) continue;
+  const w = Math.max(n.name.length * 6.6, ...n.lines.map((l) => l.length * 6.8)) + 4;
+  const h = 14 + n.lines.length * 12;
+  const gap = n.r + 8;
+  const options: (Label & { box: Box })[] = [];
+  // A los lados (centrado, más arriba o más abajo) y encima/debajo
+  for (const dy of [0, -h / 2 - 4, h / 2 + 4, -h - 6, h + 6]) {
+    const top = n.y - 13 + dy;
+    options.push({ anchor: 'start', tx: n.x + gap, ty: top + 11, box: { x1: n.x + gap, y1: top, x2: n.x + gap + w, y2: top + h } });
+    options.push({ anchor: 'end', tx: n.x - gap, ty: top + 11, box: { x1: n.x - gap - w, y1: top, x2: n.x - gap, y2: top + h } });
+  }
+  options.push({ anchor: 'middle', tx: n.x, ty: n.y + gap + 10, box: { x1: n.x - w / 2, y1: n.y + gap, x2: n.x + w / 2, y2: n.y + gap + h } });
+  options.push({ anchor: 'middle', tx: n.x, ty: n.y - gap - h + 10, box: { x1: n.x - w / 2, y1: n.y - gap - h, x2: n.x + w / 2, y2: n.y - gap } });
+  const self = (t: Box) => t.x1 === n.x - n.r - 6 && t.y1 === n.y - n.r - 6;
+  // Sin hueco libre no se dibuja: mejor sin etiqueta (queda en el tooltip) que solapada
+  const pick = options.find((o) => inside(o.box) && !taken.some((t) => !self(t) && hit(t, o.box)));
+  if (!pick) continue;
+  taken.push(pick.box);
+  labels.set(n.systemId, pick);
+}
+
+const invCount = nodes.filter((n) => n.inventory > 0).length;
+const earnCount = nodes.filter((n) => n.earnedToday > 0).length;
+const summary =
+  `Mapa de New Eden: inventario en ${invCount} ${invCount === 1 ? 'sistema' : 'sistemas'}` +
+  (earnCount ? `, ISK ganado hoy en ${earnCount}` : ', sin ganancias localizadas hoy');
+---
+
+<figure class="new-eden">
+  {
+    nodes.length === 0 ? (
+      <p class="empty">Tu mapa aparecerá cuando se sincronice el inventario o ganes ISK en un sistema.</p>
+    ) : (
+      <>
+        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={summary}>
+          <defs>
+            <pattern id="ne-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path class="grid-line" d="M 40 0 L 0 0 0 40" />
+            </pattern>
+          </defs>
+          <rect class="grid" width={W} height={H} fill="url(#ne-grid)" />
+          {placed.map((n) => (
+            <g class="node">
+              <title>{n.title}</title>
+              {n.earnedToday > 0 && (
+                <>
+                  <circle class="ping" cx={n.x} cy={n.y} r={n.r + 5} />
+                  <circle class="earned" cx={n.x} cy={n.y} r={n.r + 5} />
+                </>
+              )}
+              <circle class:list={['dot', { held: n.inventory > 0 }]} cx={n.x} cy={n.y} r={n.r} />
+              {labels.has(n.systemId) && (
+                <text x={labels.get(n.systemId)!.tx} y={labels.get(n.systemId)!.ty} text-anchor={labels.get(n.systemId)!.anchor}>
+                  <tspan class="name">{n.name}</tspan>
+                  {n.lines.map((l, i) => (
+                    <tspan class:list={['val', { gain: l.endsWith('hoy') }]} x={labels.get(n.systemId)!.tx} dy={i === 0 ? 13 : 12}>
+                      {l}
+                    </tspan>
+                  ))}
+                </text>
+              )}
+            </g>
+          ))}
+        </svg>
+        <ul class="node-list">
+          {nodes.map((n) => (
+            <li>
+              <span class="n-name">{n.name}</span>
+              <span class="n-val">
+                {n.inventory > 0 ? `${isk(n.inventory)} ISK` : 'sin inventario'}
+                {n.earnedToday > 0 && <span class="gain">, +{isk(n.earnedToday)} hoy</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </>
+    )
+  }
+  <figcaption>
+    <span class="legend-key"><i class="held" />Inventario (tamaño = valor)</span>
+    <span class="legend-key"><i class="earned" />Ganado hoy</span>
+    {
+      map.unplaced.value > 0 && (
+        <span class="unplaced" title="Estructuras de jugadores: ubicarlas requiere el permiso esi-universe.read_structures.v1">
+          {isk(map.unplaced.value)} sin ubicar ({map.unplaced.locations}{' '}
+          {map.unplaced.locations === 1 ? 'estructura' : 'estructuras'})
+        </span>
+      )
+    }
+  </figcaption>
+</figure>
+
+<style>
+  .new-eden {
+    margin: 14px 0 0;
+  }
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    background: radial-gradient(ellipse at 50% 50%, #0f2230, #0a121a 75%);
+    border: 1px solid var(--line);
+  }
+  .grid-line {
+    fill: none;
+    stroke: #ffffff08;
+    stroke-width: 1;
+  }
+  .dot {
+    fill: #5a6f7e;
+  }
+  .dot.held {
+    fill: var(--inventory);
+    stroke: #0a121a;
+    stroke-width: 2;
+  }
+  .earned {
+    fill: none;
+    stroke: var(--income);
+    stroke-width: 2;
+  }
+  /* Único movimiento del dashboard: comunica actividad de hoy en ese sistema */
+  .ping {
+    fill: none;
+    stroke: var(--income);
+    stroke-width: 1.5;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: ping 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  @keyframes ping {
+    from {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    to {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+  text {
+    font: 11px var(--font);
+    fill: var(--text-secondary);
+  }
+  .name {
+    font-weight: 600;
+    fill: var(--text);
+  }
+  .val {
+    font: 11px var(--mono);
+    fill: var(--text-secondary);
+  }
+  .val.gain {
+    fill: #7cc4dc;
+  }
+  .node:hover .dot {
+    stroke: var(--text);
+  }
+  figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .legend-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-key i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .legend-key i.held {
+    background: var(--inventory);
+  }
+  .legend-key i.earned {
+    border: 2px solid var(--income);
+  }
+  .unplaced {
+    margin-left: auto;
+    color: var(--text-muted);
+  }
+  .empty {
+    padding: 28px 16px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  /* Accesible siempre; visible solo en pantallas estrechas, donde el texto del SVG sería ilegible */
+  .node-list {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  @media (max-width: 600px) {
+    svg text {
+      display: none;
+    }
+    .node-list {
+      position: static;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      clip: auto;
+      white-space: normal;
+      display: grid;
+      gap: 4px;
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 13px;
+    }
+    .node-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .n-name {
+      color: var(--text);
+    }
+    .n-val {
+      font: 12px var(--mono);
+      color: var(--text-secondary);
+      text-align: right;
+    }
+    .n-val .gain {
+      color: #7cc4dc;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ping {
+      display: none;
+    }
+  }
+</style>

@@ -1,9 +1,12 @@
 import { Elysia, t } from 'elysia';
+import { getMap } from '../services/geo';
 import { getInventory, listAssets } from '../services/inventory';
 
 export const inventoryRoutes = new Elysia()
   // Valor del inventario consolidado: por personaje, por ubicación e ítems más valiosos
   .get('/inventory', () => getInventory())
+  // Mapa «tu New Eden»: inventario por sistema y dónde se ganó ISK hoy
+  .get('/map', () => getMap())
   // Detalle de assets con nombre y valor, ordenados por valor
   .get(
     '/assets',

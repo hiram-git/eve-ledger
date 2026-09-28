@@ -104,3 +104,20 @@ export const marketPrices = sqliteTable('market_prices', {
   adjustedPrice: real('adjusted_price'),
   updatedAt: ts('updated_at').notNull(),
 });
+
+// Caché de geografía de ESI para el mapa: sistemas con coordenadas y estación → sistema.
+// Son datos estáticos del universo, se piden una sola vez por ID
+export const systems = sqliteTable('systems', {
+  id: integer('id').primaryKey(), // solar_system_id
+  name: text('name').notNull(),
+  security: real('security').notNull(),
+  // Posición en metros; el plano galáctico es x/z (y es la altura)
+  x: real('x').notNull(),
+  y: real('y').notNull(),
+  z: real('z').notNull(),
+});
+
+export const stationSystems = sqliteTable('station_systems', {
+  stationId: integer('station_id').primaryKey(),
+  systemId: integer('system_id').notNull(),
+});

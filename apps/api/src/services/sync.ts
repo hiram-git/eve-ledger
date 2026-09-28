@@ -3,6 +3,7 @@ import { db } from '../db/client';
 import { characters, syncLog, walletJournal, walletTransactions } from '../db/schema';
 import { esiGet } from '../lib/esi';
 import { ASSETS_SCOPE, fetchAssets } from './assets';
+import { resolvePendingGeo } from './geo';
 import { resolvePendingNames } from './names';
 import { refreshPricesIfStale } from './prices';
 
@@ -213,6 +214,7 @@ export async function syncCharacter(characterId: number): Promise<SyncResult> {
       // Solo llaman a ESI si hace falta: precios de más de 1 h, IDs sin nombre (reintenta fallos anteriores)
       if (result.assets && !result.assets.error) await bestEffort('prices', refreshPricesIfStale);
       result.namesResolved = await bestEffort('names', resolvePendingNames);
+      await bestEffort('geo', resolvePendingGeo);
     }
   } finally {
     running.delete(characterId);
