@@ -27,7 +27,8 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - [x] 3. Flujo SSO (`/auth/login`, `/auth/callback`) + `GET /characters` + `GET /characters/:id/wallet`
 - [x] 4. Sync del wallet journal (`src/services/sync.ts`, `POST /sync/:characterId`, `POST /sync/all`, `GET /sync/log`)
 - [x] 5. `GET /summary?days=N` (`src/services/summary.ts`) + dashboard mínimo en Astro (`apps/web`)
-- [ ] 6. Vincular los 5 personajes + cron cada 60 min (`POST /sync/all`)
+- [x] 6b. Cron dentro de la API (`src/services/scheduler.ts`): `syncAll()` cada `SYNC_INTERVAL_MIN` (60 por defecto, 0 lo desactiva). Al arrancar retoma el ritmo desde el último `sync_log`; estado en `GET /sync/status`. Al vincular un personaje se lanza su primer sync en segundo plano.
+- [ ] 6a. Vincular los 5 personajes (manual: `http://localhost:3000/auth/login` con cada uno)
 - [ ] Después: wallet transactions con nombres de ítems (`/universe/names` o SDE), inventario con `/characters/{id}/assets`
 
 ## Paso 4 — especificación

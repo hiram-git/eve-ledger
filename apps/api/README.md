@@ -14,4 +14,6 @@
    - `curl -X POST http://localhost:3000/sync/<id>` (un personaje)
    - `curl -X POST http://localhost:3000/sync/all` (todos, en secuencia)
    - `curl http://localhost:3000/sync/log` (últimas ejecuciones y errores)
-9. Resumen consolidado: http://localhost:3000/summary?days=30 (lo consume el dashboard de `apps/web`)
+9. Sync automático: la API sincroniza todos los personajes cada `SYNC_INTERVAL_MIN` minutos (60 por defecto; `0` lo desactiva).
+   Estado en http://localhost:3000/sync/status. Al vincular un personaje se sincroniza enseguida.
+10. Resumen consolidado: http://localhost:3000/summary?days=30 (lo consume el dashboard de `apps/web`)

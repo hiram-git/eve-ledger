@@ -26,6 +26,13 @@ export function ago(iso: string | null): string {
   return `hace ${Math.round(h / 24)} días`;
 }
 
+export function until(iso: string): string {
+  const min = Math.round((new Date(iso).getTime() - Date.now()) / 60_000);
+  if (min < 1) return 'en menos de 1 min';
+  if (min < 60) return `en ${min} min`;
+  return `en ${Math.round(min / 60)} h`;
+}
+
 // Nombres legibles de los ref_type más comunes; el resto se muestra tal cual
 const REF_TYPES: Record<string, string> = {
   bounty_prizes: 'Recompensas (ratting)',

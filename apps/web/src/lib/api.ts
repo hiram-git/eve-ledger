@@ -20,6 +20,14 @@ export type Summary = {
 
 export type SyncAllResult = { inserted: number; errors: number };
 
+export type SyncStatus = {
+  enabled: boolean;
+  intervalMin: number;
+  running: boolean;
+  nextRunAt: string | null;
+  lastRun: { startedAt: string; finishedAt: string; inserted: number; errors: number; characters: number } | null;
+};
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, init);
   if (!res.ok) throw new Error(`API ${res.status} en ${path}: ${await res.text()}`);
@@ -27,5 +35,6 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const getSummary = (days: number) => call<Summary>(`/summary?days=${days}`);
+export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
 export const loginUrl = `${API_URL}/auth/login`;

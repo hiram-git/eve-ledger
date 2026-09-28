@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { desc } from 'drizzle-orm';
 import { db } from '../db/client';
 import { syncLog } from '../db/schema';
+import { schedulerStatus } from '../services/scheduler';
 import { syncAll, syncJournal } from '../services/sync';
 
 export const syncRoutes = new Elysia({ prefix: '/sync' })
@@ -21,6 +22,8 @@ export const syncRoutes = new Elysia({ prefix: '/sync' })
     },
     { params: t.Object({ characterId: t.Numeric() }) },
   )
+  // Estado del cron: próximo sync automático y resultado del último
+  .get('/status', () => schedulerStatus())
   // Últimas ejecuciones, para revisar errores
   .get(
     '/log',
