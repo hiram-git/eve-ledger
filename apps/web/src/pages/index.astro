@@ -18,6 +18,15 @@ import {
   type SyncStatus,
 } from '../lib/api';
 import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const date = (iso: string) => shortDate(iso, lang);
+const rel = (iso: string | null) => ago(iso, lang);
+const refLabel = (ref: string) => refTypeLabel(ref, lang);
 
 const PERIODS = [7, 30, 90];
 const q = Astro.url.searchParams;
@@ -69,46 +78,46 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 const delta = summary && summary.previous.complete ? summary.totals.net - summary.previous.net : undefined;
 
 // Rango real del período en hora de EVE, para el subtítulo de la navegación
-const range = summary ? `${shortDate(summary.period.from)} – ${shortDate(summary.period.to)}` : undefined;
+const range = summary ? `${date(summary.period.from)} – ${date(summary.period.to)}` : undefined;
 
 const refRows = (pick: (r: Summary['byRefType'][number]) => number): BarRow[] =>
-  summary?.byRefType.map((r) => ({ label: refTypeLabel(r.refType), value: pick(r), detail: `${r.count} movimientos` })) ?? [];
+  summary?.byRefType.map((r) => ({ label: refLabel(r.refType), value: pick(r), detail: m.entries(r.count) })) ?? [];
 const incomeRows = refRows((r) => r.income);
 const expenseRows = refRows((r) => r.expenses);
 
 // Las estructuras de jugadores no tienen nombre sin el scope de estructuras
 const locationLabel = (id: number, name: string | null) =>
-  name ?? (id > 1_000_000_000_000 ? `Estructura #${id}` : `#${id}`);
+  name ?? (id > 1_000_000_000_000 ? m.structure(id) : `#${id}`);
 // "Jita IV - Moon 4 - Caldari Navy Assembly Plant" → "Jita IV - Moon 4" (el nombre completo va en el tooltip)
 const shortStation = (name: string) => name.split(' - ').slice(0, 2).join(' - ');
 const locationRows: BarRow[] =
   inventory?.byLocation.map((l) => {
     const full = locationLabel(l.locationId, l.name);
-    return { label: shortStation(full), value: l.value, detail: `${full} · ${l.stacks} stacks` };
+    return { label: shortStation(full), value: l.value, detail: `${full} · ${m.stacks(l.stacks)}` };
   }) ?? [];
 const valuableItems = inventory?.topItems.map((i) => ({ ...i, isk: i.value })) ?? [];
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 ---
 
 <Base section="resumen" status={status} pilots={summary?.characters.length}>
-    <nav class="main-nav shell" aria-label="Período" slot="nav">
+    <nav class="main-nav shell" aria-label={m.period} slot="nav">
       <div class="nav-tabs">
         {
           PERIODS.map((p) => (
             <a class="nav-tab" href={`/?days=${p}`} aria-current={p === days ? 'page' : undefined}>
               <Icon name="clock" />
-              {p} días
+              {m.days(p)}
             </a>
           ))
         }
       </div>
       <p class="period-meta">
-        {range && <span>{range} · hora EVE</span>}
+        {range && <span>{range} · {m.eveTime}</span>}
         {
           partialHistory && (
-            <span class="coverage" title="ESI solo guarda ~30 días del journal: el historial crece desde el primer sync">
+            <span class="coverage" title={m.coverageTitle}>
               <Icon name="info" />
-              Historial desde {shortDate(summary!.coverage.firstEntryAt!)} ({summary!.coverage.coveredDays} de {days} días)
+              {m.coverage(date(summary!.coverage.firstEntryAt!), summary!.coverage.coveredDays, days)}
             </span>
           )
         }
@@ -116,26 +125,25 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
           lastSync && (
             <span class:list={['fresh', { stale: isStale(lastSync) }]}>
               <Icon name={isStale(lastSync) ? 'alert' : 'activity'} />
-              Actualizado <time datetime={lastSync} data-ago={lastSync}>{ago(lastSync)}</time>
+              {m.updated} <time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
             </span>
           )
         }
       </p>
     </nav>
 
-      <h1 class="sr-only">Resumen de los últimos {days} días</h1>
+      <h1 class="sr-only">{m.summaryH1(days)}</h1>
 
       {
         synced !== null && (
           <div class="notice">
             <Icon name="info" />
             <p>
-              Sincronización completa: {synced} movimientos nuevos
+              {m.syncDone(synced)}
               {syncErrors && (
                 <strong>
                   {' '}
-                  · {syncErrors} {syncErrors === '1' ? 'piloto con error' : 'pilotos con error'}: revisa el{' '}
-                  <a href={syncLogUrl}>registro de sync</a>
+                  · {m.syncErrors(Number(syncErrors))} <a href={syncLogUrl}>{m.syncLog}</a>
                 </strong>
               )}
             </p>
@@ -147,11 +155,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
           <div class="notice warning" role="status">
             <Icon name="alert" />
             <p>
-              <strong>Datos desactualizados:</strong> el último sync fue {lastSync ? ago(lastSync) : 'nunca'}.
-              {status && !status.enabled
-                ? ' El sync automático está desactivado (SYNC_INTERVAL_MIN=0); '
-                : ' El sync automático no ha podido completarse; '}
-              pulsa «Sincronizar» o revisa el <a href={syncLogUrl}>registro de sync</a>.
+              <strong>{m.staleTitle}</strong> {m.staleLast(rel(lastSync ?? null))}{' '}
+              {status && !status.enabled ? m.staleCronOff : m.staleCronFailed} {m.staleAction}{' '}
+              <a href={syncLogUrl}>{m.syncLog}</a>.
             </p>
           </div>
         )
@@ -160,7 +166,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
         syncFailed && (
           <div class="notice error">
             <Icon name="alert" />
-            <p>No se pudo sincronizar: {syncFailed}</p>
+            <p>{m.syncFailed} {syncFailed}</p>
           </div>
         )
       }
@@ -170,10 +176,10 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
           <div class="notice error">
             <Icon name="alert" />
             <div>
-              <strong>Sin enlace con la API</strong>
+              <strong>{m.apiDown}</strong>
               <p class="muted">{apiError}</p>
               <p>
-                ¿Está corriendo? En <code>apps/api</code>: <code>bun run dev</code>
+                {m.apiRunning} <code>apps/api</code>: <code>bun run dev</code>
               </p>
             </div>
           </div>
@@ -185,8 +191,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
           <div class="notice">
             <Icon name="users" />
             <p>
-              Aún no hay pilotos vinculados. <a href={loginUrl}>Vincula tu primer personaje</a> y luego pulsa
-              «Sincronizar».
+              {m.noPilots} <a href={loginUrl}>{m.linkFirst}</a> {m.thenSync}
             </p>
           </div>
         )
@@ -195,26 +200,26 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       {
         summary && summary.characters.length > 0 && (
           <>
-            <section class="glance" aria-label="Resumen">
+            <section class="glance" aria-label={m.summary}>
               <div class="panel stat hero-stat">
                 <span class="label">
                   <Icon name="activity" />
-                  Neto · últimos {days} días
+                  {m.netPeriod(days)}
                 </span>
-                <span class:list={['value', 'signed', sign(summary.totals.net)]} title={iskFull(summary.totals.net)}>
+                <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
                   {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
-                  {isk(summary.totals.net, { sign: true })}
+                  {fmt(summary.totals.net, { sign: true })}
                   <small>ISK</small>
-                  <span class="sr-only">{summary.totals.net >= 0 ? '(ganancia)' : '(pérdida)'}</span>
+                  <span class="sr-only">{summary.totals.net >= 0 ? m.gain : m.loss}</span>
                 </span>
                 <p class="versus">
                   {delta !== undefined ? (
                     <>
-                      <span class:list={['delta', sign(delta)]}>{isk(delta, { sign: true })}</span> frente a los {days} días
-                      anteriores ({isk(summary.previous.net, { sign: true })})
+                      <span class:list={['delta', sign(delta)]}>{fmt(delta, { sign: true })}</span>{' '}
+                      {m.versus(days, fmt(summary.previous.net, { sign: true }))}
                     </>
                   ) : (
-                    <>Sin {days} días anteriores completos para comparar todavía</>
+                    <>{m.noPrevious(days)}</>
                   )}
                 </p>
                 <div class="ratio" aria-hidden="true">
@@ -229,30 +234,30 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   <div>
                     <dt>
                       <i class="key income" />
-                      Ingresos
+                      {m.income}
                     </dt>
-                    <dd title={iskFull(summary.totals.income)}>{isk(summary.totals.income)}</dd>
+                    <dd title={full(summary.totals.income)}>{fmt(summary.totals.income)}</dd>
                   </div>
                   <div>
                     <dt>
                       <i class="key expenses" />
-                      Gastos
+                      {m.expenses}
                     </dt>
-                    <dd title={iskFull(-summary.totals.expenses)}>{isk(-summary.totals.expenses)}</dd>
+                    <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
                   </div>
                 </dl>
-                <div class="today" title={`Desde las 00:00 EVE (UTC): ${iskFull(summary.today.net)}`}>
+                <div class="today" title={m.todayTitle(full(summary.today.net))}>
                   <span class="today-label">
                     <Icon name="clock" />
-                    Hoy (EVE)
+                    {m.today}
                   </span>
-                  <span class:list={['today-value', sign(summary.today.net)]}>{isk(summary.today.net, { sign: true })}</span>
+                  <span class:list={['today-value', sign(summary.today.net)]}>{fmt(summary.today.net, { sign: true })}</span>
                   <span class="today-detail">
-                    {isk(summary.today.income)} entran · {isk(summary.today.expenses)} salen
+                    {m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))}
                   </span>
                 </div>
                 {summary.internalTransfers > 0 && (
-                  <span class="sub">No incluye {isk(summary.internalTransfers)} ISK movidos entre tus pilotos</span>
+                  <span class="sub">{m.internal(fmt(summary.internalTransfers))}</span>
                 )}
               </div>
               <div class="panel stat worth">
@@ -260,10 +265,10 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   <div>
                     <span class="label">
                       <Icon name="wallet" />
-                      Patrimonio
+                      {m.netWorth}
                     </span>
-                    <span class="value" title={iskFull(netWorth)}>
-                      {isk(netWorth)}
+                    <span class="value" title={full(netWorth)}>
+                      {fmt(netWorth)}
                       <small>ISK</small>
                     </span>
                   </div>
@@ -271,17 +276,17 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                     <div>
                       <dt>
                         <i class="key balance" />
-                        Wallets
+                        {m.wallets}
                       </dt>
-                      <dd title={iskFull(summary.balance)}>{isk(summary.balance)}</dd>
+                      <dd title={full(summary.balance)}>{fmt(summary.balance)}</dd>
                     </div>
                     <div>
                       <dt>
                         <i class="key inventory" />
-                        Inventario
+                        {m.inventory}
                       </dt>
-                      <dd title={inventoryValue ? iskFull(inventoryValue) : 'Sin inventario sincronizado'}>
-                        {inventoryValue ? isk(inventoryValue) : '—'}
+                      <dd title={inventoryValue ? full(inventoryValue) : m.noInventory}>
+                        {inventoryValue ? fmt(inventoryValue) : '—'}
                       </dd>
                     </div>
                   </dl>
@@ -290,17 +295,19 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               </div>
             </section>
 
-            <ul class="pilot-strip" aria-label="Neto por piloto">
+            <ul class="pilot-strip" aria-label={m.netByPilot}>
               {summary.characters.map((c) => (
                 <li>
                   <a
                     href="#pilotos"
                     class:list={{ stale: isStale(c.lastSyncAt) }}
-                    title={`${c.name}: neto ${iskFull(c.net)} en ${days} días` + (isStale(c.lastSyncAt) ? ` · sin sync ${ago(c.lastSyncAt)}` : '')}
+                    title={m.pilotNetTitle(c.name, full(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
                   >
                     {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
                     <span class="pilot-name">{c.name}</span>
-                    <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>{isk(c.net, { sign: true })}</span>
+                    <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
+                      {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
+                    </span>
                   </a>
                 </li>
               ))}
@@ -308,8 +315,8 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             <section class="panel">
               <div class="panel-heading">
-                <h3>Flujo diario</h3>
-                <span class="meta">Hora de EVE (UTC)</span>
+                <h3>{m.dailyFlow}</h3>
+                <span class="meta">{m.eveTimeUtc}</span>
               </div>
               <div class="panel-body">
                 <DailyChart daily={summary.daily} firstDate={firstDate} />
@@ -317,18 +324,18 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             </section>
 
             <div class="split">
-              <BarList title="De dónde viene el ISK" kind="income" rows={incomeRows} />
-              <BarList title="En qué se va" kind="expenses" rows={expenseRows} />
+              <BarList title={m.whereFrom} kind="income" rows={incomeRows} />
+              <BarList title={m.whereTo} kind="expenses" rows={expenseRows} />
             </div>
 
             {(summary.market.sold.length > 0 || summary.market.bought.length > 0) && (
               <div class="split">
                 <MarketItems
-                  title="Mercado: lo más vendido"
+                  title={m.topSold}
                   items={summary.market.sold.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
                 />
                 <MarketItems
-                  title="Mercado: lo más comprado"
+                  title={m.topBought}
                   items={summary.market.bought.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
                 />
               </div>
@@ -336,36 +343,36 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             {inventory && inventory.stacks > 0 && (
               <div class="split">
-                <BarList title="Dónde está tu inventario" kind="inventory" rows={locationRows} limit={11} />
+                <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
                 <MarketItems
-                  title="Lo más valioso"
+                  title={m.mostValuable}
                   items={valuableItems}
-                  iskLabel="Valor"
-                  priceLabel="Precio unitario"
-                  empty="Sin inventario sincronizado."
+                  iskLabel={m.value}
+                  priceLabel={m.unitPrice}
+                  empty={m.noInventoryDot}
                 />
               </div>
             )}
 
             <section class="panel">
               <div class="panel-heading">
-                <h3 id="pilotos">Pilotos</h3>
+                <h3 id="pilotos">{m.pilots}</h3>
                 <a class="meta link" href="/pilotos">
                   <Icon name="users" />
-                  Gestionar pilotos
+                  {m.managePilots}
                 </a>
               </div>
               <div class="scroll">
                 <table class="pilots">
                   <thead>
                     <tr>
-                      <th>Piloto</th>
-                      <th>Saldo</th>
-                      <th>Inventario</th>
-                      <th>Ingresos</th>
-                      <th>Gastos</th>
-                      <th>Neto</th>
-                      <th>Último sync</th>
+                      <th>{m.pilot}</th>
+                      <th>{m.balance}</th>
+                      <th>{m.inventory}</th>
+                      <th>{m.income}</th>
+                      <th>{m.expenses}</th>
+                      <th>{m.net}</th>
+                      <th>{m.lastSync}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -384,22 +391,22 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                             {c.name}
                           </span>
                         </td>
-                        <td title={c.balance === null ? 'Sin movimientos sincronizados' : iskFull(c.balance)}>
-                          {c.balance === null ? '—' : isk(c.balance)}
+                        <td title={c.balance === null ? m.noEntries : full(c.balance)}>
+                          {c.balance === null ? '—' : fmt(c.balance)}
                         </td>
                         <td
                           title={
-                            inventoryByChar.has(c.id) ? iskFull(inventoryByChar.get(c.id)!) : 'Sin inventario sincronizado'
+                            inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory
                           }
                         >
-                          {inventoryByChar.has(c.id) ? isk(inventoryByChar.get(c.id)!) : '—'}
+                          {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
                         </td>
-                        <td>{isk(c.income)}</td>
-                        <td>{isk(-c.expenses)}</td>
-                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{isk(c.net, { sign: true })}</td>
+                        <td>{fmt(c.income)}</td>
+                        <td>{fmt(-c.expenses)}</td>
+                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{fmt(c.net, { sign: true })}</td>
                         <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
                           {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
-                          {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{ago(c.lastSyncAt)}</time> : 'nunca'}
+                          {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
                         </td>
                       </tr>
                     ))}
@@ -407,17 +414,10 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                 </table>
               </div>
               <p class="panel-note">
-                Saldo = balance del último movimiento sincronizado. Inventario valorado con el precio medio de ESI
-                {inventory?.pricesUpdatedAt && <> (actualizado {ago(inventory.pricesUpdatedAt)})</>}; las copias de
-                blueprint cuentan como 0
-                {inventory && inventory.unpricedTypes > 0 && (
-                  <>
-                    {' '}
-                    y hay {inventory.unpricedTypes} {inventory.unpricedTypes === 1 ? 'tipo de ítem' : 'tipos de ítem'} sin
-                    precio
-                  </>
-                )}
-                .
+                {m.noteBalance}
+                {inventory?.pricesUpdatedAt && m.notePrices(rel(inventory.pricesUpdatedAt))}
+                {m.noteBpc}
+                {inventory && inventory.unpricedTypes > 0 && m.noteUnpriced(inventory.unpricedTypes)}.
               </p>
             </section>
           </>

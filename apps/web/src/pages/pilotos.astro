@@ -15,7 +15,14 @@ import {
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { ago, isk, iskFull } from '../lib/format';
+import { ago, isk, iskFull, longDate } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const rel = (iso: string | null) => ago(iso, lang);
 
 const DAYS = 30;
 const q = Astro.url.searchParams;
@@ -42,11 +49,7 @@ const linkedId = Number(q.get('linked') ?? 0);
 const linked = pilots.find((p) => p.id === linkedId);
 const loginError = q.get('error');
 const loginErrorDetail = q.get('detail');
-const LOGIN_ERRORS: Record<string, string> = {
-  denied: 'Cancelaste el acceso en la página de EVE, así que no se vinculó ningún piloto.',
-  state: 'El enlace de inicio de sesión caducó (dura 10 minutos) o ya se había usado.',
-  sso: 'EVE no aceptó el inicio de sesión.',
-};
+const LOGIN_ERRORS: Record<string, string> = { denied: m.loginDenied, state: m.loginState, sso: m.loginSso };
 
 const synced = q.get('synced');
 const syncErrors = q.get('syncErrors');
@@ -57,31 +60,33 @@ const flows = new Map(summary?.characters.map((c) => [c.id, c]));
 const invByPilot = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 
 const SCOPE_LABELS: Record<string, string> = {
-  'esi-wallet.read_character_wallet.v1': 'Wallet',
-  'esi-assets.read_assets.v1': 'Inventario',
+  'esi-wallet.read_character_wallet.v1': m.scopeWallet,
+  'esi-assets.read_assets.v1': m.scopeInventory,
 };
 const REQUIRED = Object.keys(SCOPE_LABELS);
 
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 type State = { kind: 'ok' | 'pending' | 'stale' | 'error'; text: string; title?: string; hint?: string };
 
+// Los errores llegan de la API en español/inglés técnico: se explican en el idioma elegido
 function explain(message: string): string {
-  if (/invalid_grant|refresh token/i.test(message)) return 'EVE rechazó el token: caducó o se revocó el acceso. Vuelve a vincularlo.';
-  if (/descifrar|ENC_KEY/i.test(message)) return 'No se pudo descifrar el token guardado (¿cambió ENC_KEY?). Vuelve a vincularlo.';
-  if (/cambió de dueño|owner/i.test(message)) return 'El personaje cambió de cuenta. Vuelve a vincularlo.';
-  if (/ESI (401|403)/.test(message)) return 'ESI denegó el acceso: faltan permisos. Vuelve a vincularlo.';
-  if (/ESI (420|429)/.test(message)) return 'ESI limitó las peticiones; se reintentará en el próximo sync.';
-  if (/ESI 5\d\d/.test(message)) return 'ESI no respondió bien (posible downtime); se reintentará en el próximo sync.';
+  if (/invalid_grant|refresh token/i.test(message)) return m.errToken;
+  if (/descifrar|ENC_KEY/i.test(message)) return m.errDecrypt;
+  if (/cambió de dueño|owner/i.test(message)) return m.errOwner;
+  if (/ESI (401|403)/.test(message)) return m.errForbidden;
+  if (/ESI (420|429)/.test(message)) return m.errRate;
+  if (/ESI 5\d\d/.test(message)) return m.errDown;
   return message;
 }
 function stateOf(p: Pilot): State {
   if (p.lastError) {
-    const kind = { journal: 'journal', transactions: 'transacciones', assets: 'inventario' }[p.lastError.kind] ?? p.lastError.kind;
-    return { kind: 'error', text: `Falló el sync de ${kind}`, title: p.lastError.message, hint: explain(p.lastError.message) };
+    const kinds: Record<string, string> = { journal: m.kindJournal, transactions: m.kindTransactions, assets: m.kindAssets };
+    const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
+    return { kind: 'error', text: m.stateError(kind), title: p.lastError.message, hint: explain(p.lastError.message) };
   }
-  if (!p.lastSyncAt) return { kind: 'pending', text: 'Primer sync en curso…' };
-  if (Date.now() - new Date(p.lastSyncAt).getTime() > staleAfterMs) return { kind: 'stale', text: 'Sin sincronizar' };
-  return { kind: 'ok', text: 'Sincronizado' };
+  if (!p.lastSyncAt) return { kind: 'pending', text: m.statePending };
+  if (Date.now() - new Date(p.lastSyncAt).getTime() > staleAfterMs) return { kind: 'stale', text: m.stateStale };
+  return { kind: 'ok', text: m.stateOk };
 }
 
 const rows = pilots.map((p) => ({ ...p, state: stateOf(p) }));
@@ -90,18 +95,18 @@ const freeSlots = Math.max(0, PILOT_SLOTS - pilots.length);
 const portrait = (id: number, size = 128) => `https://images.evetech.net/characters/${id}/portrait?size=${size}`;
 ---
 
-<Base title="Pilotos" section="pilotos" status={status} pilots={pilots.length}>
+<Base title={m.pilots} section="pilotos" status={status} pilots={pilots.length}>
   <div class="page-head" data-pending={pending ? '1' : undefined}>
     <div>
-      <h1>Pilotos</h1>
+      <h1>{m.pilots}</h1>
       <p class="subtitle">
-        {pilots.length} de {PILOT_SLOTS} vinculados
-        {freeSlots > 0 && <span> · ESI solo guarda ~30 días de wallet: vincula los que faltan cuanto antes</span>}
+        {m.pilotsLinked(pilots.length, PILOT_SLOTS)}
+        {freeSlots > 0 && <span>{m.pilotsHurry}</span>}
       </p>
     </div>
     <a class="secondary-button" href={loginUrl}>
       <Icon name="plus" />
-      Vincular piloto
+      {m.linkPilot}
     </a>
   </div>
 
@@ -110,11 +115,9 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
       <div class="notice success" role="status">
         <img class="notice-portrait" src={portrait(linked.id, 64)} alt="" width="40" height="40" onerror="this.style.visibility='hidden'" />
         <div>
-          <strong>{linked.name} vinculado.</strong>
+          <strong>{m.linkedTitle(linked.name)}</strong>
           <p>
-            {linked.lastSyncAt
-              ? `Primer sync completo ${ago(linked.lastSyncAt)}: ya cuenta en el resumen.`
-              : 'Su primer sync (journal, transacciones e inventario) está en marcha; esta página se actualiza sola.'}
+            {linked.lastSyncAt ? m.linkedDone(rel(linked.lastSyncAt)) : m.linkedPending}
           </p>
         </div>
       </div>
@@ -125,13 +128,13 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
       <div class="notice error" role="alert">
         <Icon name="alert" />
         <div>
-          <strong>No se pudo vincular el piloto.</strong>
+          <strong>{m.linkFailed}</strong>
           <p>
-            {LOGIN_ERRORS[loginError] ?? 'El inicio de sesión con EVE falló.'}
-            {loginErrorDetail && <span class="detail"> Detalle: {loginErrorDetail}</span>}
+            {LOGIN_ERRORS[loginError] ?? m.loginGeneric}
+            {loginErrorDetail && <span class="detail"> {m.detail} {loginErrorDetail}</span>}
           </p>
           <p>
-            <a href={loginUrl}>Volver a intentarlo</a>
+            <a href={loginUrl}>{m.retry}</a>
           </p>
         </div>
       </div>
@@ -142,12 +145,11 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
       <div class="notice" role="status">
         <Icon name="info" />
         <p>
-          Sincronización completa: {synced} movimientos nuevos
+          {m.syncDone(synced)}
           {syncErrors && (
             <strong>
               {' '}
-              · {syncErrors === '1' ? '1 piloto con error' : `${syncErrors} pilotos con error`}: revisa el{' '}
-              <a href={syncLogUrl}>registro de sync</a>
+              · {m.syncErrors(Number(syncErrors))} <a href={syncLogUrl}>{m.syncLog}</a>
             </strong>
           )}
         </p>
@@ -158,7 +160,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     syncFailed && (
       <div class="notice error" role="alert">
         <Icon name="alert" />
-        <p>No se pudo sincronizar: {syncFailed}</p>
+        <p>{m.syncFailed} {syncFailed}</p>
       </div>
     )
   }
@@ -167,10 +169,10 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
       <div class="notice error" role="alert">
         <Icon name="alert" />
         <div>
-          <strong>Sin enlace con la API</strong>
+          <strong>{m.apiDown}</strong>
           <p class="muted">{apiError}</p>
           <p>
-            ¿Está corriendo? En <code>apps/api</code>: <code>bun run dev</code>
+            {m.apiRunning} <code>apps/api</code>: <code>bun run dev</code>
           </p>
         </div>
       </div>
@@ -187,7 +189,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
               <div>
                 <h2>{p.name}</h2>
                 <p class="since">
-                  Vinculado <time datetime={p.createdAt}>{new Date(p.createdAt).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</time>
+                  {m.linkedOn} <time datetime={p.createdAt}>{longDate(p.createdAt, lang)}</time>
                 </p>
               </div>
             </div>
@@ -200,66 +202,66 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
               <span class="when">
                 {p.lastSyncAt ? (
                   <>
-                    Último sync <time datetime={p.lastSyncAt} data-ago={p.lastSyncAt}>{ago(p.lastSyncAt)}</time>
+                    {m.lastSyncAgo} <time datetime={p.lastSyncAt} data-ago={p.lastSyncAt}>{rel(p.lastSyncAt)}</time>
                   </>
                 ) : (
-                  'Aún sin datos'
+                  m.noDataYet
                 )}
               </span>
               {p.state.kind === 'error' && p.state.hint && (
-                <span class="error-msg" title={`Error original: ${p.state.title}`}>
+                <span class="error-msg" title={`${m.originalError} ${p.state.title}`}>
                   {p.state.hint}
                 </span>
               )}
             </div>
 
-            <ul class="scopes" aria-label="Permisos">
+            <ul class="scopes" aria-label={m.permissions}>
               {REQUIRED.map((s) => (
                 <li class:list={{ missing: p.missingScopes.includes(s) }}>
                   <Icon name={p.missingScopes.includes(s) ? 'alert' : 'wallet'} />
                   {SCOPE_LABELS[s]}
-                  {p.missingScopes.includes(s) && <span class="sr-only"> (falta el permiso)</span>}
+                  {p.missingScopes.includes(s) && <span class="sr-only">{m.scopeMissing}</span>}
                 </li>
               ))}
             </ul>
 
             <dl class="figures">
               <div>
-                <dt>Saldo</dt>
-                <dd title={flows.get(p.id)?.balance != null ? iskFull(flows.get(p.id)!.balance!) : 'Sin movimientos sincronizados'}>
-                  {flows.get(p.id)?.balance != null ? isk(flows.get(p.id)!.balance!) : '—'}
+                <dt>{m.balance}</dt>
+                <dd title={flows.get(p.id)?.balance != null ? full(flows.get(p.id)!.balance!) : m.noEntries}>
+                  {flows.get(p.id)?.balance != null ? fmt(flows.get(p.id)!.balance!) : '—'}
                 </dd>
               </div>
               <div>
-                <dt>Inventario</dt>
-                <dd title={invByPilot.has(p.id) ? iskFull(invByPilot.get(p.id)!) : 'Sin inventario sincronizado'}>
-                  {invByPilot.has(p.id) ? isk(invByPilot.get(p.id)!) : '—'}
+                <dt>{m.inventory}</dt>
+                <dd title={invByPilot.has(p.id) ? full(invByPilot.get(p.id)!) : m.noInventory}>
+                  {invByPilot.has(p.id) ? fmt(invByPilot.get(p.id)!) : '—'}
                 </dd>
               </div>
               <div>
-                <dt>Neto {DAYS} d</dt>
+                <dt>{m.net30(DAYS)}</dt>
                 <dd
                   class:list={{ pos: (flows.get(p.id)?.net ?? 0) > 0, neg: (flows.get(p.id)?.net ?? 0) < 0 }}
-                  title={flows.has(p.id) ? iskFull(flows.get(p.id)!.net) : undefined}
+                  title={flows.has(p.id) ? full(flows.get(p.id)!.net) : undefined}
                 >
-                  {flows.has(p.id) && p.lastSyncAt ? isk(flows.get(p.id)!.net, { sign: true }) : '—'}
+                  {flows.has(p.id) && p.lastSyncAt ? fmt(flows.get(p.id)!.net, { sign: true }) : '—'}
                 </dd>
               </div>
             </dl>
 
             <div class="actions">
               {p.missingScopes.length > 0 || p.state.kind === 'error' ? (
-                <a class="secondary-button" href={loginUrl} title="Volver a iniciar sesión con este personaje en EVE">
+                <a class="secondary-button" href={loginUrl} title={m.relinkTitle}>
                   <Icon name="refresh" />
-                  Revincular
+                  {m.relink}
                 </a>
               ) : (
                 <form method="post" action="/sync" class="sync-form">
                   <input type="hidden" name="back" value="/pilotos" />
                   <input type="hidden" name="character" value={p.id} />
-                  <button type="submit" class="secondary-button" title={`Sincronizar solo a ${p.name}`}>
+                  <button type="submit" class="secondary-button" title={m.syncOneTitle(p.name)}>
                     <Icon name="refresh" />
-                    <span class="label">Sincronizar</span>
+                    <span class="label">{m.syncOne}</span>
                   </button>
                 </form>
               )}
@@ -274,8 +276,8 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
                 <Icon name="plus" />
               </span>
               <span>
-                <strong>Plaza {pilots.length + i + 1} libre</strong>
-                <span class="hint">Vincula otro de tus personajes con el login de EVE</span>
+                <strong>{m.freeSlot(pilots.length + i + 1)}</strong>
+                <span class="hint">{m.freeSlotHint}</span>
               </span>
             </a>
           </li>
@@ -287,9 +289,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
   <p class="privacy">
     <Icon name="info" />
     <span>
-      Vincular un piloto solo autoriza <strong>lectura</strong> de su wallet y su inventario. Los tokens se guardan cifrados en
-      este equipo y nada sale de él salvo las llamadas a ESI. Puedes revocar el acceso cuando quieras desde la gestión de
-      aplicaciones de tu cuenta de EVE.
+      {m.privacyA} <strong>{m.privacyRead}</strong> {m.privacyB}
     </span>
   </p>
 </Base>

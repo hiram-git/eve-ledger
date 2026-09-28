@@ -6,7 +6,7 @@
    - Scopes: `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`
 2. `cp .env.example .env` y completa CLIENT_ID, CLIENT_SECRET y ENC_KEY
 3. `bun install`
-4. `bun run db:generate` (genera las migraciones; se aplican solas al arrancar)
+4. `bun run db:generate` si cambiaste el esquema (crea las migraciones). Se aplican solas al arrancar; para aplicarlas sin arrancar: `bun run db:migrate`
 5. `bun run dev`
 6. Abre http://localhost:4321/pilotos (dashboard) → «Vincular piloto» y entra con un personaje. Al volver de EVE se muestra ahí el resultado
 7. Prueba: http://localhost:3000/characters/<id>/wallet. `GET /characters` devuelve JSON a scripts (`curl`) y redirige a la página de pilotos en el navegador

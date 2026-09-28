@@ -5,9 +5,9 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 
 ## Stack
 - `apps/api`: Bun + Elysia + Drizzle + SQLite (`bun:sqlite`)
-- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`. Tema oscuro tipo HUD en `src/styles/theme.css`. Fuentes autoalojadas con `@fontsource` (Inter para la interfaz, IBM Plex Mono solo para cifras y datos, Barlow Condensed solo para el logotipo). Colores de datos: ingresos `#2a98c0`, gastos `#e8604c`, inventario `#9a7cf0`, validados sobre el fondo de los paneles; no reutilizarlos como colores de interfaz.
+- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`. Tema oscuro tipo HUD en `src/styles/theme.css`. Franja de marca compacta en `Base.astro` (118 px, 92 px en móvil): «EVE LEDGER_» sobre el mapa estelar animado (`src/components/StarMap.astro`, decorativo); no debe empujar el neto fuera de la primera pantalla. Fuentes autoalojadas con `@fontsource` (Inter para la interfaz, IBM Plex Mono solo para cifras y datos, Barlow Condensed solo para el logotipo). Colores de datos: ingresos `#2a98c0`, gastos `#e8604c`, inventario `#9a7cf0`, validados sobre el fondo de los paneles; no reutilizarlos como colores de interfaz.
 - Contexto de producto para el diseño en `PRODUCT.md` (generado con `/impeccable init`: usuario, uso mientras juega y en revisión, «¿gano o pierdo ISK?» como pregunta principal, pilotos PvE + PvP). Live mode configurado en `.impeccable/live/config.json`.
-- Diseño: skill **impeccable** instalado en `.claude/skills/impeccable` (versión y origen en `UPSTREAM`; agentes en `.claude/agents/`). Sin sus hooks automáticos: tras cambiar UI, correr `.claude/skills/impeccable/scripts/impeccable detect --json <archivos>`. Reglas adoptadas: sin eyebrows sobre títulos ni números de sección, el cian solo para acciones/estado, el signo del neto en verde/rojo (`--positive`/`--critical`) y avisos en ámbar (`--warning`). Único movimiento: el pulso de los sistemas con ganancias hoy en el mapa.
+- Diseño: skill **impeccable** instalado en `.claude/skills/impeccable` (versión y origen en `UPSTREAM`; agentes en `.claude/agents/`). Sin sus hooks automáticos: tras cambiar UI, correr `.claude/skills/impeccable/scripts/impeccable detect --json <archivos>`. Reglas adoptadas: sin eyebrows sobre títulos ni números de sección, el cian solo para acciones/estado, el signo del neto en verde/rojo (`--positive`/`--critical`) y avisos en ámbar (`--warning`). Movimiento solo en dos sitios: el pulso de los sistemas con ganancias hoy en el mapa y el mapa estelar animado de la franja de marca (desactivados con `prefers-reduced-motion`).
 - Un solo usuario, sin multitenant ni login propio. Si crece: migrar a PostgreSQL con Drizzle.
 
 ## Decisiones tomadas (no cambiar sin preguntar)
@@ -27,7 +27,8 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Datos «desactualizados» cuando el último sync supera 2× el intervalo (2 h si el cron está apagado). El dashboard se recarga solo tras cada sync automático (`/status.json` en la web).
 - Vinculación: `/auth/callback` no pinta HTML; redirige a `${WEB_URL}/pilotos?linked=ID` o `?error=denied|state|sso`. `GET /characters` redirige a esa página si el cliente pide `text/html` y devuelve JSON (con `missingScopes` y `lastError`) al resto. La web tiene layout común (`src/layouts/Base.astro`) con secciones Resumen / Pilotos; plazas de piloto según `PILOT_SLOTS` (5).
 - `/summary` excluye las transferencias internas (ambas partes son personajes vinculados): en el consolidado se anulan. El saldo por personaje es el `balance` del último movimiento del journal.
-- Migraciones: `bun run db:generate` las crea; se aplican solas al arrancar (`runMigrations()`).
+- Migraciones: `bun run db:generate` las crea; se aplican solas al arrancar (`runMigrations()`) o sin arrancar con `bun run db:migrate` (desde `apps/api`).
+- Idiomas de la web: español (predeterminado), inglés y alemán (`src/lib/i18n.ts`, diccionarios tipados: todo texto visible va ahí, nunca literal en las plantillas). Selector ES/EN/DE en la barra superior → `/lang?to=xx&back=…` guarda la cookie `lang`. Formatos de número/fecha y tiempos relativos con `Intl` según el idioma; la notación k/M/B de ISK y los nombres de ESI no se traducen.
 
 ## Esquema (`src/db/schema.ts`)
 `characters`, `wallet_journal`, `wallet_transactions` (con `client_id` y `journal_ref_id`), `names`, `assets`, `market_prices`, `systems`, `station_systems`, `sync_log` (con `kind`: `journal` | `transactions` | `assets`).
@@ -55,5 +56,5 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
   - Implementado en `esiGet()`: pausa global según `X-ESI-Error-Limit-Remain/Reset` (también preventiva si quedan < 10 errores) y `Retry-After` en 429; como mucho un reintento.
 
 ## Comandos
-- API (`apps/api`): `bun install` · `bun run db:generate` · `bun run dev` (puerto 3000)
+- API (`apps/api`): `bun install` · `bun run db:generate` · `bun run db:migrate` · `bun run dev` (puerto 3000)
 - Web (`apps/web`): `bun install` · `bun run dev` (puerto 4321)

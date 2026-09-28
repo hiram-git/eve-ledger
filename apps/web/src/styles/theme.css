@@ -264,6 +264,48 @@ a {
   text-decoration: none;
 }
 
+/* ───── Franja de marca con mapa estelar (compacta) ───── */
+.hero {
+  position: relative;
+  height: 118px;
+  isolation: isolate;
+  overflow: hidden;
+}
+.hero-lockup {
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.hero-name {
+  margin: 0;
+  font: 700 46px/1 var(--display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text);
+}
+.hero-name span {
+  font-weight: 500;
+  color: #c9d8e4;
+}
+.hero-name i {
+  font-style: normal;
+  color: var(--cyan);
+  margin-left: 2px;
+  animation: blink 1.1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.hero-tagline {
+  margin-top: 6px;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: #7690a1;
+}
+
 /* ───── Navegación de período ───── */
 .period-meta {
   display: flex;
@@ -586,6 +628,15 @@ footer .footer-brand {
   }
   .split {
     grid-template-columns: 1fr;
+  }
+  .hero {
+    height: 92px;
+  }
+  .hero-name {
+    font-size: 32px;
+  }
+  .hero-tagline {
+    font-size: 11px;
   }
   .main-nav {
     height: auto;
