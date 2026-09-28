@@ -1,0 +1,101 @@
+---
+// Barras horizontales ordenadas: una serie por lista, el título la nombra
+import { isk, iskFull, refTypeLabel } from '../lib/format';
+
+interface Props {
+  title: string;
+  kind: 'income' | 'expenses';
+  rows: { refType: string; value: number; count: number }[];
+  limit?: number;
+}
+const { title, kind, rows, limit = 8 } = Astro.props;
+
+const sorted = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
+const shown = sorted.slice(0, limit);
+const rest = sorted.slice(limit);
+if (rest.length) {
+  shown.push({
+    refType: `Otros (${rest.length})`,
+    value: rest.reduce((n, r) => n + r.value, 0),
+    count: rest.reduce((n, r) => n + r.count, 0),
+  });
+}
+const max = Math.max(1, ...shown.map((r) => r.value));
+---
+
+<section class="card">
+  <h2>{title}</h2>
+  {
+    shown.length === 0 ? (
+      <p class="empty">Sin movimientos en el período.</p>
+    ) : (
+      <ul>
+        {shown.map((r) => (
+          <li title={`${iskFull(r.value)} · ${r.count} movimientos`}>
+            <span class="label">{r.refType.startsWith('Otros') ? r.refType : refTypeLabel(r.refType)}</span>
+            <span class="track">
+              <span class:list={['bar', kind]} style={`width:calc((100% - 4.5rem) * ${r.value / max})`} />
+              <span class="value">{isk(r.value)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</section>
+
+<style>
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  li {
+    display: grid;
+    grid-template-columns: minmax(0, 11rem) 1fr;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+  }
+  .label {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .track {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .bar {
+    height: 14px;
+    min-width: 2px;
+    border-radius: 0 4px 4px 0;
+    flex-shrink: 0;
+  }
+  .bar.income {
+    background: var(--income);
+  }
+  .bar.expenses {
+    background: var(--expenses);
+  }
+  .value {
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  .empty {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  @media (max-width: 480px) {
+    li {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+  }
+</style>

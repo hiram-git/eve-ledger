@@ -5,7 +5,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 
 ## Stack
 - `apps/api`: Bun + Elysia + Drizzle + SQLite (`bun:sqlite`)
-- `apps/web`: Astro (pendiente)
+- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`
 - Un solo usuario, sin multitenant ni login propio. Si crece: migrar a PostgreSQL con Drizzle.
 
 ## Decisiones tomadas (no cambiar sin preguntar)
@@ -15,6 +15,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Si cambia el `owner_hash` de un personaje, se rechaza y hay que revincularlo.
 - Todas las llamadas a ESI pasan por `esiGet()` (`src/lib/esi.ts`), que añade `X-Compatibility-Date` y `User-Agent`.
 - Sincronización idempotente: los IDs de ESI (`journal_id`, `transaction_id`) son PK; insertar con `onConflictDoNothing`.
+- `/summary` excluye las transferencias internas (ambas partes son personajes vinculados): en el consolidado se anulan. El saldo por personaje es el `balance` del último movimiento del journal.
 - Migraciones: `bun run db:generate` las crea; se aplican solas al arrancar (`runMigrations()`).
 
 ## Esquema (`src/db/schema.ts`)
@@ -25,7 +26,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - [x] 2. Esquema Drizzle + migración
 - [x] 3. Flujo SSO (`/auth/login`, `/auth/callback`) + `GET /characters` + `GET /characters/:id/wallet`
 - [x] 4. Sync del wallet journal (`src/services/sync.ts`, `POST /sync/:characterId`, `POST /sync/all`, `GET /sync/log`)
-- [ ] 5. `GET /summary` + dashboard mínimo en Astro
+- [x] 5. `GET /summary?days=N` (`src/services/summary.ts`) + dashboard mínimo en Astro (`apps/web`)
 - [ ] 6. Vincular los 5 personajes + cron cada 60 min (`POST /sync/all`)
 - [ ] Después: wallet transactions con nombres de ítems (`/universe/names` o SDE), inventario con `/characters/{id}/assets`
 
@@ -40,4 +41,5 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
   - Implementado en `esiGet()`: pausa global según `X-ESI-Error-Limit-Remain/Reset` (también preventiva si quedan < 10 errores) y `Retry-After` en 429; como mucho un reintento.
 
 ## Comandos
-- `bun install` · `bun run db:generate` · `bun run dev`
+- API (`apps/api`): `bun install` · `bun run db:generate` · `bun run dev` (puerto 3000)
+- Web (`apps/web`): `bun install` · `bun run dev` (puerto 4321)

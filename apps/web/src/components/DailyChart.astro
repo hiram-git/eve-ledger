@@ -1,0 +1,264 @@
+---
+// Columnas divergentes por día: ingresos hacia arriba, gastos hacia abajo, un solo eje
+import type { Summary } from '../lib/api';
+import { isk, iskFull, shortDate } from '../lib/format';
+
+interface Props {
+  daily: Summary['daily'];
+}
+const { daily } = Astro.props;
+
+function niceStep(range: number, count = 4) {
+  if (range <= 0) return 1;
+  const raw = range / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+}
+
+const maxIn = Math.max(0, ...daily.map((d) => d.income));
+const maxOut = Math.max(0, ...daily.map((d) => d.expenses));
+const step = niceStep(maxIn + maxOut);
+const top = Math.max(step, Math.ceil(maxIn / step) * step);
+const bottom = Math.ceil(maxOut / step) * step;
+const span = top + bottom;
+const pct = (v: number) => (v / span) * 100;
+const zero = pct(bottom); // altura de la línea base desde abajo, en %
+
+const ticks: number[] = [];
+for (let v = -bottom; v <= top + step / 2; v += step) ticks.push(v);
+
+// Etiquetas del eje X: primera, última y una por semana
+const labelEvery = daily.length > 14 ? 7 : daily.length > 7 ? 2 : 1;
+const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i) % labelEvery === 0;
+---
+
+<div class="legend" aria-hidden="true">
+  <span><i class="key income"></i>Ingresos</span>
+  <span><i class="key expenses"></i>Gastos</span>
+</div>
+
+<div class="chart" role="img" aria-label="Ingresos y gastos diarios. La tabla con los valores está debajo.">
+  <div class="y-axis">
+    {ticks.map((t) => <span style={`bottom:${pct(t + bottom)}%`}>{isk(t)}</span>)}
+  </div>
+  <div class="plot">
+    {ticks.map((t) => <div class:list={['grid', { base: t === 0 }]} style={`bottom:${pct(t + bottom)}%`} />)}
+    <div class="cols">
+      {
+        daily.map((d) => (
+          <div
+            class="col"
+            tabindex="0"
+            data-date={shortDate(d.date)}
+            data-income={iskFull(d.income)}
+            data-expenses={iskFull(-d.expenses)}
+            data-net={iskFull(d.net)}
+          >
+            {d.income > 0 && <div class="bar income" style={`bottom:${zero}%;height:${pct(d.income)}%`} />}
+            {d.expenses > 0 && <div class="bar expenses" style={`top:${100 - zero}%;height:${pct(d.expenses)}%`} />}
+          </div>
+        ))
+      }
+    </div>
+  </div>
+  <div class="x-axis">
+    {daily.map((d, i) => <span>{showLabel(i) ? shortDate(d.date) : ''}</span>)}
+  </div>
+  <div class="tooltip" hidden></div>
+</div>
+
+<details class="table-view">
+  <summary>Ver como tabla</summary>
+  <table>
+    <thead><tr><th>Día</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead>
+    <tbody>
+      {
+        [...daily].reverse().map((d) => (
+          <tr>
+            <td>{shortDate(d.date)}</td>
+            <td>{isk(d.income)}</td>
+            <td>{isk(-d.expenses)}</td>
+            <td>{isk(d.net, { sign: true })}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</details>
+
+<script>
+  for (const chart of document.querySelectorAll<HTMLElement>('.chart')) {
+    const tip = chart.querySelector<HTMLElement>('.tooltip')!;
+    const show = (col: HTMLElement) => {
+      const { date, income, expenses, net } = col.dataset;
+      tip.innerHTML = `<strong>${date}</strong>
+        <span><i class="key income"></i>Ingresos</span><b>${income}</b>
+        <span><i class="key expenses"></i>Gastos</span><b>${expenses}</b>
+        <span>Neto</span><b>${net}</b>`;
+      tip.hidden = false;
+      const c = chart.getBoundingClientRect();
+      const r = col.getBoundingClientRect();
+      const left = Math.min(Math.max(r.left - c.left + r.width / 2 - tip.offsetWidth / 2, 0), c.width - tip.offsetWidth);
+      tip.style.left = `${left}px`;
+    };
+    for (const col of chart.querySelectorAll<HTMLElement>('.col')) {
+      col.addEventListener('pointerenter', () => show(col));
+      col.addEventListener('focus', () => show(col));
+    }
+    chart.addEventListener('pointerleave', () => (tip.hidden = true));
+    chart.addEventListener('focusout', () => (tip.hidden = true));
+  }
+</script>
+
+<style>
+  .legend {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  :global(.key) {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+  :global(.key.income) {
+    background: var(--income);
+  }
+  :global(.key.expenses) {
+    background: var(--expenses);
+  }
+
+  .chart {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: 220px auto;
+    column-gap: 8px;
+  }
+  .y-axis {
+    position: relative;
+    min-width: 44px;
+  }
+  .y-axis span {
+    position: absolute;
+    right: 0;
+    transform: translateY(50%);
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .plot {
+    position: relative;
+  }
+  .grid {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--grid);
+  }
+  .grid.base {
+    background: var(--axis);
+  }
+  .cols {
+    position: absolute;
+    inset: 0;
+    display: flex;
+  }
+  .col {
+    position: relative;
+    flex: 1;
+    outline: none;
+    border-radius: 4px;
+  }
+  .col:hover,
+  .col:focus-visible {
+    background: var(--hover);
+  }
+  .bar {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 2px);
+    max-width: 24px;
+  }
+  .bar.income {
+    background: var(--income);
+    border-radius: 4px 4px 0 0;
+  }
+  .bar.expenses {
+    background: var(--expenses);
+    border-radius: 0 0 4px 4px;
+  }
+  .x-axis {
+    grid-column: 2;
+    display: flex;
+    padding-top: 6px;
+  }
+  .x-axis span {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    white-space: nowrap;
+    overflow: visible;
+    width: 0;
+    display: flex;
+    justify-content: center;
+  }
+  .tooltip {
+    position: absolute;
+    top: -8px;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 4px 16px;
+    padding: 10px 12px;
+    font-size: 12px;
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .tooltip :global(strong) {
+    grid-column: 1 / -1;
+  }
+  .tooltip :global(span) {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+  }
+  .tooltip :global(b) {
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .tooltip[hidden] {
+    display: none;
+  }
+  .table-view {
+    margin-top: 16px;
+    font-size: 13px;
+  }
+  .table-view summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+  }
+  .table-view table {
+    margin-top: 8px;
+  }
+</style>
