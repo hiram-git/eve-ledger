@@ -8,8 +8,8 @@
 3. `bun install`
 4. `bun run db:generate` (genera las migraciones; se aplican solas al arrancar)
 5. `bun run dev`
-6. Abre http://localhost:3000/auth/login y entra con un personaje
-7. Prueba: http://localhost:3000/characters/<id>/wallet
+6. Abre http://localhost:4321/pilotos (dashboard) → «Vincular piloto» y entra con un personaje. Al volver de EVE se muestra ahí el resultado
+7. Prueba: http://localhost:3000/characters/<id>/wallet. `GET /characters` devuelve JSON a scripts (`curl`) y redirige a la página de pilotos en el navegador
 8. Sincroniza wallet e inventario (journal + transacciones + assets + precios + nombres):
    - `curl -X POST http://localhost:3000/sync/<id>` (un personaje)
    - `curl -X POST http://localhost:3000/sync/all` (todos, en secuencia)

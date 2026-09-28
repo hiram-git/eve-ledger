@@ -19,6 +19,7 @@ Producción local: `bun run build && bun run start`.
 - Mercado por ítem (lo más vendido y comprado)
 - Inventario: valor total, dónde está y los ítems más valiosos (precio medio de ESI)
 - Tabla por personaje con saldo, inventario, neto y último sync
+- Página **Pilotos** (`/pilotos`): vincular personajes (vuelta del login de EVE con aviso de éxito o error), estado de sync, permisos, cifras y sync o revinculación por piloto; plazas libres según `PILOT_SLOTS`
 - Botón «Sincronizar ahora» → `POST /sync/all` de la API
 
 Diseño: tema oscuro tipo HUD (`src/styles/theme.css`), con el mapa de New Eden en el panel de patrimonio (`NewEdenMap.astro`). Fuentes autoalojadas (`@fontsource`), funciona sin conexión. Las animaciones se desactivan con «reducir movimiento» del sistema. Revisado con el skill impeccable (`/impeccable polish`).

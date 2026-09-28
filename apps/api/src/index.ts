@@ -16,7 +16,7 @@ const app = new Elysia()
     console.error(`[${code}]`, error);
     return { error: error instanceof Error ? error.message : String(error) };
   })
-  .get('/', ({ redirect }) => redirect('/characters'))
+  .get('/', ({ redirect }) => redirect(`${env.webUrl}/`))
   .use(authRoutes)
   .use(characterRoutes)
   .use(syncRoutes)

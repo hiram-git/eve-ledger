@@ -20,6 +20,8 @@ export const env = {
   esiCompatDate: Bun.env.ESI_COMPAT_DATE ?? '2025-12-16',
   esiUserAgent: Bun.env.ESI_USER_AGENT ?? 'eve-ledger/0.1',
   port: Number(Bun.env.PORT ?? 3000),
+  // Dashboard (apps/web): el navegador vuelve ahí tras el login de EVE
+  webUrl: (Bun.env.WEB_URL ?? 'http://localhost:4321').replace(/\/$/, ''),
   // Minutos entre syncs automáticos de todos los personajes (0 = desactivado)
   syncIntervalMin: intOrDefault('SYNC_INTERVAL_MIN', 60),
 };

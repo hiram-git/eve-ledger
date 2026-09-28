@@ -1,0 +1,623 @@
+---
+// Pilotos: vincular personajes (vuelta del login de EVE), su estado de sync, permisos y cifras
+import { PILOT_SLOTS } from 'astro:env/server';
+import Icon from '../components/Icon.astro';
+import Base from '../layouts/Base.astro';
+import {
+  getInventory,
+  getPilots,
+  getSummary,
+  getSyncStatus,
+  loginUrl,
+  syncLogUrl,
+  type Inventory,
+  type Pilot,
+  type Summary,
+  type SyncStatus,
+} from '../lib/api';
+import { ago, isk, iskFull } from '../lib/format';
+
+const DAYS = 30;
+const q = Astro.url.searchParams;
+
+let pilots: Pilot[] = [];
+let summary: Summary | undefined;
+let inventory: Inventory | undefined;
+let status: SyncStatus | undefined;
+let apiError: string | undefined;
+try {
+  const optional = <T,>(p: Promise<T>) => p.catch((err) => (console.error(err), undefined));
+  [pilots, status, summary, inventory] = await Promise.all([
+    getPilots(),
+    getSyncStatus(),
+    optional(getSummary(DAYS)),
+    optional(getInventory()),
+  ]);
+} catch (err) {
+  apiError = err instanceof Error ? err.message : String(err);
+}
+
+// Vuelta del login de EVE
+const linkedId = Number(q.get('linked') ?? 0);
+const linked = pilots.find((p) => p.id === linkedId);
+const loginError = q.get('error');
+const loginErrorDetail = q.get('detail');
+const LOGIN_ERRORS: Record<string, string> = {
+  denied: 'Cancelaste el acceso en la página de EVE, así que no se vinculó ningún piloto.',
+  state: 'El enlace de inicio de sesión caducó (dura 10 minutos) o ya se había usado.',
+  sso: 'EVE no aceptó el inicio de sesión.',
+};
+
+const synced = q.get('synced');
+const syncErrors = q.get('syncErrors');
+const syncFailed = q.get('syncFailed');
+
+// Cifras por piloto: saldo y neto del resumen, inventario del inventario
+const flows = new Map(summary?.characters.map((c) => [c.id, c]));
+const invByPilot = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
+
+const SCOPE_LABELS: Record<string, string> = {
+  'esi-wallet.read_character_wallet.v1': 'Wallet',
+  'esi-assets.read_assets.v1': 'Inventario',
+};
+const REQUIRED = Object.keys(SCOPE_LABELS);
+
+const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+type State = { kind: 'ok' | 'pending' | 'stale' | 'error'; text: string; title?: string; hint?: string };
+
+function explain(message: string): string {
+  if (/invalid_grant|refresh token/i.test(message)) return 'EVE rechazó el token: caducó o se revocó el acceso. Vuelve a vincularlo.';
+  if (/descifrar|ENC_KEY/i.test(message)) return 'No se pudo descifrar el token guardado (¿cambió ENC_KEY?). Vuelve a vincularlo.';
+  if (/cambió de dueño|owner/i.test(message)) return 'El personaje cambió de cuenta. Vuelve a vincularlo.';
+  if (/ESI (401|403)/.test(message)) return 'ESI denegó el acceso: faltan permisos. Vuelve a vincularlo.';
+  if (/ESI (420|429)/.test(message)) return 'ESI limitó las peticiones; se reintentará en el próximo sync.';
+  if (/ESI 5\d\d/.test(message)) return 'ESI no respondió bien (posible downtime); se reintentará en el próximo sync.';
+  return message;
+}
+function stateOf(p: Pilot): State {
+  if (p.lastError) {
+    const kind = { journal: 'journal', transactions: 'transacciones', assets: 'inventario' }[p.lastError.kind] ?? p.lastError.kind;
+    return { kind: 'error', text: `Falló el sync de ${kind}`, title: p.lastError.message, hint: explain(p.lastError.message) };
+  }
+  if (!p.lastSyncAt) return { kind: 'pending', text: 'Primer sync en curso…' };
+  if (Date.now() - new Date(p.lastSyncAt).getTime() > staleAfterMs) return { kind: 'stale', text: 'Sin sincronizar' };
+  return { kind: 'ok', text: 'Sincronizado' };
+}
+
+const rows = pilots.map((p) => ({ ...p, state: stateOf(p) }));
+const pending = rows.some((r) => r.state.kind === 'pending');
+const freeSlots = Math.max(0, PILOT_SLOTS - pilots.length);
+const portrait = (id: number, size = 128) => `https://images.evetech.net/characters/${id}/portrait?size=${size}`;
+---
+
+<Base title="Pilotos" section="pilotos" status={status} pilots={pilots.length}>
+  <div class="page-head" data-pending={pending ? '1' : undefined}>
+    <div>
+      <h1>Pilotos</h1>
+      <p class="subtitle">
+        {pilots.length} de {PILOT_SLOTS} vinculados
+        {freeSlots > 0 && <span> · ESI solo guarda ~30 días de wallet: vincula los que faltan cuanto antes</span>}
+      </p>
+    </div>
+    <a class="secondary-button" href={loginUrl}>
+      <Icon name="plus" />
+      Vincular piloto
+    </a>
+  </div>
+
+  {
+    linked && (
+      <div class="notice success" role="status">
+        <img class="notice-portrait" src={portrait(linked.id, 64)} alt="" width="40" height="40" onerror="this.style.visibility='hidden'" />
+        <div>
+          <strong>{linked.name} vinculado.</strong>
+          <p>
+            {linked.lastSyncAt
+              ? `Primer sync completo ${ago(linked.lastSyncAt)}: ya cuenta en el resumen.`
+              : 'Su primer sync (journal, transacciones e inventario) está en marcha; esta página se actualiza sola.'}
+          </p>
+        </div>
+      </div>
+    )
+  }
+  {
+    loginError && (
+      <div class="notice error" role="alert">
+        <Icon name="alert" />
+        <div>
+          <strong>No se pudo vincular el piloto.</strong>
+          <p>
+            {LOGIN_ERRORS[loginError] ?? 'El inicio de sesión con EVE falló.'}
+            {loginErrorDetail && <span class="detail"> Detalle: {loginErrorDetail}</span>}
+          </p>
+          <p>
+            <a href={loginUrl}>Volver a intentarlo</a>
+          </p>
+        </div>
+      </div>
+    )
+  }
+  {
+    synced !== null && (
+      <div class="notice" role="status">
+        <Icon name="info" />
+        <p>
+          Sincronización completa: {synced} movimientos nuevos
+          {syncErrors && (
+            <strong>
+              {' '}
+              · {syncErrors === '1' ? '1 piloto con error' : `${syncErrors} pilotos con error`}: revisa el{' '}
+              <a href={syncLogUrl}>registro de sync</a>
+            </strong>
+          )}
+        </p>
+      </div>
+    )
+  }
+  {
+    syncFailed && (
+      <div class="notice error" role="alert">
+        <Icon name="alert" />
+        <p>No se pudo sincronizar: {syncFailed}</p>
+      </div>
+    )
+  }
+  {
+    apiError && (
+      <div class="notice error" role="alert">
+        <Icon name="alert" />
+        <div>
+          <strong>Sin enlace con la API</strong>
+          <p class="muted">{apiError}</p>
+          <p>
+            ¿Está corriendo? En <code>apps/api</code>: <code>bun run dev</code>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  {
+    !apiError && (
+      <ol class="roster">
+        {rows.map((p) => (
+          <li class:list={['pilot', 'panel', { fresh: p.id === linkedId }]}>
+            <div class="who">
+              <img src={portrait(p.id)} alt="" width="56" height="56" loading="lazy" onerror="this.style.visibility='hidden'" />
+              <div>
+                <h2>{p.name}</h2>
+                <p class="since">
+                  Vinculado <time datetime={p.createdAt}>{new Date(p.createdAt).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}</time>
+                </p>
+              </div>
+            </div>
+
+            <div class="state">
+              <span class:list={['chip', p.state.kind]} title={p.state.title}>
+                <Icon name={p.state.kind === 'ok' ? 'activity' : p.state.kind === 'pending' ? 'clock' : 'alert'} />
+                {p.state.text}
+              </span>
+              <span class="when">
+                {p.lastSyncAt ? (
+                  <>
+                    Último sync <time datetime={p.lastSyncAt} data-ago={p.lastSyncAt}>{ago(p.lastSyncAt)}</time>
+                  </>
+                ) : (
+                  'Aún sin datos'
+                )}
+              </span>
+              {p.state.kind === 'error' && p.state.hint && (
+                <span class="error-msg" title={`Error original: ${p.state.title}`}>
+                  {p.state.hint}
+                </span>
+              )}
+            </div>
+
+            <ul class="scopes" aria-label="Permisos">
+              {REQUIRED.map((s) => (
+                <li class:list={{ missing: p.missingScopes.includes(s) }}>
+                  <Icon name={p.missingScopes.includes(s) ? 'alert' : 'wallet'} />
+                  {SCOPE_LABELS[s]}
+                  {p.missingScopes.includes(s) && <span class="sr-only"> (falta el permiso)</span>}
+                </li>
+              ))}
+            </ul>
+
+            <dl class="figures">
+              <div>
+                <dt>Saldo</dt>
+                <dd title={flows.get(p.id)?.balance != null ? iskFull(flows.get(p.id)!.balance!) : 'Sin movimientos sincronizados'}>
+                  {flows.get(p.id)?.balance != null ? isk(flows.get(p.id)!.balance!) : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>Inventario</dt>
+                <dd title={invByPilot.has(p.id) ? iskFull(invByPilot.get(p.id)!) : 'Sin inventario sincronizado'}>
+                  {invByPilot.has(p.id) ? isk(invByPilot.get(p.id)!) : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>Neto {DAYS} d</dt>
+                <dd
+                  class:list={{ pos: (flows.get(p.id)?.net ?? 0) > 0, neg: (flows.get(p.id)?.net ?? 0) < 0 }}
+                  title={flows.has(p.id) ? iskFull(flows.get(p.id)!.net) : undefined}
+                >
+                  {flows.has(p.id) && p.lastSyncAt ? isk(flows.get(p.id)!.net, { sign: true }) : '—'}
+                </dd>
+              </div>
+            </dl>
+
+            <div class="actions">
+              {p.missingScopes.length > 0 || p.state.kind === 'error' ? (
+                <a class="secondary-button" href={loginUrl} title="Volver a iniciar sesión con este personaje en EVE">
+                  <Icon name="refresh" />
+                  Revincular
+                </a>
+              ) : (
+                <form method="post" action="/sync" class="sync-form">
+                  <input type="hidden" name="back" value="/pilotos" />
+                  <input type="hidden" name="character" value={p.id} />
+                  <button type="submit" class="secondary-button" title={`Sincronizar solo a ${p.name}`}>
+                    <Icon name="refresh" />
+                    <span class="label">Sincronizar</span>
+                  </button>
+                </form>
+              )}
+            </div>
+          </li>
+        ))}
+
+        {Array.from({ length: freeSlots }, (_, i) => (
+          <li class="pilot empty">
+            <a href={loginUrl}>
+              <span class="slot-icon" aria-hidden="true">
+                <Icon name="plus" />
+              </span>
+              <span>
+                <strong>Plaza {pilots.length + i + 1} libre</strong>
+                <span class="hint">Vincula otro de tus personajes con el login de EVE</span>
+              </span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    )
+  }
+
+  <p class="privacy">
+    <Icon name="info" />
+    <span>
+      Vincular un piloto solo autoriza <strong>lectura</strong> de su wallet y su inventario. Los tokens se guardan cifrados en
+      este equipo y nada sale de él salvo las llamadas a ESI. Puedes revocar el acceso cuando quieras desde la gestión de
+      aplicaciones de tu cuenta de EVE.
+    </span>
+  </p>
+</Base>
+
+<script>
+  // Mientras algún piloto hace su primer sync, recargar cada 15 s (como mucho 2 min)
+  if (document.querySelector('[data-pending]')) {
+    const tries = Number(sessionStorage.getItem('pilotos-reload') ?? 0);
+    if (tries < 8) {
+      setTimeout(() => {
+        sessionStorage.setItem('pilotos-reload', String(tries + 1));
+        location.reload();
+      }, 15_000);
+    }
+  } else {
+    sessionStorage.removeItem('pilotos-reload');
+  }
+</script>
+
+<style>
+  .page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+  }
+  .subtitle {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .subtitle span {
+    color: var(--text-muted);
+  }
+
+  .notice.success {
+    align-items: center;
+    border-color: #2f5a4b;
+    background: #13261f;
+    color: #cfeee2;
+  }
+  .notice-portrait {
+    flex-shrink: 0;
+    border-radius: 6px;
+    border: 1px solid #2f5a4b;
+  }
+  .notice strong {
+    font-weight: 600;
+  }
+  .notice p + p {
+    margin-top: 4px;
+  }
+  .detail {
+    color: var(--text-muted);
+    font: 12px var(--mono);
+  }
+
+  /* Lista de pilotos: una fila por personaje, columnas alineadas entre filas */
+  .roster {
+    display: grid;
+    grid-template-columns: minmax(13rem, 1.2fr) minmax(12rem, 1.1fr) auto minmax(17rem, 1.4fr) auto;
+    column-gap: 24px;
+    row-gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* Cada fila hereda las columnas de la lista: todo queda alineado entre pilotos */
+  .pilot {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: center;
+    row-gap: 14px;
+    padding: 16px 20px;
+  }
+  .pilot.fresh {
+    border-color: #2f5a4b;
+  }
+  .who {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+  }
+  .who img {
+    flex-shrink: 0;
+    border-radius: 6px;
+    border: 1px solid var(--line-strong);
+    background: #162834;
+  }
+  .who h2 {
+    font-size: 16px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .since {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .state {
+    display: grid;
+    gap: 4px;
+    justify-items: start;
+    min-width: 0;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px 3px 7px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .chip .icon {
+    width: 13px;
+    height: 13px;
+  }
+  .chip.ok .icon {
+    color: var(--positive);
+  }
+  .chip.pending {
+    border-color: #2c5566;
+    color: #a9dbe8;
+  }
+  .chip.stale {
+    border-color: #6b5530;
+    color: var(--warning);
+  }
+  .chip.error {
+    border-color: #663b44;
+    color: var(--critical);
+  }
+  .when {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .error-msg {
+    max-width: 32ch;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #d9aab1;
+  }
+
+  .scopes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .scopes li {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #14232f;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .scopes li .icon {
+    width: 12px;
+    height: 12px;
+    color: var(--cyan-dim);
+  }
+  .scopes li.missing {
+    background: #2a2216;
+    color: var(--warning);
+  }
+  .scopes li.missing .icon {
+    color: var(--warning);
+  }
+
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+  }
+  .figures dt {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .figures dd {
+    margin: 2px 0 0;
+    font: 500 16px var(--mono);
+    letter-spacing: -0.02em;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .figures dd.pos {
+    color: var(--positive);
+  }
+  .figures dd.neg {
+    color: var(--critical);
+  }
+  .actions {
+    justify-self: end;
+  }
+  .actions .secondary-button {
+    padding: 7px 12px;
+  }
+
+  /* Plazas libres: invitación a vincular, sin competir con los pilotos reales */
+  .pilot.empty {
+    display: block;
+    padding: 0;
+  }
+  .pilot.empty a {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 20px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+  .pilot.empty a:hover {
+    border-color: var(--cyan-dim);
+    color: var(--text);
+  }
+  .slot-icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: 6px;
+    border: 1px dashed var(--line-strong);
+    color: var(--cyan);
+  }
+  .pilot.empty strong {
+    display: block;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .privacy {
+    display: flex;
+    gap: 10px;
+    max-width: 75ch;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .privacy .icon {
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    color: var(--cyan-dim);
+  }
+  .privacy strong {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+  code {
+    font: 12px var(--mono);
+    color: var(--cyan);
+  }
+
+  @media (max-width: 1100px) {
+    .roster {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    /* identidad | permisos · estado | acción · cifras a lo ancho */
+    .who {
+      grid-area: 1 / 1;
+    }
+    .scopes {
+      grid-area: 1 / 2;
+      justify-content: flex-end;
+    }
+    .state {
+      grid-area: 2 / 1;
+    }
+    .actions {
+      grid-area: 2 / 2;
+    }
+    .figures {
+      grid-area: 3 / 1 / 4 / -1;
+      max-width: 36rem;
+    }
+  }
+  @media (max-width: 600px) {
+    .roster {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pilot {
+      padding: 14px 16px;
+    }
+    .who,
+    .state,
+    .scopes,
+    .figures,
+    .actions {
+      grid-area: auto;
+      grid-column: 1;
+    }
+    .scopes {
+      justify-content: flex-start;
+    }
+    .actions {
+      justify-self: stretch;
+    }
+    .actions .secondary-button,
+    .actions form {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>
