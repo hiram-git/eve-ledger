@@ -5,7 +5,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 
 ## Stack
 - `apps/api`: Bun + Elysia + Drizzle + SQLite (`bun:sqlite`)
-- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`
+- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`. Tema oscuro tipo HUD en `src/styles/theme.css` (Inter + IBM Plex Mono + Barlow Condensed desde Google Fonts). Colores de datos: ingresos `#2a98c0`, gastos `#e8604c`, inventario `#9a7cf0`, validados sobre el fondo de los paneles; no reutilizarlos como colores de interfaz.
 - Un solo usuario, sin multitenant ni login propio. Si crece: migrar a PostgreSQL con Drizzle.
 
 ## Decisiones tomadas (no cambiar sin preguntar)

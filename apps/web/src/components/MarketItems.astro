@@ -6,6 +6,7 @@ export type ItemRow = { typeId: number; name: string | null; quantity: number; i
 
 interface Props {
   title: string;
+  step?: string;
   items: ItemRow[];
   iskLabel?: string;
   priceLabel?: string;
@@ -13,6 +14,7 @@ interface Props {
 }
 const {
   title,
+  step,
   items,
   iskLabel = 'ISK',
   priceLabel = 'Precio medio',
@@ -21,11 +23,14 @@ const {
 const qty = new Intl.NumberFormat('es');
 ---
 
-<section class="card">
-  <h2>{title}</h2>
+<section class="panel">
+  <div class="panel-heading">
+    <h3>{step && <span class="step-label">{step}</span>}{title}</h3>
+    {items.length > 0 && <span class="meta">TOP {items.length}</span>}
+  </div>
   {
     items.length === 0 ? (
-      <p class="empty">{empty}</p>
+      <p class="empty panel-body">{empty}</p>
     ) : (
       <div class="scroll">
         <table>
@@ -42,14 +47,16 @@ const qty = new Intl.NumberFormat('es');
               <tr>
                 <td>
                   <span class="item">
-                    <img
-                      src={`https://images.evetech.net/types/${it.typeId}/icon?size=32`}
-                      alt=""
-                      width="24"
-                      height="24"
-                      loading="lazy"
-                      onerror="this.style.visibility='hidden'"
-                    />
+                    <span class="thumb">
+                      <img
+                        src={`https://images.evetech.net/types/${it.typeId}/icon?size=32`}
+                        alt=""
+                        width="24"
+                        height="24"
+                        loading="lazy"
+                        onerror="this.style.visibility='hidden'"
+                      />
+                    </span>
                     <span class="name">{it.name ?? `#${it.typeId}`}</span>
                   </span>
                 </td>
@@ -75,15 +82,29 @@ const qty = new Intl.NumberFormat('es');
 </section>
 
 <style>
+  table th:first-child,
+  table td:first-child {
+    padding-left: 22px;
+  }
+  table th:last-child,
+  table td:last-child {
+    padding-right: 22px;
+  }
   .item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     max-width: 16rem;
   }
-  .item img {
-    border-radius: 4px;
+  .thumb {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
+    border: 1px solid #2b4251;
+    border-radius: 5px;
+    background: #162834;
   }
   .name {
     overflow: hidden;
@@ -102,6 +123,14 @@ const qty = new Intl.NumberFormat('es');
     th,
     td {
       padding: 8px 6px;
+    }
+    table th:first-child,
+    table td:first-child {
+      padding-left: 16px;
+    }
+    table th:nth-child(3),
+    table td:nth-child(3) {
+      padding-right: 16px;
     }
     .item {
       max-width: 9rem;

@@ -1,5 +1,8 @@
 ---
+import '../styles/theme.css';
 import DailyChart from '../components/DailyChart.astro';
+import Icon from '../components/Icon.astro';
+import StarMap from '../components/StarMap.astro';
 import MarketItems from '../components/MarketItems.astro';
 import BarList, { type BarRow } from '../components/BarList.astro';
 import { getInventory, getSummary, getSyncStatus, loginUrl, type Inventory, type Summary, type SyncStatus } from '../lib/api';
@@ -28,17 +31,48 @@ const synced = q.get('synced');
 const syncErrors = q.get('syncErrors');
 const syncFailed = q.get('syncFailed');
 
-const cronText = !status
+// Estado del sync automático para la barra superior
+const cron = !status
   ? undefined
   : !status.enabled
-    ? 'Sync automático desactivado'
+    ? { cls: 'off', text: 'Sync auto desactivado' }
     : status.running
-      ? 'Sincronizando…'
-      : `Sync automático cada ${status.intervalMin} min` + (status.nextRunAt ? ` · próximo ${until(status.nextRunAt)}` : '');
+      ? { cls: 'busy', text: 'Sincronizando…' }
+      : {
+          cls: '',
+          text: `Sync auto · ${status.intervalMin} min` + (status.nextRunAt ? ` · próximo ${until(status.nextRunAt)}` : ''),
+        };
 const cronTitle = status?.lastRun
   ? `Último sync automático ${ago(status.lastRun.finishedAt)}: ${status.lastRun.inserted} movimientos nuevos` +
     (status.lastRun.errors ? `, ${status.lastRun.errors} personaje(s) con error` : '')
   : undefined;
+
+// Sync más reciente entre todos los personajes
+const lastSync = summary?.characters
+  .map((c) => c.lastSyncAt)
+  .filter((d): d is string => !!d)
+  .sort()
+  .at(-1);
+
+// Telemetría para el ticker: neto por piloto, mayor fuente de ingresos, inventario
+type Tick = { label: string; value: string; trend?: 'up' | 'down' };
+const ticks: Tick[] = [];
+if (summary) {
+  for (const c of summary.characters) {
+    ticks.push({ label: c.name.toUpperCase(), value: isk(c.net, { sign: true }), trend: c.net >= 0 ? 'up' : 'down' });
+  }
+  const topIncome = [...summary.byRefType].sort((a, b) => b.income - a.income)[0];
+  if (topIncome?.income) ticks.push({ label: `TOP INGRESO · ${refTypeLabel(topIncome.refType).toUpperCase()}`, value: isk(topIncome.income) });
+  const topSold = summary.market.sold[0];
+  if (topSold) ticks.push({ label: `MÁS VENDIDO · ${(topSold.name ?? `#${topSold.typeId}`).toUpperCase()}`, value: isk(topSold.isk) });
+}
+if (inventory?.stacks) {
+  ticks.push({ label: 'INVENTARIO', value: isk(inventory.value) });
+  if (inventory.byLocation[0]) {
+    ticks.push({ label: `HUB PRINCIPAL · ${(inventory.byLocation[0].name ?? 'ESTRUCTURA').split(' - ')[0].toUpperCase()}`, value: isk(inventory.byLocation[0].value) });
+  }
+}
+if (lastSync) ticks.push({ label: 'ÚLTIMO SYNC', value: ago(lastSync).toUpperCase() });
 
 const refRows = (pick: (r: Summary['byRefType'][number]) => number): BarRow[] =>
   summary?.byRefType.map((r) => ({ label: refTypeLabel(r.refType), value: pick(r), detail: `${r.count} movimientos` })) ?? [];
@@ -64,58 +98,159 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070c13" />
     <title>EVE Ledger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;450;500;550;600;650;700&display=swap"
+    />
   </head>
   <body>
-    <header>
-      <h1>EVE Ledger</h1>
-      <nav class="periods" aria-label="Período">
+    <header class="utility shell">
+      <div class="micro-brand">
+        <span class="brand-square">E</span>
+        EVE LEDGER <span class="divider">//</span>
+        <span class="muted">{summary ? `${summary.characters.length} PILOTOS` : 'SIN CONEXIÓN'}</span>
+      </div>
+      <div class="utility-right">
+        {
+          cron && (
+            <span class:list={['status-badge', cron.cls]} title={cronTitle}>
+              <i class="dot" />
+              <span class="text">{cron.text}</span>
+            </span>
+          )
+        }
+        <form method="post" action="/sync">
+          <input type="hidden" name="days" value={days} />
+          <button type="submit" class="primary-button">
+            <Icon name="refresh" />
+            Sincronizar
+          </button>
+        </form>
+      </div>
+    </header>
+
+    <section class="hero">
+      <StarMap />
+      <div class="hero-lockup shell">
+        <div class="hero-title">
+          <p class="eyebrow">New Eden // Registro financiero</p>
+          <h1>EVE <span>Ledger</span><i>_</i></h1>
+          <p>Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI</p>
+        </div>
+      </div>
+    </section>
+
+    <nav class="main-nav shell" aria-label="Período">
+      <div class="nav-tabs">
         {
           PERIODS.map((p) => (
-            <a href={`/?days=${p}`} aria-current={p === days ? 'page' : undefined}>
+            <a class="nav-tab" href={`/?days=${p}`} aria-current={p === days ? 'page' : undefined}>
+              <Icon name="clock" />
               {p} días
             </a>
           ))
         }
-      </nav>
-      <form method="post" action="/sync">
-        {cronText && <span class="cron" title={cronTitle}>{cronText}</span>}
-        <input type="hidden" name="days" value={days} />
-        <button type="submit">Sincronizar ahora</button>
-      </form>
-    </header>
+      </div>
+      <a class="secondary-button" href={loginUrl}>
+        <Icon name="plus" />
+        Vincular piloto
+      </a>
+    </nav>
 
-    <main>
+    {
+      ticks.length > 0 && (
+        <div class="shell">
+          <div class="ticker" role="marquee" aria-label="Telemetría">
+            <span class="ticker-label">
+              <Icon name="signal" />
+              <span>TELEMETRÍA</span>
+            </span>
+            <div class="ticker-window">
+              <div class="ticker-track">
+                {/* Contenido duplicado: la animación desplaza -50% y el bucle no se nota */}
+                {[0, 1].map((copy) =>
+                  ticks.map((t) => (
+                    <>
+                      <span aria-hidden={copy === 1 ? 'true' : undefined}>
+                        {t.label} <b class:list={{ up: t.trend === 'up', down: t.trend === 'down' }}>{t.value}</b>
+                      </span>
+                      <span class="sep" aria-hidden="true">
+                        ◆
+                      </span>
+                    </>
+                  )),
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    <main class="shell">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Resumen // últimos {days} días</p>
+          <h2>Estado <span>de la flota</span></h2>
+        </div>
+        {
+          lastSync && (
+            <span class="heading-note">
+              <Icon name="activity" />
+              DATOS DE ESI · {ago(lastSync).toUpperCase()}
+            </span>
+          )
+        }
+      </div>
+
       {
         synced !== null && (
-          <p class="notice">
-            Sincronización completa: {synced} movimientos nuevos
-            {syncErrors && <strong> · {syncErrors} personaje(s) con error (revisa /sync/log en la API)</strong>}
-          </p>
+          <div class="notice">
+            <Icon name="info" />
+            <p>
+              Sincronización completa: {synced} movimientos nuevos
+              {syncErrors && <strong> · {syncErrors} personaje(s) con error (revisa /sync/log en la API)</strong>}
+            </p>
+          </div>
         )
       }
-      {syncFailed && <p class="notice error">No se pudo sincronizar: {syncFailed}</p>}
+      {
+        syncFailed && (
+          <div class="notice error">
+            <Icon name="alert" />
+            <p>No se pudo sincronizar: {syncFailed}</p>
+          </div>
+        )
+      }
 
       {
         apiError && (
-          <section class="card">
-            <h2>No se pudo leer la API</h2>
-            <p class="muted">{apiError}</p>
-            <p>
-              ¿Está corriendo? En <code>apps/api</code>: <code>bun run dev</code>
-            </p>
-          </section>
+          <div class="notice error">
+            <Icon name="alert" />
+            <div>
+              <strong>Sin enlace con la API</strong>
+              <p class="muted">{apiError}</p>
+              <p>
+                ¿Está corriendo? En <code>apps/api</code>: <code>bun run dev</code>
+              </p>
+            </div>
+          </div>
         )
       }
 
       {
         summary && summary.characters.length === 0 && (
-          <section class="card">
-            <h2>Aún no hay personajes vinculados</h2>
+          <div class="notice">
+            <Icon name="users" />
             <p>
-              <a href={loginUrl}>Vincula tu primer personaje</a> y luego pulsa «Sincronizar ahora».
+              Aún no hay pilotos vinculados. <a href={loginUrl}>Vincula tu primer personaje</a> y luego pulsa
+              «Sincronizar».
             </p>
-          </section>
+          </div>
         )
       }
 
@@ -123,83 +258,118 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
         summary && summary.characters.length > 0 && (
           <>
             <section class="stats">
-              <div class="hero">
-                <span class="label">Neto de los últimos {days} días</span>
+              <div class="panel stat hero-stat">
+                <span class="glow-line" />
+                <span class="label">
+                  <Icon name="activity" />
+                  Neto del período
+                </span>
                 <span class="value" title={iskFull(summary.totals.net)}>
-                  {isk(summary.totals.net, { sign: true })} <small>ISK</small>
+                  {isk(summary.totals.net, { sign: true })}
+                  <small>ISK</small>
                 </span>
                 {summary.internalTransfers > 0 && (
-                  <span class="muted">
-                    Excluye {isk(summary.internalTransfers)} ISK movidos entre tus personajes
-                  </span>
+                  <span class="sub">Excluye {isk(summary.internalTransfers)} ISK movidos entre tus pilotos</span>
                 )}
               </div>
-              <div class="tile">
-                <span class="label">Ingresos</span>
-                <span class="value" title={iskFull(summary.totals.income)}>{isk(summary.totals.income)}</span>
+              <div class="panel stat">
+                <span class="label">
+                  <Icon name="up" />
+                  Ingresos
+                </span>
+                <span class="value" title={iskFull(summary.totals.income)}>
+                  {isk(summary.totals.income)}
+                </span>
               </div>
-              <div class="tile">
-                <span class="label">Gastos</span>
-                <span class="value" title={iskFull(-summary.totals.expenses)}>{isk(-summary.totals.expenses)}</span>
+              <div class="panel stat">
+                <span class="label">
+                  <Icon name="down" />
+                  Gastos
+                </span>
+                <span class="value" title={iskFull(-summary.totals.expenses)}>
+                  {isk(-summary.totals.expenses)}
+                </span>
               </div>
-              <div class="tile">
-                <span class="label">Saldo total</span>
-                <span class="value" title={iskFull(summary.balance)}>{isk(summary.balance)}</span>
+              <div class="panel stat">
+                <span class="label">
+                  <Icon name="wallet" />
+                  Saldo total
+                </span>
+                <span class="value" title={iskFull(summary.balance)}>
+                  {isk(summary.balance)}
+                </span>
               </div>
-              <div class="tile">
-                <span class="label">Inventario</span>
+              <div class="panel stat">
+                <span class="label">
+                  <Icon name="box" />
+                  Inventario
+                </span>
                 <span class="value" title={inventory ? iskFull(inventory.value) : 'Sin datos'}>
                   {inventory && inventory.stacks > 0 ? isk(inventory.value) : '—'}
                 </span>
               </div>
             </section>
 
-            <section class="card">
-              <h2>Flujo diario</h2>
-              <DailyChart daily={summary.daily} />
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>
+                  <span class="step-label">01</span>Flujo diario
+                </h3>
+                <span class="meta">UTC · HORA DE EVE</span>
+              </div>
+              <div class="panel-body">
+                <DailyChart daily={summary.daily} />
+              </div>
             </section>
 
             <div class="split">
-              <BarList title="De dónde viene el ISK" kind="income" rows={incomeRows} />
-              <BarList title="En qué se va" kind="expenses" rows={expenseRows} />
+              <BarList step="02" title="De dónde viene el ISK" kind="income" rows={incomeRows} />
+              <BarList step="03" title="En qué se va" kind="expenses" rows={expenseRows} />
             </div>
 
             {(summary.market.sold.length > 0 || summary.market.bought.length > 0) && (
               <div class="split">
-                <MarketItems title="Mercado: lo más vendido" items={summary.market.sold.map((i) => ({ ...i, unitPrice: i.avgPrice }))} />
-                <MarketItems title="Mercado: lo más comprado" items={summary.market.bought.map((i) => ({ ...i, unitPrice: i.avgPrice }))} />
+                <MarketItems
+                  step="04"
+                  title="Mercado: lo más vendido"
+                  items={summary.market.sold.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
+                />
+                <MarketItems
+                  step="05"
+                  title="Mercado: lo más comprado"
+                  items={summary.market.bought.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
+                />
               </div>
             )}
 
             {inventory && inventory.stacks > 0 && (
-              <>
-                <div class="split">
-                  <BarList title="Dónde está tu inventario" kind="inventory" rows={locationRows} limit={11} />
-                  <MarketItems
-                    title="Lo más valioso"
-                    items={valuableItems}
-                    iskLabel="Valor"
-                    priceLabel="Precio unitario"
-                    empty="Sin inventario sincronizado."
-                  />
-                </div>
-                <p class="muted small note">
-                  Inventario valorado con el precio medio de ESI
-                  {inventory.pricesUpdatedAt && <> (actualizado {ago(inventory.pricesUpdatedAt)})</>}. Las copias de
-                  blueprint cuentan como 0{inventory.unpricedTypes > 0 && (
-                    <>; {inventory.unpricedTypes} {inventory.unpricedTypes === 1 ? 'tipo de ítem' : 'tipos de ítem'} sin precio</>
-                  )}.
-                </p>
-              </>
+              <div class="split">
+                <BarList step="06" title="Dónde está tu inventario" kind="inventory" rows={locationRows} limit={11} />
+                <MarketItems
+                  step="07"
+                  title="Lo más valioso"
+                  items={valuableItems}
+                  iskLabel="Valor"
+                  priceLabel="Precio unitario"
+                  empty="Sin inventario sincronizado."
+                />
+              </div>
             )}
 
-            <section class="card">
-              <h2>Personajes</h2>
+            <section class="panel">
+              <div class="panel-heading">
+                <h3>
+                  <span class="step-label">08</span>Pilotos
+                </h3>
+                <a class="meta" href={loginUrl}>
+                  + VINCULAR
+                </a>
+              </div>
               <div class="scroll">
-                <table>
+                <table class="pilots">
                   <thead>
                     <tr>
-                      <th>Personaje</th>
+                      <th>Piloto</th>
                       <th>Saldo</th>
                       <th>Inventario</th>
                       <th>Ingresos</th>
@@ -216,8 +386,8 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                             <img
                               src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`}
                               alt=""
-                              width="28"
-                              height="28"
+                              width="30"
+                              height="30"
                               loading="lazy"
                               onerror="this.style.visibility='hidden'"
                             />
@@ -227,281 +397,63 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                         <td title={c.balance === null ? 'Sin movimientos sincronizados' : iskFull(c.balance)}>
                           {c.balance === null ? '—' : isk(c.balance)}
                         </td>
-                        <td title={inventoryByChar.has(c.id) ? iskFull(inventoryByChar.get(c.id)!) : 'Sin inventario sincronizado'}>
+                        <td
+                          title={
+                            inventoryByChar.has(c.id) ? iskFull(inventoryByChar.get(c.id)!) : 'Sin inventario sincronizado'
+                          }
+                        >
                           {inventoryByChar.has(c.id) ? isk(inventoryByChar.get(c.id)!) : '—'}
                         </td>
                         <td>{isk(c.income)}</td>
                         <td>{isk(-c.expenses)}</td>
-                        <td>{isk(c.net, { sign: true })}</td>
+                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{isk(c.net, { sign: true })}</td>
                         <td class="muted">{ago(c.lastSyncAt)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p class="muted small">
-                Saldo = balance del último movimiento sincronizado. <a href={loginUrl}>Vincular otro personaje</a>
+              <p class="panel-note">
+                Saldo = balance del último movimiento sincronizado. Inventario valorado con el precio medio de ESI
+                {inventory?.pricesUpdatedAt && <> (actualizado {ago(inventory.pricesUpdatedAt)})</>}; las copias de
+                blueprint cuentan como 0
+                {inventory && inventory.unpricedTypes > 0 && (
+                  <>
+                    {' '}
+                    y hay {inventory.unpricedTypes} {inventory.unpricedTypes === 1 ? 'tipo de ítem' : 'tipos de ítem'} sin
+                    precio
+                  </>
+                )}
+                .
               </p>
             </section>
           </>
         )
       }
     </main>
+
+    <footer class="shell">
+      <span class="footer-brand">EVE LEDGER // LOCALHOST</span>
+      <span>Datos vía ESI. EVE Online y todo lo relacionado son marcas de CCP hf.</span>
+    </footer>
   </body>
 </html>
 
-<style is:global>
-  :root {
-    color-scheme: light;
-    --page: #f9f9f7;
-    --surface: #fcfcfb;
-    --surface-raised: #ffffff;
-    --text-primary: #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted: #6f6d68;
-    --grid: #e1e0d9;
-    --axis: #c3c2b7;
-    --border: rgba(11, 11, 11, 0.1);
-    --hover: rgba(11, 11, 11, 0.04);
-    --accent: #2a78d6;
-    --income: #2a78d6;
-    --expenses: #e34948;
-    --inventory: #1baf7a;
-    --critical: #d03b3b;
+<style>
+  .pilots th:first-child,
+  .pilots td:first-child {
+    padding-left: 22px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) {
-      color-scheme: dark;
-      --page: #0d0d0d;
-      --surface: #1a1a19;
-      --surface-raised: #232322;
-      --text-primary: #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted: #9a988f;
-      --grid: #2c2c2a;
-      --axis: #383835;
-      --border: rgba(255, 255, 255, 0.1);
-      --hover: rgba(255, 255, 255, 0.05);
-      --accent: #3987e5;
-      --income: #3987e5;
-      --expenses: #e66767;
-      --inventory: #199e70;
-      --critical: #e66767;
-    }
+  .pilots th:last-child,
+  .pilots td:last-child {
+    padding-right: 22px;
   }
-  :root[data-theme='dark'] {
-    color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --surface-raised: #232322;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #9a988f;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
-    --hover: rgba(255, 255, 255, 0.05);
-    --accent: #3987e5;
-    --income: #3987e5;
-    --expenses: #e66767;
-    --inventory: #199e70;
-    --critical: #e66767;
-  }
-
-  * {
-    box-sizing: border-box;
-  }
-  body {
-    margin: 0;
-    background: var(--page);
-    color: var(--text-primary);
-    font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
-  }
-  a {
-    color: var(--accent);
-  }
-  h1 {
-    font-size: 18px;
-    margin: 0;
-  }
-  h2 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0 0 16px;
-  }
-  header,
-  main {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 16px;
-  }
-  header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px 24px;
-  }
-  header form {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .cron {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-  .periods {
-    display: flex;
-    gap: 4px;
-  }
-  .periods a {
-    padding: 4px 10px;
-    border-radius: 6px;
-    color: var(--text-secondary);
+  .panel-heading a.meta:hover {
+    color: var(--cyan);
     text-decoration: none;
   }
-  .periods a:hover {
-    background: var(--hover);
-  }
-  .periods a[aria-current='page'] {
-    background: var(--surface-raised);
-    color: var(--text-primary);
-    font-weight: 600;
-    box-shadow: 0 0 0 1px var(--border);
-  }
-  button {
-    font: inherit;
-    padding: 6px 14px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--surface-raised);
-    color: var(--text-primary);
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  button:hover {
-    background: var(--hover);
-  }
-  main {
-    display: grid;
-    gap: 16px;
-  }
-  .card,
-  .stats > div {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    min-width: 0;
-  }
-  .stats {
-    display: grid;
-    grid-template-columns: 2fr repeat(4, 1fr);
-    gap: 16px;
-  }
-  .stats > div {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .stats .label {
-    color: var(--text-secondary);
-    font-size: 13px;
-  }
-  .stats .value {
-    font-size: 24px;
-    font-weight: 600;
-  }
-  .hero .value {
-    font-size: 48px;
-    line-height: 1.1;
-  }
-  .hero small {
-    font-size: 18px;
-    font-weight: 500;
-    color: var(--text-secondary);
-  }
-  .split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-  }
-  @media (max-width: 800px) {
-    .stats {
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-    }
-    .stats > div:not(.hero) {
-      padding: 14px;
-    }
-    .stats .value {
-      font-size: 18px;
-    }
-    .hero .value {
-      font-size: 40px;
-    }
-    .hero {
-      grid-column: 1 / -1;
-    }
-    .split {
-      grid-template-columns: 1fr;
-    }
-  }
-  .muted {
-    color: var(--text-muted);
-  }
-  .small {
-    font-size: 12px;
-    margin: 12px 0 0;
-  }
-  .note {
-    margin: -8px 4px 0;
-  }
-  .notice {
-    margin: 0;
-    padding: 10px 14px;
-    border-radius: 8px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-  }
-  .notice.error {
-    border-color: var(--critical);
-  }
-  .scroll {
-    overflow-x: auto;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-variant-numeric: tabular-nums;
-  }
-  th,
-  td {
-    vertical-align: middle;
-    padding: 8px 12px;
-    text-align: right;
-    border-bottom: 1px solid var(--grid);
-    white-space: nowrap;
-  }
-  th {
-    font-weight: 500;
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-  th:first-child,
-  td:first-child {
-    text-align: left;
-  }
-  tbody tr:last-child td {
-    border-bottom: none;
-  }
-  .who {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .who img {
-    border-radius: 50%;
+  code {
+    font: 12px var(--mono);
+    color: var(--cyan);
   }
 </style>

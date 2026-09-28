@@ -114,10 +114,12 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
 <style>
   .legend {
     display: flex;
-    gap: 16px;
-    font-size: 13px;
+    gap: 18px;
+    font: 500 10px var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     color: var(--text-secondary);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
   }
   .legend span {
     display: inline-flex;
@@ -152,9 +154,8 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
     position: absolute;
     right: 0;
     transform: translateY(50%);
-    font-size: 11px;
+    font: 10px var(--mono);
     color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .plot {
@@ -183,7 +184,7 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
   }
   .col:hover,
   .col:focus-visible {
-    background: var(--hover);
+    background: linear-gradient(180deg, transparent, #61cce512 50%, transparent);
   }
   .bar {
     position: absolute;
@@ -207,7 +208,7 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
   }
   .x-axis span {
     flex: 1;
-    font-size: 11px;
+    font: 10px var(--mono);
     color: var(--text-muted);
     text-align: center;
     white-space: nowrap;
@@ -225,16 +226,24 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
     gap: 4px 16px;
     padding: 10px 12px;
     font-size: 12px;
-    background: var(--surface-raised);
+    background: #0d1a25f2;
     color: var(--text-primary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+    border: 1px solid #345469;
+    border-radius: 6px;
+    box-shadow:
+      0 10px 40px #0009,
+      0 0 0 1px #61cce510,
+      inset 0 1px 0 #64c9e233;
+    backdrop-filter: blur(6px);
     pointer-events: none;
     white-space: nowrap;
   }
   .tooltip :global(strong) {
     grid-column: 1 / -1;
+    font: 500 10px var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cyan);
   }
   .tooltip :global(span) {
     display: inline-flex;
@@ -244,8 +253,7 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
   }
   .tooltip :global(b) {
     text-align: right;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
+    font: 500 12px var(--mono);
   }
   .tooltip[hidden] {
     display: none;
@@ -256,7 +264,12 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
   }
   .table-view summary {
     cursor: pointer;
+    font: 11px var(--mono);
+    letter-spacing: 0.08em;
     color: var(--text-secondary);
+  }
+  .table-view summary:hover {
+    color: var(--cyan);
   }
   .table-view table {
     margin-top: 8px;
