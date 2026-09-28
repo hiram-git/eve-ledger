@@ -14,10 +14,15 @@ export async function encrypt(plain: string): Promise<string> {
 
 export async function decrypt(payload: string): Promise<string> {
   const [ivB64, ctB64] = payload.split('.');
-  const pt = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: Buffer.from(ivB64, 'base64') },
-    key,
-    Buffer.from(ctB64, 'base64'),
-  );
-  return new TextDecoder().decode(pt);
+  try {
+    if (!ivB64 || !ctB64) throw new Error('formato inválido');
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: Buffer.from(ivB64, 'base64') },
+      key,
+      Buffer.from(ctB64, 'base64'),
+    );
+    return new TextDecoder().decode(pt);
+  } catch {
+    throw new Error('No se pudo descifrar el token guardado (¿cambió ENC_KEY?); vuelve a vincular el personaje');
+  }
 }

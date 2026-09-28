@@ -1,0 +1,438 @@
+---
+import DailyChart from '../components/DailyChart.astro';
+import RefTypeBars from '../components/RefTypeBars.astro';
+import { getSummary, getSyncStatus, loginUrl, type Summary, type SyncStatus } from '../lib/api';
+import { ago, isk, iskFull, until } from '../lib/format';
+
+const PERIODS = [7, 30, 90];
+const q = Astro.url.searchParams;
+const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 30;
+
+let summary: Summary | undefined;
+let status: SyncStatus | undefined;
+let apiError: string | undefined;
+try {
+  [summary, status] = await Promise.all([getSummary(days), getSyncStatus()]);
+} catch (err) {
+  apiError = err instanceof Error ? err.message : String(err);
+}
+
+const synced = q.get('synced');
+const syncErrors = q.get('syncErrors');
+const syncFailed = q.get('syncFailed');
+
+const cronText = !status
+  ? undefined
+  : !status.enabled
+    ? 'Sync automático desactivado'
+    : status.running
+      ? 'Sincronizando…'
+      : `Sync automático cada ${status.intervalMin} min` + (status.nextRunAt ? ` · próximo ${until(status.nextRunAt)}` : '');
+const cronTitle = status?.lastRun
+  ? `Último sync automático ${ago(status.lastRun.finishedAt)}: ${status.lastRun.inserted} movimientos nuevos` +
+    (status.lastRun.errors ? `, ${status.lastRun.errors} personaje(s) con error` : '')
+  : undefined;
+
+const incomeRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: r.income, count: r.count })) ?? [];
+const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: r.expenses, count: r.count })) ?? [];
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EVE Ledger</title>
+  </head>
+  <body>
+    <header>
+      <h1>EVE Ledger</h1>
+      <nav class="periods" aria-label="Período">
+        {
+          PERIODS.map((p) => (
+            <a href={`/?days=${p}`} aria-current={p === days ? 'page' : undefined}>
+              {p} días
+            </a>
+          ))
+        }
+      </nav>
+      <form method="post" action="/sync">
+        {cronText && <span class="cron" title={cronTitle}>{cronText}</span>}
+        <input type="hidden" name="days" value={days} />
+        <button type="submit">Sincronizar ahora</button>
+      </form>
+    </header>
+
+    <main>
+      {
+        synced !== null && (
+          <p class="notice">
+            Sincronización completa: {synced} movimientos nuevos
+            {syncErrors && <strong> · {syncErrors} personaje(s) con error (revisa /sync/log en la API)</strong>}
+          </p>
+        )
+      }
+      {syncFailed && <p class="notice error">No se pudo sincronizar: {syncFailed}</p>}
+
+      {
+        apiError && (
+          <section class="card">
+            <h2>No se pudo leer la API</h2>
+            <p class="muted">{apiError}</p>
+            <p>
+              ¿Está corriendo? En <code>apps/api</code>: <code>bun run dev</code>
+            </p>
+          </section>
+        )
+      }
+
+      {
+        summary && summary.characters.length === 0 && (
+          <section class="card">
+            <h2>Aún no hay personajes vinculados</h2>
+            <p>
+              <a href={loginUrl}>Vincula tu primer personaje</a> y luego pulsa «Sincronizar ahora».
+            </p>
+          </section>
+        )
+      }
+
+      {
+        summary && summary.characters.length > 0 && (
+          <>
+            <section class="stats">
+              <div class="hero">
+                <span class="label">Neto de los últimos {days} días</span>
+                <span class="value" title={iskFull(summary.totals.net)}>
+                  {isk(summary.totals.net, { sign: true })} <small>ISK</small>
+                </span>
+                {summary.internalTransfers > 0 && (
+                  <span class="muted">
+                    Excluye {isk(summary.internalTransfers)} ISK movidos entre tus personajes
+                  </span>
+                )}
+              </div>
+              <div class="tile">
+                <span class="label">Ingresos</span>
+                <span class="value" title={iskFull(summary.totals.income)}>{isk(summary.totals.income)}</span>
+              </div>
+              <div class="tile">
+                <span class="label">Gastos</span>
+                <span class="value" title={iskFull(-summary.totals.expenses)}>{isk(-summary.totals.expenses)}</span>
+              </div>
+              <div class="tile">
+                <span class="label">Saldo total</span>
+                <span class="value" title={iskFull(summary.balance)}>{isk(summary.balance)}</span>
+              </div>
+            </section>
+
+            <section class="card">
+              <h2>Flujo diario</h2>
+              <DailyChart daily={summary.daily} />
+            </section>
+
+            <div class="split">
+              <RefTypeBars title="De dónde viene el ISK" kind="income" rows={incomeRows} />
+              <RefTypeBars title="En qué se va" kind="expenses" rows={expenseRows} />
+            </div>
+
+            <section class="card">
+              <h2>Personajes</h2>
+              <div class="scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Personaje</th>
+                      <th>Saldo</th>
+                      <th>Ingresos</th>
+                      <th>Gastos</th>
+                      <th>Neto</th>
+                      <th>Último sync</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.characters.map((c) => (
+                      <tr>
+                        <td>
+                          <span class="who">
+                            <img
+                              src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`}
+                              alt=""
+                              width="28"
+                              height="28"
+                              loading="lazy"
+                            />
+                            {c.name}
+                          </span>
+                        </td>
+                        <td title={c.balance === null ? 'Sin movimientos sincronizados' : iskFull(c.balance)}>
+                          {c.balance === null ? '—' : isk(c.balance)}
+                        </td>
+                        <td>{isk(c.income)}</td>
+                        <td>{isk(-c.expenses)}</td>
+                        <td>{isk(c.net, { sign: true })}</td>
+                        <td class="muted">{ago(c.lastSyncAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p class="muted small">
+                Saldo = balance del último movimiento sincronizado. <a href={loginUrl}>Vincular otro personaje</a>
+              </p>
+            </section>
+          </>
+        )
+      }
+    </main>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --surface-raised: #ffffff;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #6f6d68;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.1);
+    --hover: rgba(11, 11, 11, 0.04);
+    --accent: #2a78d6;
+    --income: #2a78d6;
+    --expenses: #e34948;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --surface-raised: #232322;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #9a988f;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.1);
+      --hover: rgba(255, 255, 255, 0.05);
+      --accent: #3987e5;
+      --income: #3987e5;
+      --expenses: #e66767;
+      --critical: #e66767;
+    }
+  }
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-raised: #232322;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9a988f;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --hover: rgba(255, 255, 255, 0.05);
+    --accent: #3987e5;
+    --income: #3987e5;
+    --expenses: #e66767;
+    --critical: #e66767;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  a {
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 18px;
+    margin: 0;
+  }
+  h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 16px;
+  }
+  header,
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 24px;
+  }
+  header form {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .cron {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .periods {
+    display: flex;
+    gap: 4px;
+  }
+  .periods a {
+    padding: 4px 10px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+  .periods a:hover {
+    background: var(--hover);
+  }
+  .periods a[aria-current='page'] {
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 0 0 1px var(--border);
+  }
+  button {
+    font: inherit;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover {
+    background: var(--hover);
+  }
+  main {
+    display: grid;
+    gap: 16px;
+  }
+  .card,
+  .stats > div {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    min-width: 0;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .stats > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stats .label {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .stats .value {
+    font-size: 24px;
+    font-weight: 600;
+  }
+  .hero .value {
+    font-size: 48px;
+    line-height: 1.1;
+  }
+  .hero small {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 800px) {
+    .stats {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .stats > div:not(.hero) {
+      padding: 14px;
+    }
+    .stats .value {
+      font-size: 18px;
+    }
+    .hero .value {
+      font-size: 40px;
+    }
+    .hero {
+      grid-column: 1 / -1;
+    }
+    .split {
+      grid-template-columns: 1fr;
+    }
+  }
+  .muted {
+    color: var(--text-muted);
+  }
+  .small {
+    font-size: 12px;
+    margin: 12px 0 0;
+  }
+  .notice {
+    margin: 0;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .notice.error {
+    border-color: var(--critical);
+  }
+  .scroll {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+  th,
+  td {
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--grid);
+    white-space: nowrap;
+  }
+  th {
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  th:first-child,
+  td:first-child {
+    text-align: left;
+  }
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .who {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .who img {
+    border-radius: 50%;
+  }
+</style>
