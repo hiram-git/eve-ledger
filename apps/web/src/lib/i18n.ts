@@ -23,6 +23,7 @@ const es = {
   // Marco
   sections: 'Secciones',
   heroTagline: 'Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI',
+  skipToContent: 'Saltar al contenido',
   summary: 'Resumen',
   pilots: 'Pilotos',
   language: 'Idioma',
@@ -121,6 +122,9 @@ const es = {
   noPriceTitle: 'Sin precio en ESI o copia de blueprint',
   each: (v: string) => `${v} c/u`,
   chartLabel: 'Ingresos y gastos diarios. La tabla con los valores está debajo.',
+  chartHint: 'Usa ← y → para recorrer los días; Inicio y Fin van al primero y al último.',
+  chartDay: (date: string, income: string, expenses: string, net: string) =>
+    `${date}: ingresos ${income}, gastos ${expenses}, neto ${net}`,
   asTable: 'Ver como tabla',
   day: 'Día',
   noHistory: 'Sin historial',
@@ -190,6 +194,7 @@ export type Messages = typeof es;
 const en: Messages = {
   sections: 'Sections',
   heroTagline: 'Consolidated income, expenses and assets of your pilots, via ESI',
+  skipToContent: 'Skip to content',
   summary: 'Overview',
   pilots: 'Pilots',
   language: 'Language',
@@ -284,6 +289,8 @@ const en: Messages = {
   noPriceTitle: 'No ESI price, or blueprint copy',
   each: (v) => `${v} each`,
   chartLabel: 'Daily income and expenses. The table with the values is below.',
+  chartHint: 'Use ← and → to move between days; Home and End jump to the first and last.',
+  chartDay: (date, income, expenses, net) => `${date}: income ${income}, expenses ${expenses}, net ${net}`,
   asTable: 'Show as table',
   day: 'Day',
   noHistory: 'No history',
@@ -350,6 +357,7 @@ const en: Messages = {
 const de: Messages = {
   sections: 'Bereiche',
   heroTagline: 'Konsolidierte Einnahmen, Ausgaben und Inventar deiner Piloten, über ESI',
+  skipToContent: 'Zum Inhalt springen',
   summary: 'Übersicht',
   pilots: 'Piloten',
   language: 'Sprache',
@@ -444,6 +452,8 @@ const de: Messages = {
   noPriceTitle: 'Kein ESI-Preis oder Blaupausenkopie',
   each: (v) => `${v} pro Stück`,
   chartLabel: 'Tägliche Einnahmen und Ausgaben. Die Tabelle mit den Werten steht darunter.',
+  chartHint: 'Mit ← und → durch die Tage; Pos1 und Ende springen zum ersten und letzten Tag.',
+  chartDay: (date, income, expenses, net) => `${date}: Einnahmen ${income}, Ausgaben ${expenses}, Netto ${net}`,
   asTable: 'Als Tabelle anzeigen',
   day: 'Tag',
   noHistory: 'Keine Historie',

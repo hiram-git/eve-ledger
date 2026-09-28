@@ -15,6 +15,8 @@ const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const date = (iso: string) => shortDate(iso, lang);
+// Gasto con signo, sin «−0» en los días sin gastos
+const out = (v: number) => (v ? -v : 0);
 
 const missing = firstDate ? daily.filter((d) => d.date < firstDate).length : 0;
 
@@ -41,6 +43,9 @@ for (let v = -bottom; v <= top + step / 2; v += step) ticks.push(v);
 // Etiquetas del eje X: primera, última y una por semana
 const labelEvery = daily.length > 14 ? 7 : daily.length > 7 ? 2 : 1;
 const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i) % labelEvery === 0;
+
+// Una sola parada de Tab (roving tabindex): entra por el día más reciente y se recorre con las flechas
+const hintId = 'daily-chart-hint';
 ---
 
 <div class="legend" aria-hidden="true">
@@ -48,8 +53,16 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
   <span><i class="key expenses"></i>{m.expenses}</span>
 </div>
 
-<div class="chart" role="img" aria-label={m.chartLabel} data-l-income={m.income} data-l-expenses={m.expenses} data-l-net={m.net}>
-  <div class="y-axis">
+<div
+  class="chart"
+  role="group"
+  aria-label={m.chartLabel}
+  aria-describedby={hintId}
+  data-l-income={m.income}
+  data-l-expenses={m.expenses}
+  data-l-net={m.net}
+>
+  <div class="y-axis" aria-hidden="true">
     {ticks.map((t) => <span style={`bottom:${pct(t + bottom)}%`}>{fmt(t)}</span>)}
   </div>
   <div class="plot">
@@ -65,14 +78,16 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
       {
         daily.map((d, i) => (
           i < missing ? (
-            <div class="col nodata" />
+            <div class="col nodata" aria-hidden="true" />
           ) : (
           <div
             class="col"
-            tabindex="0"
+            role="img"
+            tabindex={i === daily.length - 1 ? 0 : -1}
+            aria-label={m.chartDay(date(d.date), full(d.income), full(out(d.expenses)), full(d.net))}
             data-date={date(d.date)}
             data-income={full(d.income)}
-            data-expenses={full(-d.expenses)}
+            data-expenses={full(out(d.expenses))}
             data-net={full(d.net)}
           >
             {d.income > 0 && <div class="bar income" style={`bottom:${zero}%;height:${pct(d.income)}%`} />}
@@ -83,15 +98,18 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
       }
     </div>
   </div>
-  <div class="x-axis">
+  <div class="x-axis" aria-hidden="true">
     {daily.map((d, i) => <span>{showLabel(i) ? date(d.date) : ''}</span>)}
   </div>
-  <div class="tooltip" hidden></div>
+  <!-- Visual: el lector de pantalla ya lee la etiqueta del día enfocado -->
+  <div class="tooltip" aria-hidden="true" hidden></div>
+  <p class="hint" id={hintId}>{m.chartHint}</p>
 </div>
 
 <details class="table-view">
   <summary>{m.asTable}</summary>
   <table>
+    <caption class="sr-only">{m.dailyFlow}</caption>
     <thead><tr><th>{m.day}</th><th>{m.income}</th><th>{m.expenses}</th><th>{m.net}</th></tr></thead>
     <tbody>
       {
@@ -99,7 +117,7 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
           <tr>
             <td>{date(d.date)}</td>
             <td>{fmt(d.income)}</td>
-            <td>{fmt(-d.expenses)}</td>
+            <td>{fmt(out(d.expenses))}</td>
             <td>{fmt(d.net, { sign: true })}</td>
           </tr>
         ))
@@ -111,6 +129,7 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
 <script>
   for (const chart of document.querySelectorAll<HTMLElement>('.chart')) {
     const tip = chart.querySelector<HTMLElement>('.tooltip')!;
+    const cols = [...chart.querySelectorAll<HTMLElement>('.col:not(.nodata)')];
     const show = (col: HTMLElement) => {
       const { date, income, expenses, net } = col.dataset;
       const l = chart.dataset;
@@ -119,17 +138,45 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
         <span><i class="key expenses"></i>${l.lExpenses}</span><b>${expenses}</b>
         <span>${l.lNet}</span><b>${net}</b>`;
       tip.hidden = false;
+      // Al lado de la columna (derecha si cabe, si no izquierda) para no tapar sus barras
       const c = chart.getBoundingClientRect();
       const r = col.getBoundingClientRect();
-      const left = Math.min(Math.max(r.left - c.left + r.width / 2 - tip.offsetWidth / 2, 0), c.width - tip.offsetWidth);
+      const right = r.right - c.left + 8;
+      const left = right + tip.offsetWidth <= c.width ? right : Math.max(r.left - c.left - 8 - tip.offsetWidth, 0);
       tip.style.left = `${left}px`;
     };
-    for (const col of chart.querySelectorAll<HTMLElement>('.col:not(.nodata)')) {
+    const hide = () => (tip.hidden = true);
+    const focusAt = (i: number) => {
+      const next = cols[Math.min(Math.max(i, 0), cols.length - 1)];
+      if (!next) return;
+      for (const col of cols) col.tabIndex = col === next ? 0 : -1;
+      next.focus();
+    };
+    for (const col of cols) {
       col.addEventListener('pointerenter', () => show(col));
       col.addEventListener('focus', () => show(col));
+      // Un clic también mueve la parada de Tab a ese día
+      col.addEventListener('pointerdown', () => {
+        for (const c of cols) c.tabIndex = c === col ? 0 : -1;
+      });
     }
-    chart.addEventListener('pointerleave', () => (tip.hidden = true));
-    chart.addEventListener('focusout', () => (tip.hidden = true));
+    chart.addEventListener('keydown', (e) => {
+      const i = cols.indexOf(document.activeElement as HTMLElement);
+      if (i < 0) return;
+      const step: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, PageUp: -7, PageDown: 7 };
+      if (e.key in step) focusAt(i + step[e.key]);
+      else if (e.key === 'Home') focusAt(0);
+      else if (e.key === 'End') focusAt(cols.length - 1);
+      else if (e.key === 'Escape') return hide();
+      else return;
+      e.preventDefault();
+    });
+    chart.addEventListener('pointerleave', () => {
+      if (!chart.contains(document.activeElement)) hide();
+    });
+    chart.addEventListener('focusout', (e) => {
+      if (!chart.contains(e.relatedTarget as Node)) hide();
+    });
   }
 </script>
 
@@ -199,12 +246,16 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
   .col {
     position: relative;
     flex: 1;
-    outline: none;
     border-radius: 4px;
   }
   .col:hover,
   .col:focus-visible {
-    background: linear-gradient(180deg, transparent, #61cce512 50%, transparent);
+    background: linear-gradient(180deg, transparent, #61cce524 50%, transparent);
+  }
+  /* Anillo de foco de 2 px dentro de la columna (sin desplazamiento: las columnas están pegadas) */
+  .col:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: -1px;
   }
   /* Días anteriores al primer sync: textura diagonal, sin barras ni tooltip */
   .nodata-band {
@@ -291,6 +342,17 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
   }
   .tooltip[hidden] {
     display: none;
+  }
+  /* La pista de teclado solo se ve mientras el gráfico tiene el foco */
+  .hint {
+    grid-column: 2;
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    visibility: hidden;
+  }
+  .chart:focus-within .hint {
+    visibility: visible;
   }
   .table-view {
     margin-top: 16px;

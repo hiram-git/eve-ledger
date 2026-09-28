@@ -206,6 +206,27 @@ a {
   color: var(--text);
 }
 
+/* Oculto hasta recibir el foco con Tab: primera parada de la página */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 16px;
+  z-index: 10;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--cyan);
+  color: var(--text);
+  font-size: 14px;
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: none;
+}
+main:focus {
+  outline: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
