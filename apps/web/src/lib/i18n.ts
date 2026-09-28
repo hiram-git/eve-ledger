@@ -22,6 +22,7 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 const es = {
   // Marco
   sections: 'Secciones',
+  heroTagline: 'Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI',
   summary: 'Resumen',
   pilots: 'Pilotos',
   language: 'Idioma',
@@ -188,6 +189,7 @@ export type Messages = typeof es;
 
 const en: Messages = {
   sections: 'Sections',
+  heroTagline: 'Consolidated income, expenses and assets of your pilots, via ESI',
   summary: 'Overview',
   pilots: 'Pilots',
   language: 'Language',
@@ -347,6 +349,7 @@ const en: Messages = {
 
 const de: Messages = {
   sections: 'Bereiche',
+  heroTagline: 'Konsolidierte Einnahmen, Ausgaben und Inventar deiner Piloten, über ESI',
   summary: 'Übersicht',
   pilots: 'Piloten',
   language: 'Sprache',

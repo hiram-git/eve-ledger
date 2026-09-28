@@ -7,6 +7,7 @@ import '@fontsource/barlow-condensed/500.css';
 import '@fontsource/barlow-condensed/700.css';
 import '../styles/theme.css';
 import Icon from '../components/Icon.astro';
+import StarMap from '../components/StarMap.astro';
 import type { SyncStatus } from '../lib/api';
 import { ago, until } from '../lib/format';
 import { LANG_NAMES, LANGS, getLang, t } from '../lib/i18n';
@@ -53,10 +54,9 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   </head>
   <body data-last-run={status?.lastRun?.finishedAt ?? ''} data-now={m.now} data-syncing={m.syncing}>
     <header class="utility shell">
-      <div class="micro-brand">
+      <a class="micro-brand" href="/" aria-label="EVE Ledger">
         <span class="brand-square" aria-hidden="true">E</span>
-        <span class="wordmark">EVE Ledger</span>
-      </div>
+      </a>
       <nav class="sections" aria-label={m.sections}>
         <a href="/" aria-current={section === 'resumen' ? 'page' : undefined}>{m.summary}</a>
         <a href="/pilotos" aria-current={section === 'pilotos' ? 'page' : undefined}>
@@ -90,6 +90,17 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
         </form>
       </div>
     </header>
+
+    <!-- Franja de marca: mapa estelar animado detrás del título (decorativa) -->
+    <section class="hero" aria-label="EVE Ledger">
+      <StarMap />
+      <div class="hero-lockup shell">
+        <div class="hero-title">
+          <p class="hero-name" aria-hidden="true">EVE <span>Ledger</span><i>_</i></p>
+          <p class="hero-tagline">{m.heroTagline}</p>
+        </div>
+      </div>
+    </section>
 
     <slot name="nav" />
 
