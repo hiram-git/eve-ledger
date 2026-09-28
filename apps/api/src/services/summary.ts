@@ -1,7 +1,8 @@
 import { and, desc, eq, gte, lt, min, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, walletJournal } from '../db/schema';
-import { topItems } from './transactions';
+import { ACTIVITIES, activityOf, foldBy, foldTrading } from '../lib/activities';
+import { marketReview } from './transactions';
 
 const DAY_MS = 86_400_000;
 
@@ -15,6 +16,8 @@ const expenses = sql<number>`coalesce(sum(case when ${walletJournal.amount} < 0 
 
 export type Totals = { income: number; expenses: number; net: number };
 
+const activity = activityOf(walletJournal.refType);
+
 const withNet = <T extends { income: number; expenses: number }>(r: T): T & { net: number } => ({
   ...r,
   net: r.income - r.expenses,
@@ -23,13 +26,14 @@ const withNet = <T extends { income: number; expenses: number }>(r: T): T & { ne
 // Fecha UTC (hora de EVE) en formato YYYY-MM-DD
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
-// Ingresos, gastos y neto entre dos instantes, sin transferencias internas
+// Ingresos, gastos y neto entre dos instantes, sin transferencias internas y con el trading como margen
 async function flowBetween(from: Date, to?: Date) {
-  const [row] = await db
-    .select({ income, expenses })
+  const rows = await db
+    .select({ activity, income, expenses })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), to ? lt(walletJournal.date, to) : undefined, eq(isInternal, 0)));
-  return withNet(row);
+    .where(and(gte(walletJournal.date, from), to ? lt(walletJournal.date, to) : undefined, eq(isInternal, 0)))
+    .groupBy(activity);
+  return foldTrading(rows);
 }
 
 export async function getSummary(days: number) {
@@ -39,7 +43,12 @@ export async function getSummary(days: number) {
   const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
   const inPeriod = and(gte(walletJournal.date, from), eq(isInternal, 0));
 
-  const [totals] = await db.select({ income, expenses }).from(walletJournal).where(inPeriod);
+  const activityRows = await db
+    .select({ activity, income, expenses, count: sql<number>`count(*)` })
+    .from(walletJournal)
+    .where(inPeriod)
+    .groupBy(activity);
+  const totals = foldTrading(activityRows);
 
   // «Hoy» = día de EVE en curso (desde 00:00 UTC) y el período anterior de igual duración
   const today = await flowBetween(todayStart);
@@ -62,24 +71,28 @@ export async function getSummary(days: number) {
     .from(walletJournal)
     .where(and(gte(walletJournal.date, from), eq(isInternal, 1)));
 
-  const byCharacter = await db
-    .select({ characterId: walletJournal.characterId, income, expenses })
+  const byCharacterRows = await db
+    .select({ characterId: walletJournal.characterId, activity, income, expenses })
     .from(walletJournal)
     .where(inPeriod)
-    .groupBy(walletJournal.characterId);
+    .groupBy(walletJournal.characterId, activity);
 
   const refType = walletJournal.refType;
   const byRefType = await db
-    .select({ refType, income, expenses, count: sql<number>`count(*)` })
+    .select({ refType, activity, income, expenses, count: sql<number>`count(*)` })
     .from(walletJournal)
     .where(inPeriod)
     .groupBy(refType);
 
   const day = sql<string>`date(${walletJournal.date}, 'unixepoch')`;
-  const dailyRows = await db.select({ day, income, expenses }).from(walletJournal).where(inPeriod).groupBy(day);
+  const dailyRows = await db
+    .select({ day, activity, income, expenses })
+    .from(walletJournal)
+    .where(inPeriod)
+    .groupBy(day, activity);
 
   // Serie diaria completa, con ceros en los días sin movimientos
-  const dailyMap = new Map(dailyRows.map((r) => [r.day, r]));
+  const dailyMap = foldBy(dailyRows, (r) => r.day);
   const daily = Array.from({ length: days }, (_, i) => {
     const d = isoDay(new Date(from.getTime() + i * DAY_MS));
     return withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0 });
@@ -87,7 +100,7 @@ export async function getSummary(days: number) {
 
   // Saldo = el balance del último movimiento sincronizado de cada personaje
   const chars = await db.select({ id: characters.id, name: characters.name, lastSyncAt: characters.lastSyncAt }).from(characters);
-  const charMap = new Map(byCharacter.map((r) => [r.characterId, r]));
+  const charMap = foldBy(byCharacterRows, (r) => r.characterId);
   const perCharacter = await Promise.all(
     chars.map(async (c) => {
       const [last] = await db
@@ -112,15 +125,28 @@ export async function getSummary(days: number) {
 
   return {
     period: { days, from, to: now },
-    totals: withNet(totals) as Totals,
+    totals: totals as Totals,
     balance: perCharacter.reduce((n, c) => n + (c.balance ?? 0), 0),
     internalTransfers: internal.volume,
     characters: perCharacter,
-    byRefType: byRefType.map(withNet).sort((a, b) => Math.abs(b.net) - Math.abs(a.net)),
+    // Por actividad, con ingresos y gastos brutos (el margen del trading es su neto) y su detalle por ref_type
+    byActivity: ACTIVITIES.map((a) => {
+      const row = activityRows.find((r) => r.activity === a);
+      return withNet({
+        activity: a,
+        income: row?.income ?? 0,
+        expenses: row?.expenses ?? 0,
+        count: row?.count ?? 0,
+        refTypes: byRefType
+          .filter((r) => r.activity === a)
+          .map(({ activity: _, ...r }) => withNet(r))
+          .sort((x, y) => Math.abs(y.net) - Math.abs(x.net)),
+      });
+    }).filter((a) => a.count > 0),
     daily,
     today,
     previous: { ...previous, complete: previousComplete },
     coverage: { firstEntryAt, coveredDays },
-    market: await topItems(from),
+    market: await marketReview(from),
   };
 }

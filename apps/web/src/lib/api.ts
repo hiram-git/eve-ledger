@@ -2,13 +2,18 @@ import { API_URL } from 'astro:env/server';
 
 export type Flow = { income: number; expenses: number; net: number };
 
+export type Activity = 'pve' | 'pvp' | 'trading' | 'other';
+
+// Revisión de mercado: por ítem, vendido y comprado en el período
 export type MarketItem = {
   typeId: number;
   name: string | null;
-  quantity: number;
-  isk: number;
+  soldQty: number;
+  sold: number;
+  boughtQty: number;
+  bought: number;
   trades: number;
-  avgPrice: number;
+  net: number;
 };
 
 export type Summary = {
@@ -23,12 +28,13 @@ export type Summary = {
     balance: number | null;
     balanceAt: string | null;
   })[];
-  byRefType: (Flow & { refType: string; count: number })[];
+  // Brutos por actividad; en el trading, su neto es el margen que entra en totals
+  byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
   daily: (Flow & { date: string })[];
   today: Flow;
   previous: Flow & { complete: boolean };
   coverage: { firstEntryAt: string | null; coveredDays: number };
-  market: { sold: MarketItem[]; bought: MarketItem[] };
+  market: { items: MarketItem[]; totals: { sold: number; bought: number; net: number; items: number } };
 };
 
 export type Inventory = {

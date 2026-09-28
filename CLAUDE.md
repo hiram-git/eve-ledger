@@ -27,6 +27,9 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Datos «desactualizados» cuando el último sync supera 2× el intervalo (2 h si el cron está apagado). El dashboard se recarga solo tras cada sync automático (`/status.json` en la web).
 - Vinculación: `/auth/callback` no pinta HTML; redirige a `${WEB_URL}/pilotos?linked=ID` o `?error=denied|state|sso`. `GET /characters` redirige a esa página si el cliente pide `text/html` y devuelve JSON (con `missingScopes` y `lastError`) al resto. La web tiene layout común (`src/layouts/Base.astro`) con secciones Resumen / Pilotos; plazas de piloto según `PILOT_SLOTS` (5).
 - `/summary` excluye las transferencias internas (ambas partes son personajes vinculados): en el consolidado se anulan. El saldo por personaje es el `balance` del último movimiento del journal.
+- Actividades (`apps/api/src/lib/activities.ts`): cada `ref_type` se clasifica como PvE (recompensas, ESS, misiones), PvP (seguros, kill rights, guerras), trading (mercado, escrow, comisiones, impuestos, contratos de compraventa) u otros (lo que no está en ninguna lista). `/summary` devuelve `byActivity` con brutos y detalle por `ref_type`.
+- El trading cuenta como **margen neto** (ventas − compras − comisiones) en ingresos, gastos, «Hoy», el gráfico diario y los pilotos: si es positivo suma a ingresos y si es negativo a gastos, en el ámbito de cada cálculo (período, día o piloto) (`foldTrading()`). El neto no cambia. Comprar stock baja el margen hasta que se vende, y las naves compradas en el mercado cuentan como trading, no como PvP.
+- Revisión de mercado (`market` en `/summary`, `marketReview()`): una tabla por ítem con vendido, comprado y neto (sin comisiones), plegada al final del resumen. Orden del resumen: vistazo → pilotos → gráfico → por actividad → tabla de pilotos → inventario → revisión de mercado.
 - Migraciones: `bun run db:generate` las crea; se aplican solas al arrancar (`runMigrations()`) o sin arrancar con `bun run db:migrate` (desde `apps/api`).
 - Idiomas de la web: español (predeterminado), inglés y alemán (`src/lib/i18n.ts`, diccionarios tipados: todo texto visible va ahí, nunca literal en las plantillas). Selector ES/EN/DE en la barra superior → `/lang?to=xx&back=…` guarda la cookie `lang`. Formatos de número/fecha y tiempos relativos con `Intl` según el idioma; la notación k/M/B de ISK y los nombres de ESI no se traducen.
 
@@ -44,6 +47,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - [x] 7. Wallet transactions + nombres de ítems: `syncCharacter()` hace journal → transacciones (paginando con `from_id`) → nombres pendientes. `GET /transactions`, `market` en `/summary` y tablas de ítems en el dashboard.
 - [x] 9. Rediseño guiado por `/impeccable critique` (25/40): vistazo mientras juegas (neto + «Hoy» arriba, auto-refresco), mapa «tu New Eden», neto con signo y comparación, avisos de cobertura y antigüedad.
 - [x] 8. Inventario + precios: `syncCharacter()` añade assets → precios (si tienen > 1 h) → nombres. `GET /inventory` (valor por personaje, ubicación e ítem), `GET /assets` (detalle) y sección de inventario en el dashboard.
+- [x] 10. P2 de la crítica: accesibilidad del gráfico diario (una parada de Tab, `aria-label` por día, «Saltar al contenido») y resumen por actividad con el trading como margen neto.
 
 ## Paso 4 — especificación
 - `src/services/sync.ts`: `syncJournal(characterId)`

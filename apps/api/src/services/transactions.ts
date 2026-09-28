@@ -53,26 +53,37 @@ export async function listTransactions(f: TransactionFilter) {
   }));
 }
 
-// Ítems más vendidos y más comprados del período (ISK movido), sin operaciones internas
-export async function topItems(from: Date, limit = 10) {
-  const isk = sql<number>`sum(${tx.quantity} * ${tx.unitPrice})`;
-  const query = (isBuy: boolean) =>
-    db
-      .select({
-        typeId: tx.typeId,
-        name: itemName.name,
-        quantity: sql<number>`sum(${tx.quantity})`,
-        isk,
-        trades: sql<number>`count(*)`,
-      })
-      .from(tx)
-      .leftJoin(itemName, eq(itemName.id, tx.typeId))
-      .where(and(gte(tx.date, from), eq(tx.isBuy, isBuy), eq(isInternal, 0)))
-      .groupBy(tx.typeId)
-      .orderBy(desc(isk))
-      .limit(limit);
+// Revisión de mercado: por ítem, lo vendido y lo comprado en el período (sin operaciones internas),
+// ordenado por ISK movido. El neto por ítem es ventas − compras, sin comisiones ni impuestos.
+export async function marketReview(from: Date, limit = 15) {
+  const soldIsk = sql<number>`coalesce(sum(case when ${tx.isBuy} = 0 then ${tx.quantity} * ${tx.unitPrice} end), 0)`;
+  const boughtIsk = sql<number>`coalesce(sum(case when ${tx.isBuy} = 1 then ${tx.quantity} * ${tx.unitPrice} end), 0)`;
+  const where = and(gte(tx.date, from), eq(isInternal, 0));
 
-  const [sold, bought] = await Promise.all([query(false), query(true)]);
-  const withAvg = <T extends { isk: number; quantity: number }>(r: T) => ({ ...r, avgPrice: r.isk / r.quantity });
-  return { sold: sold.map(withAvg), bought: bought.map(withAvg) };
+  const items = await db
+    .select({
+      typeId: tx.typeId,
+      name: itemName.name,
+      soldQty: sql<number>`coalesce(sum(case when ${tx.isBuy} = 0 then ${tx.quantity} end), 0)`,
+      sold: soldIsk,
+      boughtQty: sql<number>`coalesce(sum(case when ${tx.isBuy} = 1 then ${tx.quantity} end), 0)`,
+      bought: boughtIsk,
+      trades: sql<number>`count(*)`,
+    })
+    .from(tx)
+    .leftJoin(itemName, eq(itemName.id, tx.typeId))
+    .where(where)
+    .groupBy(tx.typeId)
+    .orderBy(desc(sql`${soldIsk} + ${boughtIsk}`))
+    .limit(limit);
+
+  const [totals] = await db
+    .select({ sold: soldIsk, bought: boughtIsk, items: sql<number>`count(distinct ${tx.typeId})` })
+    .from(tx)
+    .where(where);
+
+  return {
+    items: items.map((r) => ({ ...r, net: r.sold - r.bought })),
+    totals: { ...totals, net: totals.sold - totals.bought },
+  };
 }
