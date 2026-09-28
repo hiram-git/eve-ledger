@@ -53,6 +53,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     <title>{title ? `${title} · EVE Ledger` : 'EVE Ledger'}</title>
   </head>
   <body data-last-run={status?.lastRun?.finishedAt ?? ''} data-now={m.now} data-syncing={m.syncing}>
+    <a class="skip-link" href="#contenido">{m.skipToContent}</a>
     <header class="utility shell">
       <a class="micro-brand" href="/" aria-label="EVE Ledger">
         <span class="brand-square" aria-hidden="true">E</span>
@@ -104,7 +105,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
 
     <slot name="nav" />
 
-    <main class="shell">
+    <main class="shell" id="contenido" tabindex="-1">
       <slot />
     </main>
 

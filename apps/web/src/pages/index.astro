@@ -4,6 +4,8 @@ import DailyChart from '../components/DailyChart.astro';
 import Icon from '../components/Icon.astro';
 import NewEdenMap from '../components/NewEdenMap.astro';
 import MarketItems from '../components/MarketItems.astro';
+import MarketReview from '../components/MarketReview.astro';
+import ActivityList from '../components/ActivityList.astro';
 import BarList, { type BarRow } from '../components/BarList.astro';
 import {
   getInventory,
@@ -17,7 +19,7 @@ import {
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { ago, isk, iskFull, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 const lang = getLang(Astro);
@@ -26,7 +28,6 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const date = (iso: string) => shortDate(iso, lang);
 const rel = (iso: string | null) => ago(iso, lang);
-const refLabel = (ref: string) => refTypeLabel(ref, lang);
 
 const PERIODS = [7, 30, 90];
 const q = Astro.url.searchParams;
@@ -79,11 +80,6 @@ const delta = summary && summary.previous.complete ? summary.totals.net - summar
 
 // Rango real del período en hora de EVE, para el subtítulo de la navegación
 const range = summary ? `${date(summary.period.from)} – ${date(summary.period.to)}` : undefined;
-
-const refRows = (pick: (r: Summary['byRefType'][number]) => number): BarRow[] =>
-  summary?.byRefType.map((r) => ({ label: refLabel(r.refType), value: pick(r), detail: m.entries(r.count) })) ?? [];
-const incomeRows = refRows((r) => r.income);
-const expenseRows = refRows((r) => r.expenses);
 
 // Las estructuras de jugadores no tienen nombre sin el scope de estructuras
 const locationLabel = (id: number, name: string | null) =>
@@ -323,36 +319,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               </div>
             </section>
 
-            <div class="split">
-              <BarList title={m.whereFrom} kind="income" rows={incomeRows} />
-              <BarList title={m.whereTo} kind="expenses" rows={expenseRows} />
-            </div>
-
-            {(summary.market.sold.length > 0 || summary.market.bought.length > 0) && (
-              <div class="split">
-                <MarketItems
-                  title={m.topSold}
-                  items={summary.market.sold.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
-                />
-                <MarketItems
-                  title={m.topBought}
-                  items={summary.market.bought.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
-                />
-              </div>
-            )}
-
-            {inventory && inventory.stacks > 0 && (
-              <div class="split">
-                <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
-                <MarketItems
-                  title={m.mostValuable}
-                  items={valuableItems}
-                  iskLabel={m.value}
-                  priceLabel={m.unitPrice}
-                  empty={m.noInventoryDot}
-                />
-              </div>
-            )}
+            <ActivityList activities={summary.byActivity} net={summary.totals.net} />
 
             <section class="panel">
               <div class="panel-heading">
@@ -420,6 +387,22 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                 {inventory && inventory.unpricedTypes > 0 && m.noteUnpriced(inventory.unpricedTypes)}.
               </p>
             </section>
+
+            {inventory && inventory.stacks > 0 && (
+              <div class="split">
+                <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
+                <MarketItems
+                  title={m.mostValuable}
+                  items={valuableItems}
+                  iskLabel={m.value}
+                  priceLabel={m.unitPrice}
+                  empty={m.noInventoryDot}
+                />
+              </div>
+            )}
+
+            {summary.market.items.length > 0 && <MarketReview market={summary.market} />}
+
           </>
         )
       }

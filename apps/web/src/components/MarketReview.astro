@@ -1,0 +1,164 @@
+---
+// Revisión de mercado (plegada): una tabla por ítem con lo vendido, lo comprado y su neto.
+// Es material de revisión, no de vistazo: el margen ya está en «Por actividad».
+import type { Summary } from '../lib/api';
+import { isk, iskFull } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+
+interface Props {
+  market: Summary['market'];
+}
+const { market } = Astro.props;
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const qty = new Intl.NumberFormat(lang);
+const units = (n: number, v: number) => `${qty.format(n)} × ${full(n ? v / n : 0)}`;
+const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
+---
+
+<section class="panel">
+  <details>
+    <summary class="panel-heading">
+      <h3>{m.marketReview}</h3>
+      <span class="meta">{m.marketReviewMeta(market.totals.items, fmt(market.totals.sold), fmt(market.totals.bought))}</span>
+    </summary>
+    <div class="scroll">
+      <table>
+        <caption class="sr-only">{m.topBy(market.items.length)}</caption>
+        <thead>
+          <tr>
+            <th>{m.item}</th>
+            <th>{m.sold}</th>
+            <th>{m.bought}</th>
+            <th>{m.net}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {market.items.map((it) => (
+            <tr>
+              <td>
+                <span class="item">
+                  <span class="thumb">
+                    <img
+                      src={`https://images.evetech.net/types/${it.typeId}/icon?size=32`}
+                      alt=""
+                      width="24"
+                      height="24"
+                      loading="lazy"
+                      onerror="this.style.visibility='hidden'"
+                    />
+                  </span>
+                  <span class="name" title={it.name ?? undefined}>{it.name ?? `#${it.typeId}`}</span>
+                </span>
+              </td>
+              <td title={it.soldQty ? units(it.soldQty, it.sold) : undefined}>{it.sold ? fmt(it.sold) : '—'}</td>
+              <td title={it.boughtQty ? units(it.boughtQty, it.bought) : undefined}>
+                {it.bought ? fmt(-it.bought) : '—'}
+              </td>
+              <td class={sign(it.net)} title={full(it.net)}>{fmt(it.net, { sign: true })}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    <p class="panel-note">{m.marketNote}.</p>
+  </details>
+</section>
+
+<style>
+  summary {
+    cursor: pointer;
+    list-style: none;
+    position: relative;
+    padding-left: 40px;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  summary::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid var(--text-muted);
+    border-bottom: 1.5px solid var(--text-muted);
+    transform: translateY(-70%) rotate(-45deg);
+    transition: transform 0.18s;
+  }
+  details[open] > summary::before {
+    transform: translateY(-70%) rotate(45deg);
+  }
+  details:not([open]) > summary {
+    border-bottom: 0;
+  }
+  summary:hover::before {
+    border-color: var(--cyan);
+  }
+  summary:focus-visible {
+    outline-offset: -2px;
+  }
+  table th:first-child,
+  table td:first-child {
+    padding-left: 22px;
+  }
+  table th:last-child,
+  table td:last-child {
+    padding-right: 22px;
+  }
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 18rem;
+  }
+  .thumb {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    border: 1px solid #2b4251;
+    border-radius: 5px;
+    background: #162834;
+  }
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  td.pos {
+    color: var(--positive);
+  }
+  td.neg {
+    color: var(--critical);
+  }
+  @media (max-width: 480px) {
+    summary {
+      padding-left: 34px;
+    }
+    summary::before {
+      left: 16px;
+    }
+    th,
+    td {
+      padding: 8px 6px;
+    }
+    table th:first-child,
+    table td:first-child {
+      padding-left: 16px;
+    }
+    table th:last-child,
+    table td:last-child {
+      padding-right: 16px;
+    }
+    .item {
+      max-width: 8rem;
+    }
+    .thumb {
+      display: none;
+    }
+  }
+</style>

@@ -1,0 +1,239 @@
+---
+// Neto por actividad (PvE, PvP, trading como margen, otros): una barra divergente por fila desde un eje central.
+// Cada fila se despliega con su detalle por tipo de movimiento de ESI.
+import type { Summary } from '../lib/api';
+import { isk, iskFull, refTypeLabel } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+
+interface Props {
+  activities: Summary['byActivity'];
+  net: number;
+}
+const { activities, net } = Astro.props;
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const out = (v: number) => (v ? -v : 0);
+
+// Más relevante primero: mayor neto absoluto
+const rows = [...activities].sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+const max = Math.max(1, ...rows.map((r) => Math.abs(r.net)));
+// Media pista por lado: el 100 % del neto máximo ocupa la mitad
+const half = (v: number) => `${(Math.abs(v) / max) * 50}%`;
+const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
+---
+
+<section class="panel">
+  <div class="panel-heading">
+    <h3>{m.byActivity}</h3>
+    <span class="meta" title={full(net)}>{m.net} {fmt(net, { sign: true })}</span>
+  </div>
+  {
+    rows.length === 0 ? (
+      <p class="empty panel-body">{m.noData}</p>
+    ) : (
+      <ul>
+        {rows.map((a) => (
+          <li>
+            <details>
+              <summary>
+                <span class="who">
+                  <span class="name">{m.activityName[a.activity]}</span>
+                  <span class="hint">{m.activityHint[a.activity]}</span>
+                </span>
+                <span class="track" aria-hidden="true">
+                  <span
+                    class:list={['bar', sign(a.net)]}
+                    style={a.net >= 0 ? `left:50%;width:${half(a.net)}` : `right:50%;width:${half(a.net)}`}
+                  />
+                </span>
+                <span class="figures">
+                  <span class:list={['net', sign(a.net)]} title={full(a.net)}>
+                    {fmt(a.net, { sign: true })}
+                  </span>
+                  <span class="gross">{m.activityInOut(fmt(a.income), fmt(a.expenses))}</span>
+                </span>
+              </summary>
+              <table aria-label={m.activityDetail(m.activityName[a.activity])}>
+                <thead>
+                  <tr>
+                    <th>{m.entryType}</th>
+                    <th>{m.income}</th>
+                    <th>{m.expenses}</th>
+                    <th>{m.net}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {a.refTypes.map((r) => (
+                    <tr>
+                      <td title={m.entries(r.count)}>{refTypeLabel(r.refType, lang)}</td>
+                      <td title={full(r.income)}>{r.income ? fmt(r.income) : '—'}</td>
+                      <td title={full(out(r.expenses))}>{r.expenses ? fmt(out(r.expenses)) : '—'}</td>
+                      <td class:list={[sign(r.net)]} title={`${m.income} ${full(r.income)} · ${m.expenses} ${full(out(r.expenses))}`}>{fmt(r.net, { sign: true })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  <p class="panel-note">{m.activityNote}.</p>
+</section>
+
+<style>
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 6px 0;
+  }
+  li + li {
+    border-top: 1px solid var(--line);
+  }
+  summary {
+    display: grid;
+    /* Columnas fijas: el eje central de la barra queda alineado en todas las filas */
+    grid-template-columns: 15rem 1fr 13rem;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 22px 12px 40px;
+    cursor: pointer;
+    list-style: none;
+    position: relative;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  /* Chevrón propio: gira al desplegar */
+  summary::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid var(--text-muted);
+    border-bottom: 1.5px solid var(--text-muted);
+    transform: translateY(-70%) rotate(-45deg);
+    transition: transform 0.18s;
+  }
+  details[open] > summary::before {
+    transform: translateY(-70%) rotate(45deg);
+  }
+  summary:hover {
+    background: var(--hover);
+  }
+  summary:hover::before {
+    border-color: var(--cyan);
+  }
+  summary:focus-visible {
+    outline-offset: -2px;
+  }
+  .who {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .name {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  /* Pista divergente: eje en el centro, positivo a la derecha, negativo a la izquierda */
+  .track {
+    position: relative;
+    height: 14px;
+  }
+  .track::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -4px;
+    bottom: -4px;
+    width: 1px;
+    background: var(--axis);
+  }
+  .bar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+  }
+  .bar.pos {
+    background: var(--income);
+    border-radius: 0 4px 4px 0;
+  }
+  .bar.neg {
+    background: var(--expenses);
+    border-radius: 4px 0 0 4px;
+  }
+  .figures {
+    display: grid;
+    justify-items: end;
+    gap: 2px;
+  }
+  .net {
+    font: 500 16px var(--mono);
+    color: var(--text);
+  }
+  .pos.net,
+  td.pos {
+    color: var(--positive);
+  }
+  .neg.net,
+  td.neg {
+    color: var(--critical);
+  }
+  .gross {
+    font: 12px var(--mono);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  table {
+    margin: 0 22px 14px 40px;
+    width: calc(100% - 62px);
+    font-size: 13px;
+  }
+  th:not(:first-child),
+  td:not(:first-child) {
+    text-align: right;
+    font-family: var(--mono);
+  }
+  th:not(:first-child) {
+    font-family: inherit;
+  }
+  .empty {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  @media (max-width: 600px) {
+    summary {
+      grid-template-columns: 1fr auto;
+      gap: 6px 12px;
+      padding: 12px 16px 12px 34px;
+    }
+    summary::before {
+      left: 16px;
+    }
+    .track {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    table {
+      margin: 0 16px 14px;
+      width: calc(100% - 32px);
+    }
+    /* En móvil el desglose queda en tipo y neto; entradas y salidas siguen en el tooltip del neto */
+    th:nth-child(2),
+    th:nth-child(3),
+    td:nth-child(2),
+    td:nth-child(3) {
+      display: none;
+    }
+  }
+</style>
