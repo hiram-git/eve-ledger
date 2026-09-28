@@ -1,6 +1,7 @@
 ---
 // Barras horizontales ordenadas: una serie por lista, el título la nombra
 import { isk, iskFull } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
 
 export type BarRow = { label: string; value: number; detail?: string };
 
@@ -11,12 +12,17 @@ interface Props {
   limit?: number;
 }
 const { title, kind, rows, limit = 8 } = Astro.props;
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+
 
 const sorted = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
 const shown = sorted.slice(0, limit);
 const rest = sorted.slice(limit);
 if (rest.length) {
-  shown.push({ label: `Otros (${rest.length})`, value: rest.reduce((n, r) => n + r.value, 0) });
+  shown.push({ label: m.others(rest.length), value: rest.reduce((n, r) => n + r.value, 0) });
 }
 const max = Math.max(1, ...shown.map((r) => r.value));
 const total = sorted.reduce((n, r) => n + r.value, 0);
@@ -25,20 +31,20 @@ const total = sorted.reduce((n, r) => n + r.value, 0);
 <section class="panel">
   <div class="panel-heading">
     <h3>{title}</h3>
-    {total > 0 && <span class="meta" title={iskFull(total)}>Total {isk(total)}</span>}
+    {total > 0 && <span class="meta" title={full(total)}>{m.total(fmt(total))}</span>}
   </div>
   <div class="panel-body">
     {
       shown.length === 0 ? (
-        <p class="empty">Sin datos.</p>
+        <p class="empty">{m.noData}</p>
       ) : (
         <ul>
           {shown.map((r) => (
-            <li title={[r.detail ?? r.label, iskFull(r.value)].join(' · ')}>
+            <li title={[r.detail ?? r.label, full(r.value)].join(' · ')}>
               <span class="label">{r.label}</span>
               <span class="track">
                 <span class:list={['bar', kind]} style={`width:calc((100% - 4.5rem) * ${r.value / max})`} />
-                <span class="value">{isk(r.value)}</span>
+                <span class="value">{fmt(r.value)}</span>
               </span>
             </li>
           ))}

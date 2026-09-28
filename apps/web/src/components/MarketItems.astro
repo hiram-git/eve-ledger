@@ -1,6 +1,7 @@
 ---
 // Tabla de ítems: nombre, cantidad, ISK total y precio unitario
 import { isk, iskFull } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
 
 export type ItemRow = { typeId: number; name: string | null; quantity: number; isk: number; unitPrice: number };
 
@@ -11,20 +12,18 @@ interface Props {
   priceLabel?: string;
   empty?: string;
 }
-const {
-  title,
-  items,
-  iskLabel = 'ISK',
-  priceLabel = 'Precio medio',
-  empty = 'Sin transacciones en el período.',
-} = Astro.props;
-const qty = new Intl.NumberFormat('es');
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const { title, items, iskLabel = m.isk, priceLabel = m.avgPrice, empty = m.noTransactions } = Astro.props;
+const qty = new Intl.NumberFormat(lang);
 ---
 
 <section class="panel">
   <div class="panel-heading">
     <h3>{title}</h3>
-    {items.length > 0 && <span class="meta">Top {items.length}</span>}
+    {items.length > 0 && <span class="meta">{m.top(items.length)}</span>}
   </div>
   {
     items.length === 0 ? (
@@ -34,8 +33,8 @@ const qty = new Intl.NumberFormat('es');
         <table>
           <thead>
             <tr>
-              <th>Ítem</th>
-              <th>Cantidad</th>
+              <th>{m.item}</th>
+              <th>{m.quantity}</th>
               <th>{iskLabel}</th>
               <th>{priceLabel}</th>
             </tr>
@@ -61,13 +60,13 @@ const qty = new Intl.NumberFormat('es');
                 <td>{qty.format(it.quantity)}</td>
                 {it.unitPrice > 0 ? (
                   <>
-                    <td title={`${iskFull(it.isk)} · ${iskFull(it.unitPrice)} c/u`}>{isk(it.isk)}</td>
-                    <td title={iskFull(it.unitPrice)}>{isk(it.unitPrice)}</td>
+                    <td title={`${full(it.isk)} · ${m.each(full(it.unitPrice))}`}>{fmt(it.isk)}</td>
+                    <td title={full(it.unitPrice)}>{fmt(it.unitPrice)}</td>
                   </>
                 ) : (
                   <>
-                    <td class="muted" title="Sin precio">—</td>
-                    <td class="muted" title="Sin precio en ESI o copia de blueprint">—</td>
+                    <td class="muted" title={m.noPrice}>—</td>
+                    <td class="muted" title={m.noPriceTitle}>—</td>
                   </>
                 )}
               </tr>

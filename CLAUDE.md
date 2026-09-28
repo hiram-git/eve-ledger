@@ -27,7 +27,8 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Datos «desactualizados» cuando el último sync supera 2× el intervalo (2 h si el cron está apagado). El dashboard se recarga solo tras cada sync automático (`/status.json` en la web).
 - Vinculación: `/auth/callback` no pinta HTML; redirige a `${WEB_URL}/pilotos?linked=ID` o `?error=denied|state|sso`. `GET /characters` redirige a esa página si el cliente pide `text/html` y devuelve JSON (con `missingScopes` y `lastError`) al resto. La web tiene layout común (`src/layouts/Base.astro`) con secciones Resumen / Pilotos; plazas de piloto según `PILOT_SLOTS` (5).
 - `/summary` excluye las transferencias internas (ambas partes son personajes vinculados): en el consolidado se anulan. El saldo por personaje es el `balance` del último movimiento del journal.
-- Migraciones: `bun run db:generate` las crea; se aplican solas al arrancar (`runMigrations()`).
+- Migraciones: `bun run db:generate` las crea; se aplican solas al arrancar (`runMigrations()`) o sin arrancar con `bun run db:migrate` (desde `apps/api`).
+- Idiomas de la web: español (predeterminado), inglés y alemán (`src/lib/i18n.ts`, diccionarios tipados: todo texto visible va ahí, nunca literal en las plantillas). Selector ES/EN/DE en la barra superior → `/lang?to=xx&back=…` guarda la cookie `lang`. Formatos de número/fecha y tiempos relativos con `Intl` según el idioma; la notación k/M/B de ISK y los nombres de ESI no se traducen.
 
 ## Esquema (`src/db/schema.ts`)
 `characters`, `wallet_journal`, `wallet_transactions` (con `client_id` y `journal_ref_id`), `names`, `assets`, `market_prices`, `systems`, `station_systems`, `sync_log` (con `kind`: `journal` | `transactions` | `assets`).
@@ -55,5 +56,5 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
   - Implementado en `esiGet()`: pausa global según `X-ESI-Error-Limit-Remain/Reset` (también preventiva si quedan < 10 errores) y `Retry-After` en 429; como mucho un reintento.
 
 ## Comandos
-- API (`apps/api`): `bun install` · `bun run db:generate` · `bun run dev` (puerto 3000)
+- API (`apps/api`): `bun install` · `bun run db:generate` · `bun run db:migrate` · `bun run dev` (puerto 3000)
 - Web (`apps/web`): `bun install` · `bun run dev` (puerto 4321)

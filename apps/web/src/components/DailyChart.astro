@@ -2,6 +2,7 @@
 // Columnas divergentes por día: ingresos hacia arriba, gastos hacia abajo, un solo eje
 import type { Summary } from '../lib/api';
 import { isk, iskFull, shortDate } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
 
 interface Props {
   daily: Summary['daily'];
@@ -9,6 +10,12 @@ interface Props {
   firstDate?: string | null;
 }
 const { daily, firstDate } = Astro.props;
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const date = (iso: string) => shortDate(iso, lang);
+
 const missing = firstDate ? daily.filter((d) => d.date < firstDate).length : 0;
 
 function niceStep(range: number, count = 4) {
@@ -37,20 +44,20 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
 ---
 
 <div class="legend" aria-hidden="true">
-  <span><i class="key income"></i>Ingresos</span>
-  <span><i class="key expenses"></i>Gastos</span>
+  <span><i class="key income"></i>{m.income}</span>
+  <span><i class="key expenses"></i>{m.expenses}</span>
 </div>
 
-<div class="chart" role="img" aria-label="Ingresos y gastos diarios. La tabla con los valores está debajo.">
+<div class="chart" role="img" aria-label={m.chartLabel} data-l-income={m.income} data-l-expenses={m.expenses} data-l-net={m.net}>
   <div class="y-axis">
-    {ticks.map((t) => <span style={`bottom:${pct(t + bottom)}%`}>{isk(t)}</span>)}
+    {ticks.map((t) => <span style={`bottom:${pct(t + bottom)}%`}>{fmt(t)}</span>)}
   </div>
   <div class="plot">
     {ticks.map((t) => <div class:list={['grid', { base: t === 0 }]} style={`bottom:${pct(t + bottom)}%`} />)}
     {
       missing > 0 && (
         <div class="nodata-band" style={`width:${(missing / daily.length) * 100}%`}>
-          <span>Sin historial</span>
+          <span>{m.noHistory}</span>
         </div>
       )
     }
@@ -63,10 +70,10 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
           <div
             class="col"
             tabindex="0"
-            data-date={shortDate(d.date)}
-            data-income={iskFull(d.income)}
-            data-expenses={iskFull(-d.expenses)}
-            data-net={iskFull(d.net)}
+            data-date={date(d.date)}
+            data-income={full(d.income)}
+            data-expenses={full(-d.expenses)}
+            data-net={full(d.net)}
           >
             {d.income > 0 && <div class="bar income" style={`bottom:${zero}%;height:${pct(d.income)}%`} />}
             {d.expenses > 0 && <div class="bar expenses" style={`top:${100 - zero}%;height:${pct(d.expenses)}%`} />}
@@ -77,23 +84,23 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
     </div>
   </div>
   <div class="x-axis">
-    {daily.map((d, i) => <span>{showLabel(i) ? shortDate(d.date) : ''}</span>)}
+    {daily.map((d, i) => <span>{showLabel(i) ? date(d.date) : ''}</span>)}
   </div>
   <div class="tooltip" hidden></div>
 </div>
 
 <details class="table-view">
-  <summary>Ver como tabla</summary>
+  <summary>{m.asTable}</summary>
   <table>
-    <thead><tr><th>Día</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead>
+    <thead><tr><th>{m.day}</th><th>{m.income}</th><th>{m.expenses}</th><th>{m.net}</th></tr></thead>
     <tbody>
       {
         [...daily].reverse().map((d) => (
           <tr>
-            <td>{shortDate(d.date)}</td>
-            <td>{isk(d.income)}</td>
-            <td>{isk(-d.expenses)}</td>
-            <td>{isk(d.net, { sign: true })}</td>
+            <td>{date(d.date)}</td>
+            <td>{fmt(d.income)}</td>
+            <td>{fmt(-d.expenses)}</td>
+            <td>{fmt(d.net, { sign: true })}</td>
           </tr>
         ))
       }
@@ -106,10 +113,11 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
     const tip = chart.querySelector<HTMLElement>('.tooltip')!;
     const show = (col: HTMLElement) => {
       const { date, income, expenses, net } = col.dataset;
+      const l = chart.dataset;
       tip.innerHTML = `<strong>${date}</strong>
-        <span><i class="key income"></i>Ingresos</span><b>${income}</b>
-        <span><i class="key expenses"></i>Gastos</span><b>${expenses}</b>
-        <span>Neto</span><b>${net}</b>`;
+        <span><i class="key income"></i>${l.lIncome}</span><b>${income}</b>
+        <span><i class="key expenses"></i>${l.lExpenses}</span><b>${expenses}</b>
+        <span>${l.lNet}</span><b>${net}</b>`;
       tip.hidden = false;
       const c = chart.getBoundingClientRect();
       const r = col.getBoundingClientRect();

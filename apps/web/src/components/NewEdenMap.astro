@@ -3,11 +3,17 @@
 // Posiciones reales de ESI proyectadas sobre el plano galáctico (x, z), norte arriba
 import type { GeoMap } from '../lib/api';
 import { isk, iskFull } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
 
 interface Props {
   map: GeoMap;
 }
 const { map } = Astro.props;
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+
 
 const W = 560;
 const H = 230;
@@ -43,13 +49,13 @@ const placed = nodes.map((n) => {
   const x = px(n.x);
   const y = py(n.z);
   const r = radius(n.inventory);
-  const lines = [n.inventory > 0 ? isk(n.inventory) : null, n.earnedToday > 0 ? `+${isk(n.earnedToday)} hoy` : null].filter(
+  const lines = [n.inventory > 0 ? fmt(n.inventory) : null, n.earnedToday > 0 ? m.mapToday(fmt(n.earnedToday)) : null].filter(
     Boolean,
   ) as string[];
   const title = [
     `${n.name} (${n.security.toFixed(1)})`,
-    n.inventory > 0 ? `Inventario: ${iskFull(n.inventory)}` : null,
-    n.earnedToday > 0 ? `Ganado hoy: ${iskFull(n.earnedToday)}` : null,
+    n.inventory > 0 ? m.mapInventoryLine(full(n.inventory)) : null,
+    n.earnedToday > 0 ? m.mapTodayLine(full(n.earnedToday)) : null,
   ]
     .filter(Boolean)
     .join('\n');
@@ -88,15 +94,13 @@ for (const n of order) {
 
 const invCount = nodes.filter((n) => n.inventory > 0).length;
 const earnCount = nodes.filter((n) => n.earnedToday > 0).length;
-const summary =
-  `Mapa de New Eden: inventario en ${invCount} ${invCount === 1 ? 'sistema' : 'sistemas'}` +
-  (earnCount ? `, ISK ganado hoy en ${earnCount}` : ', sin ganancias localizadas hoy');
+const summary = m.mapSummary(invCount, earnCount);
 ---
 
 <figure class="new-eden">
   {
     nodes.length === 0 ? (
-      <p class="empty">Tu mapa aparecerá cuando se sincronice el inventario o ganes ISK en un sistema.</p>
+      <p class="empty">{m.mapEmpty}</p>
     ) : (
       <>
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={summary}>
@@ -120,7 +124,7 @@ const summary =
                 <text x={labels.get(n.systemId)!.tx} y={labels.get(n.systemId)!.ty} text-anchor={labels.get(n.systemId)!.anchor}>
                   <tspan class="name">{n.name}</tspan>
                   {n.lines.map((l, i) => (
-                    <tspan class:list={['val', { gain: l.endsWith('hoy') }]} x={labels.get(n.systemId)!.tx} dy={i === 0 ? 13 : 12}>
+                    <tspan class:list={['val', { gain: i === n.lines.length - 1 && n.earnedToday > 0 }]} x={labels.get(n.systemId)!.tx} dy={i === 0 ? 13 : 12}>
                       {l}
                     </tspan>
                   ))}
@@ -134,8 +138,8 @@ const summary =
             <li>
               <span class="n-name">{n.name}</span>
               <span class="n-val">
-                {n.inventory > 0 ? `${isk(n.inventory)} ISK` : 'sin inventario'}
-                {n.earnedToday > 0 && <span class="gain">, +{isk(n.earnedToday)} hoy</span>}
+                {n.inventory > 0 ? `${fmt(n.inventory)} ISK` : m.mapNoInventory}
+                {n.earnedToday > 0 && <span class="gain">, {m.mapToday(fmt(n.earnedToday))}</span>}
               </span>
             </li>
           ))}
@@ -144,13 +148,12 @@ const summary =
     )
   }
   <figcaption>
-    <span class="legend-key"><i class="held" />Inventario (tamaño = valor)</span>
-    <span class="legend-key"><i class="earned" />Ganado hoy</span>
+    <span class="legend-key"><i class="held" />{m.mapLegendInventory}</span>
+    <span class="legend-key"><i class="earned" />{m.mapLegendToday}</span>
     {
       map.unplaced.value > 0 && (
-        <span class="unplaced" title="Estructuras de jugadores: ubicarlas requiere el permiso esi-universe.read_structures.v1">
-          {isk(map.unplaced.value)} sin ubicar ({map.unplaced.locations}{' '}
-          {map.unplaced.locations === 1 ? 'estructura' : 'estructuras'})
+        <span class="unplaced" title={m.mapUnplacedTitle}>
+          {m.mapUnplaced(fmt(map.unplaced.value), map.unplaced.locations)}
         </span>
       )
     }
