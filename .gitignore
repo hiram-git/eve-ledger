@@ -1,0 +1,5 @@
+# Estado local de impeccable (sesiones del live mode y preferencias personales)
+.impeccable/config.local.json
+.impeccable/live/sessions/
+.impeccable/live/inject-journal.json
+.impeccable/live/roots.json
