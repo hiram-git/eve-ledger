@@ -6,7 +6,6 @@ export type ItemRow = { typeId: number; name: string | null; quantity: number; i
 
 interface Props {
   title: string;
-  step?: string;
   items: ItemRow[];
   iskLabel?: string;
   priceLabel?: string;
@@ -14,7 +13,6 @@ interface Props {
 }
 const {
   title,
-  step,
   items,
   iskLabel = 'ISK',
   priceLabel = 'Precio medio',
@@ -25,8 +23,8 @@ const qty = new Intl.NumberFormat('es');
 
 <section class="panel">
   <div class="panel-heading">
-    <h3>{step && <span class="step-label">{step}</span>}{title}</h3>
-    {items.length > 0 && <span class="meta">TOP {items.length}</span>}
+    <h3>{title}</h3>
+    {items.length > 0 && <span class="meta">Top {items.length}</span>}
   </div>
   {
     items.length === 0 ? (

@@ -19,6 +19,6 @@ Producción local: `bun run build && bun run start`.
 - Tabla por personaje con saldo, inventario, neto y último sync
 - Botón «Sincronizar ahora» → `POST /sync/all` de la API
 
-Diseño: tema oscuro tipo HUD (`src/styles/theme.css`), con mapa estelar animado en la cabecera (`StarMap.astro`) y ticker de telemetría. Las animaciones se desactivan con «reducir movimiento» del sistema.
+Diseño: tema oscuro tipo HUD (`src/styles/theme.css`), con mapa estelar animado en la cabecera (`StarMap.astro`) y ticker de telemetría. Fuentes autoalojadas (`@fontsource`), funciona sin conexión. Las animaciones se desactivan con «reducir movimiento» del sistema. Revisado con el skill impeccable (`/impeccable polish`).
 
 Las transferencias entre tus propios personajes se excluyen del consolidado (se anulan entre sí).

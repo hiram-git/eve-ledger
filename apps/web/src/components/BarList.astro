@@ -6,12 +6,11 @@ export type BarRow = { label: string; value: number; detail?: string };
 
 interface Props {
   title: string;
-  step?: string;
   kind: 'income' | 'expenses' | 'inventory';
   rows: BarRow[];
   limit?: number;
 }
-const { title, step, kind, rows, limit = 8 } = Astro.props;
+const { title, kind, rows, limit = 8 } = Astro.props;
 
 const sorted = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value);
 const shown = sorted.slice(0, limit);
@@ -25,8 +24,8 @@ const total = sorted.reduce((n, r) => n + r.value, 0);
 
 <section class="panel">
   <div class="panel-heading">
-    <h3>{step && <span class="step-label">{step}</span>}{title}</h3>
-    {total > 0 && <span class="meta" title={iskFull(total)}>Σ {isk(total)}</span>}
+    <h3>{title}</h3>
+    {total > 0 && <span class="meta" title={iskFull(total)}>Total {isk(total)}</span>}
   </div>
   <div class="panel-body">
     {

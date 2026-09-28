@@ -5,7 +5,8 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 
 ## Stack
 - `apps/api`: Bun + Elysia + Drizzle + SQLite (`bun:sqlite`)
-- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`. Tema oscuro tipo HUD en `src/styles/theme.css` (Inter + IBM Plex Mono + Barlow Condensed desde Google Fonts). Colores de datos: ingresos `#2a98c0`, gastos `#e8604c`, inventario `#9a7cf0`, validados sobre el fondo de los paneles; no reutilizarlos como colores de interfaz.
+- `apps/web`: Astro (SSR con `@astrojs/node`), lee la API vía `API_URL`. Tema oscuro tipo HUD en `src/styles/theme.css`. Fuentes autoalojadas con `@fontsource` (Inter para la interfaz, IBM Plex Mono solo para cifras y datos, Barlow Condensed solo para el logotipo). Colores de datos: ingresos `#2a98c0`, gastos `#e8604c`, inventario `#9a7cf0`, validados sobre el fondo de los paneles; no reutilizarlos como colores de interfaz.
+- Diseño: skill **impeccable** instalado en `.claude/skills/impeccable` (versión y origen en `UPSTREAM`; agentes en `.claude/agents/`). Sin sus hooks automáticos: tras cambiar UI, correr `.claude/skills/impeccable/scripts/impeccable detect --json <archivos>`. Reglas adoptadas: sin eyebrows sobre títulos ni números de sección, el cian solo para acciones/estado, movimiento solo en el mapa estelar y el ticker.
 - Un solo usuario, sin multitenant ni login propio. Si crece: migrar a PostgreSQL con Drizzle.
 
 ## Decisiones tomadas (no cambiar sin preguntar)

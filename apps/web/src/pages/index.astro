@@ -1,4 +1,9 @@
 ---
+import '@fontsource-variable/inter';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/barlow-condensed/500.css';
+import '@fontsource/barlow-condensed/700.css';
 import '../styles/theme.css';
 import DailyChart from '../components/DailyChart.astro';
 import Icon from '../components/Icon.astro';
@@ -46,6 +51,12 @@ const cronTitle = status?.lastRun
   ? `Último sync automático ${ago(status.lastRun.finishedAt)}: ${status.lastRun.inserted} movimientos nuevos` +
     (status.lastRun.errors ? `, ${status.lastRun.errors} personaje(s) con error` : '')
   : undefined;
+
+// Patrimonio consolidado y proporciones para las barras de desglose
+const inventoryValue = inventory && inventory.stacks > 0 ? inventory.value : 0;
+const netWorth = (summary?.balance ?? 0) + inventoryValue;
+const share = (part: number, total: number) => (total > 0 ? Math.max(0, Math.min(1, part / total)) : 0);
+const flowTotal = (summary?.totals.income ?? 0) + (summary?.totals.expenses ?? 0);
 
 // Sync más reciente entre todos los personajes
 const lastSync = summary?.characters
@@ -100,19 +111,13 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#070c13" />
     <title>EVE Ledger</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;450;500;550;600;650;700&display=swap"
-    />
   </head>
   <body>
     <header class="utility shell">
       <div class="micro-brand">
         <span class="brand-square">E</span>
-        EVE LEDGER <span class="divider">//</span>
-        <span class="muted">{summary ? `${summary.characters.length} PILOTOS` : 'SIN CONEXIÓN'}</span>
+        EVE LEDGER
+        <span class="muted">· {summary ? `${summary.characters.length} pilotos` : 'sin conexión'}</span>
       </div>
       <div class="utility-right">
         {
@@ -123,11 +128,11 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             </span>
           )
         }
-        <form method="post" action="/sync">
+        <form method="post" action="/sync" id="sync-form">
           <input type="hidden" name="days" value={days} />
           <button type="submit" class="primary-button">
             <Icon name="refresh" />
-            Sincronizar
+            <span class="label">Sincronizar</span>
           </button>
         </form>
       </div>
@@ -137,7 +142,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       <StarMap />
       <div class="hero-lockup shell">
         <div class="hero-title">
-          <p class="eyebrow">New Eden // Registro financiero</p>
           <h1>EVE <span>Ledger</span><i>_</i></h1>
           <p>Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI</p>
         </div>
@@ -178,9 +182,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <span aria-hidden={copy === 1 ? 'true' : undefined}>
                         {t.label} <b class:list={{ up: t.trend === 'up', down: t.trend === 'down' }}>{t.value}</b>
                       </span>
-                      <span class="sep" aria-hidden="true">
-                        ◆
-                      </span>
+                      <span class="sep" aria-hidden="true" />
                     </>
                   )),
                 )}
@@ -194,17 +196,19 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     <main class="shell">
       <div class="page-heading">
         <div>
-          <p class="eyebrow">Resumen // últimos {days} días</p>
           <h2>Estado <span>de la flota</span></h2>
+          <p class="subtitle">
+            <span>Últimos {days} días</span>
+            {
+              lastSync && (
+                <span class="fresh">
+                  <Icon name="activity" />
+                  Datos de ESI {ago(lastSync)}
+                </span>
+              )
+            }
+          </p>
         </div>
-        {
-          lastSync && (
-            <span class="heading-note">
-              <Icon name="activity" />
-              DATOS DE ESI · {ago(lastSync).toUpperCase()}
-            </span>
-          )
-        }
       </div>
 
       {
@@ -268,54 +272,68 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   {isk(summary.totals.net, { sign: true })}
                   <small>ISK</small>
                 </span>
+                <div class="ratio" aria-hidden="true">
+                  {summary.totals.income > 0 && <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />}
+                  {summary.totals.expenses > 0 && <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />}
+                </div>
+                <dl class="breakdown">
+                  <div>
+                    <dt>
+                      <i class="key income" />
+                      Ingresos
+                    </dt>
+                    <dd title={iskFull(summary.totals.income)}>{isk(summary.totals.income)}</dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <i class="key expenses" />
+                      Gastos
+                    </dt>
+                    <dd title={iskFull(-summary.totals.expenses)}>{isk(-summary.totals.expenses)}</dd>
+                  </div>
+                </dl>
                 {summary.internalTransfers > 0 && (
-                  <span class="sub">Excluye {isk(summary.internalTransfers)} ISK movidos entre tus pilotos</span>
+                  <span class="sub">No incluye {isk(summary.internalTransfers)} ISK movidos entre tus pilotos</span>
                 )}
               </div>
               <div class="panel stat">
                 <span class="label">
-                  <Icon name="up" />
-                  Ingresos
-                </span>
-                <span class="value" title={iskFull(summary.totals.income)}>
-                  {isk(summary.totals.income)}
-                </span>
-              </div>
-              <div class="panel stat">
-                <span class="label">
-                  <Icon name="down" />
-                  Gastos
-                </span>
-                <span class="value" title={iskFull(-summary.totals.expenses)}>
-                  {isk(-summary.totals.expenses)}
-                </span>
-              </div>
-              <div class="panel stat">
-                <span class="label">
                   <Icon name="wallet" />
-                  Saldo total
+                  Patrimonio
                 </span>
-                <span class="value" title={iskFull(summary.balance)}>
-                  {isk(summary.balance)}
+                <span class="value" title={iskFull(netWorth)}>
+                  {isk(netWorth)}
+                  <small>ISK</small>
                 </span>
-              </div>
-              <div class="panel stat">
-                <span class="label">
-                  <Icon name="box" />
-                  Inventario
-                </span>
-                <span class="value" title={inventory ? iskFull(inventory.value) : 'Sin datos'}>
-                  {inventory && inventory.stacks > 0 ? isk(inventory.value) : '—'}
-                </span>
+                <div class="ratio" aria-hidden="true">
+                  {summary.balance > 0 && <i class="balance" style={`flex-grow:${share(summary.balance, netWorth)}`} />}
+                  {inventoryValue > 0 && <i class="inventory" style={`flex-grow:${share(inventoryValue, netWorth)}`} />}
+                </div>
+                <dl class="breakdown">
+                  <div>
+                    <dt>
+                      <i class="key balance" />
+                      Saldo en wallets
+                    </dt>
+                    <dd title={iskFull(summary.balance)}>{isk(summary.balance)}</dd>
+                  </div>
+                  <div>
+                    <dt>
+                      <i class="key inventory" />
+                      Inventario
+                    </dt>
+                    <dd title={inventoryValue ? iskFull(inventoryValue) : 'Sin inventario sincronizado'}>
+                      {inventoryValue ? isk(inventoryValue) : '—'}
+                    </dd>
+                  </div>
+                </dl>
               </div>
             </section>
 
             <section class="panel">
               <div class="panel-heading">
-                <h3>
-                  <span class="step-label">01</span>Flujo diario
-                </h3>
-                <span class="meta">UTC · HORA DE EVE</span>
+                <h3>Flujo diario</h3>
+                <span class="meta">Hora de EVE (UTC)</span>
               </div>
               <div class="panel-body">
                 <DailyChart daily={summary.daily} />
@@ -323,19 +341,17 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             </section>
 
             <div class="split">
-              <BarList step="02" title="De dónde viene el ISK" kind="income" rows={incomeRows} />
-              <BarList step="03" title="En qué se va" kind="expenses" rows={expenseRows} />
+              <BarList title="De dónde viene el ISK" kind="income" rows={incomeRows} />
+              <BarList title="En qué se va" kind="expenses" rows={expenseRows} />
             </div>
 
             {(summary.market.sold.length > 0 || summary.market.bought.length > 0) && (
               <div class="split">
                 <MarketItems
-                  step="04"
                   title="Mercado: lo más vendido"
                   items={summary.market.sold.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
                 />
                 <MarketItems
-                  step="05"
                   title="Mercado: lo más comprado"
                   items={summary.market.bought.map((i) => ({ ...i, unitPrice: i.avgPrice }))}
                 />
@@ -344,9 +360,8 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             {inventory && inventory.stacks > 0 && (
               <div class="split">
-                <BarList step="06" title="Dónde está tu inventario" kind="inventory" rows={locationRows} limit={11} />
+                <BarList title="Dónde está tu inventario" kind="inventory" rows={locationRows} limit={11} />
                 <MarketItems
-                  step="07"
                   title="Lo más valioso"
                   items={valuableItems}
                   iskLabel="Valor"
@@ -358,11 +373,10 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             <section class="panel">
               <div class="panel-heading">
-                <h3>
-                  <span class="step-label">08</span>Pilotos
-                </h3>
-                <a class="meta" href={loginUrl}>
-                  + VINCULAR
+                <h3>Pilotos</h3>
+                <a class="meta link" href={loginUrl}>
+                  <Icon name="plus" />
+                  Vincular piloto
                 </a>
               </div>
               <div class="scroll">
@@ -433,13 +447,96 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     </main>
 
     <footer class="shell">
-      <span class="footer-brand">EVE LEDGER // LOCALHOST</span>
+      <span class="footer-brand">EVE LEDGER · localhost</span>
       <span>Datos vía ESI. EVE Online y todo lo relacionado son marcas de CCP hf.</span>
     </footer>
   </body>
 </html>
 
+<script>
+  // Estado de carga: el sync de todos los pilotos puede tardar; evita envíos dobles
+  const form = document.getElementById('sync-form') as HTMLFormElement | null;
+  form?.addEventListener('submit', () => {
+    const button = form.querySelector('button')!;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.querySelector('.label')!.textContent = 'Sincronizando…';
+  });
+</script>
+
 <style>
+  .stats {
+    grid-template-columns: 1.15fr 1fr;
+  }
+  .ratio {
+    display: flex;
+    gap: 2px;
+    height: 6px;
+    margin: 10px 0 4px;
+  }
+  .ratio i {
+    flex-basis: 0;
+    min-width: 2px;
+    border-radius: 2px;
+  }
+  .income {
+    background: var(--income);
+  }
+  .expenses {
+    background: var(--expenses);
+  }
+  .balance {
+    background: var(--balance);
+  }
+  .inventory {
+    background: var(--inventory);
+  }
+  .breakdown {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 6px 0 0;
+  }
+  .breakdown div {
+    min-width: 0;
+  }
+  .breakdown dt {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .breakdown dd {
+    margin: 2px 0 0;
+    font: 500 18px var(--mono);
+    letter-spacing: -0.03em;
+    color: var(--text);
+  }
+  .key {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+  .stat .sub {
+    margin-top: 6px;
+  }
+  .panel-heading a.link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: 500 12px var(--font);
+    color: var(--cyan);
+  }
+  .panel-heading a.link .icon {
+    width: 14px;
+    height: 14px;
+  }
+  @media (max-width: 1040px) {
+    .stats {
+      grid-template-columns: 1fr;
+    }
+  }
   .pilots th:first-child,
   .pilots td:first-child {
     padding-left: 22px;
