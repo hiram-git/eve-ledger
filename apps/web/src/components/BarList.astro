@@ -1,11 +1,13 @@
 ---
 // Barras horizontales ordenadas: una serie por lista, el título la nombra
-import { isk, iskFull, refTypeLabel } from '../lib/format';
+import { isk, iskFull } from '../lib/format';
+
+export type BarRow = { label: string; value: number; detail?: string };
 
 interface Props {
   title: string;
-  kind: 'income' | 'expenses';
-  rows: { refType: string; value: number; count: number }[];
+  kind: 'income' | 'expenses' | 'inventory';
+  rows: BarRow[];
   limit?: number;
 }
 const { title, kind, rows, limit = 8 } = Astro.props;
@@ -14,11 +16,7 @@ const sorted = rows.filter((r) => r.value > 0).sort((a, b) => b.value - a.value)
 const shown = sorted.slice(0, limit);
 const rest = sorted.slice(limit);
 if (rest.length) {
-  shown.push({
-    refType: `Otros (${rest.length})`,
-    value: rest.reduce((n, r) => n + r.value, 0),
-    count: rest.reduce((n, r) => n + r.count, 0),
-  });
+  shown.push({ label: `Otros (${rest.length})`, value: rest.reduce((n, r) => n + r.value, 0) });
 }
 const max = Math.max(1, ...shown.map((r) => r.value));
 ---
@@ -27,12 +25,12 @@ const max = Math.max(1, ...shown.map((r) => r.value));
   <h2>{title}</h2>
   {
     shown.length === 0 ? (
-      <p class="empty">Sin movimientos en el período.</p>
+      <p class="empty">Sin datos.</p>
     ) : (
       <ul>
         {shown.map((r) => (
-          <li title={`${iskFull(r.value)} · ${r.count} movimientos`}>
-            <span class="label">{r.refType.startsWith('Otros') ? r.refType : refTypeLabel(r.refType)}</span>
+          <li title={[r.detail ?? r.label, iskFull(r.value)].join(' · ')}>
+            <span class="label">{r.label}</span>
             <span class="track">
               <span class:list={['bar', kind]} style={`width:calc((100% - 4.5rem) * ${r.value / max})`} />
               <span class="value">{isk(r.value)}</span>
@@ -82,6 +80,9 @@ const max = Math.max(1, ...shown.map((r) => r.value));
   }
   .bar.expenses {
     background: var(--expenses);
+  }
+  .bar.inventory {
+    background: var(--inventory);
   }
   .value {
     flex-shrink: 0;

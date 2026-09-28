@@ -28,6 +28,18 @@ export type Summary = {
   market: { sold: MarketItem[]; bought: MarketItem[] };
 };
 
+export type Inventory = {
+  value: number;
+  stacks: number;
+  types: number;
+  unpricedTypes: number;
+  assetsUpdatedAt: string | null;
+  pricesUpdatedAt: string | null;
+  byCharacter: { characterId: number; name: string; value: number; updatedAt: string }[];
+  byLocation: { locationId: number; name: string | null; value: number; stacks: number }[];
+  topItems: { typeId: number; name: string | null; quantity: number; unitPrice: number; value: number }[];
+};
+
 export type SyncAllResult = { inserted: number; errors: number };
 
 export type SyncStatus = {
@@ -45,6 +57,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const getSummary = (days: number) => call<Summary>(`/summary?days=${days}`);
+export const getInventory = () => call<Inventory>('/inventory');
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
 export const loginUrl = `${API_URL}/auth/login`;

@@ -1,13 +1,23 @@
 ---
-// Tabla de ítems del mercado: nombre, cantidad, ISK movido y precio medio
-import type { MarketItem } from '../lib/api';
+// Tabla de ítems: nombre, cantidad, ISK total y precio unitario
 import { isk, iskFull } from '../lib/format';
+
+export type ItemRow = { typeId: number; name: string | null; quantity: number; isk: number; unitPrice: number };
 
 interface Props {
   title: string;
-  items: MarketItem[];
+  items: ItemRow[];
+  iskLabel?: string;
+  priceLabel?: string;
+  empty?: string;
 }
-const { title, items } = Astro.props;
+const {
+  title,
+  items,
+  iskLabel = 'ISK',
+  priceLabel = 'Precio medio',
+  empty = 'Sin transacciones en el período.',
+} = Astro.props;
 const qty = new Intl.NumberFormat('es');
 ---
 
@@ -15,7 +25,7 @@ const qty = new Intl.NumberFormat('es');
   <h2>{title}</h2>
   {
     items.length === 0 ? (
-      <p class="empty">Sin transacciones en el período.</p>
+      <p class="empty">{empty}</p>
     ) : (
       <div class="scroll">
         <table>
@@ -23,8 +33,8 @@ const qty = new Intl.NumberFormat('es');
             <tr>
               <th>Ítem</th>
               <th>Cantidad</th>
-              <th>ISK</th>
-              <th>Precio medio</th>
+              <th>{iskLabel}</th>
+              <th>{priceLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -44,8 +54,17 @@ const qty = new Intl.NumberFormat('es');
                   </span>
                 </td>
                 <td>{qty.format(it.quantity)}</td>
-                <td title={iskFull(it.isk)}>{isk(it.isk)}</td>
-                <td title={iskFull(it.avgPrice)}>{isk(it.avgPrice)}</td>
+                {it.unitPrice > 0 ? (
+                  <>
+                    <td title={`${iskFull(it.isk)} · ${iskFull(it.unitPrice)} c/u`}>{isk(it.isk)}</td>
+                    <td title={iskFull(it.unitPrice)}>{isk(it.unitPrice)}</td>
+                  </>
+                ) : (
+                  <>
+                    <td class="muted" title="Sin precio">—</td>
+                    <td class="muted" title="Sin precio en ESI o copia de blueprint">—</td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
@@ -73,5 +92,19 @@ const qty = new Intl.NumberFormat('es');
   .empty {
     color: var(--text-muted);
     font-size: 13px;
+  }
+  /* En móvil: sin precio unitario (queda en el tooltip del total) y celdas más compactas */
+  @media (max-width: 480px) {
+    th:nth-child(4),
+    td:nth-child(4) {
+      display: none;
+    }
+    th,
+    td {
+      padding: 8px 6px;
+    }
+    .item {
+      max-width: 9rem;
+    }
   }
 </style>

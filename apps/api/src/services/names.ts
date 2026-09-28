@@ -1,6 +1,7 @@
-import { and, between, inArray, isNull, sql } from 'drizzle-orm';
+import { and, between, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { db } from '../db/client';
-import { names, walletTransactions } from '../db/schema';
+import { assets, names, walletTransactions } from '../db/schema';
 import { EsiError, esiPost } from '../lib/esi';
 
 type EsiName = { id: number; name: string; category: string };
@@ -13,6 +14,8 @@ const MAX_IDS = 1000;
 // Estaciones NPC: se resuelven con /universe/names. Las estructuras de jugadores
 // (IDs > 1e12) necesitan otro endpoint y el scope esi-universe.read_structures.v1
 export const STATION_RANGE = [60_000_000, 64_000_000] as const;
+// Sistemas solares: ítems sueltos en el espacio (location_type solar_system)
+export const SYSTEM_RANGE = [30_000_000, 33_000_000] as const;
 
 // Si un solo ID es inválido, ESI responde 404 para toda la petición:
 // se parte el lote en dos hasta aislar los IDs que no existen
@@ -62,19 +65,24 @@ export async function resolveNames(ids: number[]): Promise<number> {
   return added;
 }
 
-// Ítems y estaciones de las transacciones que aún no tienen nombre
-export async function resolveTransactionNames(): Promise<number> {
-  const types = await db
-    .selectDistinct({ id: walletTransactions.typeId })
-    .from(walletTransactions)
-    .leftJoin(names, sql`${names.id} = ${walletTransactions.typeId}`)
-    .where(isNull(names.id));
+// IDs de una columna que aún no tienen nombre en caché
+async function missingIds(column: SQLiteColumn, table: SQLiteTable, range?: readonly [number, number]) {
+  const rows = await db
+    .selectDistinct({ id: sql<number>`${column}` })
+    .from(table)
+    .leftJoin(names, eq(names.id, column))
+    .where(and(isNull(names.id), range ? between(column, ...range) : undefined));
+  return rows.map((r) => r.id);
+}
 
-  const stations = await db
-    .selectDistinct({ id: walletTransactions.locationId })
-    .from(walletTransactions)
-    .leftJoin(names, sql`${names.id} = ${walletTransactions.locationId}`)
-    .where(and(isNull(names.id), between(walletTransactions.locationId, ...STATION_RANGE)));
-
-  return resolveNames([...types, ...stations].map((r) => r.id));
+// Ítems, estaciones y sistemas de transacciones e inventario que aún no tienen nombre
+export async function resolvePendingNames(): Promise<number> {
+  const ids = [
+    ...(await missingIds(walletTransactions.typeId, walletTransactions)),
+    ...(await missingIds(walletTransactions.locationId, walletTransactions, STATION_RANGE)),
+    ...(await missingIds(assets.typeId, assets)),
+    ...(await missingIds(assets.rootLocationId, assets, STATION_RANGE)),
+    ...(await missingIds(assets.rootLocationId, assets, SYSTEM_RANGE)),
+  ];
+  return resolveNames(ids);
 }

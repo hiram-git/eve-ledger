@@ -67,9 +67,40 @@ export const names = sqliteTable('names', {
 export const syncLog = sqliteTable('sync_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   characterId: integer('character_id').notNull(),
-  kind: text('kind').notNull().default('journal'), // journal | transactions
+  kind: text('kind').notNull().default('journal'), // journal | transactions | assets
   startedAt: ts('started_at').notNull(),
   finishedAt: ts('finished_at'),
   rowsInserted: integer('rows_inserted').default(0),
   error: text('error'),
+});
+
+// Foto actual del inventario: se reemplaza entera en cada sync del personaje
+export const assets = sqliteTable(
+  'assets',
+  {
+    itemId: integer('item_id').primaryKey(),
+    characterId: integer('character_id').notNull().references(() => characters.id),
+    typeId: integer('type_id').notNull(),
+    quantity: integer('quantity').notNull(),
+    locationId: integer('location_id').notNull(), // estación, sistema o el item_id que lo contiene
+    locationFlag: text('location_flag').notNull(), // Hangar, Cargo, DroneBay...
+    locationType: text('location_type').notNull(), // station | solar_system | item | other
+    rootLocationId: integer('root_location_id').notNull(), // estación/estructura/sistema donde está al final
+    isSingleton: integer('is_singleton', { mode: 'boolean' }).notNull(),
+    isBlueprintCopy: integer('is_blueprint_copy', { mode: 'boolean' }).notNull().default(false),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [
+    index('assets_char_idx').on(t.characterId),
+    index('assets_type_idx').on(t.typeId),
+    index('assets_root_idx').on(t.rootLocationId),
+  ],
+);
+
+// GET /markets/prices: precio medio global de ESI (no es el precio de venta de Jita)
+export const marketPrices = sqliteTable('market_prices', {
+  typeId: integer('type_id').primaryKey(),
+  averagePrice: real('average_price'),
+  adjustedPrice: real('adjusted_price'),
+  updatedAt: ts('updated_at').notNull(),
 });

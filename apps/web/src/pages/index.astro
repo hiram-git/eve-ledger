@@ -1,9 +1,9 @@
 ---
 import DailyChart from '../components/DailyChart.astro';
 import MarketItems from '../components/MarketItems.astro';
-import RefTypeBars from '../components/RefTypeBars.astro';
-import { getSummary, getSyncStatus, loginUrl, type Summary, type SyncStatus } from '../lib/api';
-import { ago, isk, iskFull, until } from '../lib/format';
+import BarList, { type BarRow } from '../components/BarList.astro';
+import { getInventory, getSummary, getSyncStatus, loginUrl, type Inventory, type Summary, type SyncStatus } from '../lib/api';
+import { ago, isk, iskFull, refTypeLabel, until } from '../lib/format';
 
 const PERIODS = [7, 30, 90];
 const q = Astro.url.searchParams;
@@ -11,9 +11,15 @@ const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 3
 
 let summary: Summary | undefined;
 let status: SyncStatus | undefined;
+let inventory: Inventory | undefined;
 let apiError: string | undefined;
 try {
-  [summary, status] = await Promise.all([getSummary(days), getSyncStatus()]);
+  // El inventario es opcional: si falla, el resto del dashboard se muestra igual
+  [summary, status, inventory] = await Promise.all([
+    getSummary(days),
+    getSyncStatus(),
+    getInventory().catch((err) => (console.error(err), undefined)),
+  ]);
 } catch (err) {
   apiError = err instanceof Error ? err.message : String(err);
 }
@@ -34,8 +40,23 @@ const cronTitle = status?.lastRun
     (status.lastRun.errors ? `, ${status.lastRun.errors} personaje(s) con error` : '')
   : undefined;
 
-const incomeRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: r.income, count: r.count })) ?? [];
-const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: r.expenses, count: r.count })) ?? [];
+const refRows = (pick: (r: Summary['byRefType'][number]) => number): BarRow[] =>
+  summary?.byRefType.map((r) => ({ label: refTypeLabel(r.refType), value: pick(r), detail: `${r.count} movimientos` })) ?? [];
+const incomeRows = refRows((r) => r.income);
+const expenseRows = refRows((r) => r.expenses);
+
+// Las estructuras de jugadores no tienen nombre sin el scope de estructuras
+const locationLabel = (id: number, name: string | null) =>
+  name ?? (id > 1_000_000_000_000 ? `Estructura #${id}` : `#${id}`);
+// "Jita IV - Moon 4 - Caldari Navy Assembly Plant" → "Jita IV - Moon 4" (el nombre completo va en el tooltip)
+const shortStation = (name: string) => name.split(' - ').slice(0, 2).join(' - ');
+const locationRows: BarRow[] =
+  inventory?.byLocation.map((l) => {
+    const full = locationLabel(l.locationId, l.name);
+    return { label: shortStation(full), value: l.value, detail: `${full} · ${l.stacks} stacks` };
+  }) ?? [];
+const valuableItems = inventory?.topItems.map((i) => ({ ...i, isk: i.value })) ?? [];
+const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 ---
 
 <!doctype html>
@@ -125,6 +146,12 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
                 <span class="label">Saldo total</span>
                 <span class="value" title={iskFull(summary.balance)}>{isk(summary.balance)}</span>
               </div>
+              <div class="tile">
+                <span class="label">Inventario</span>
+                <span class="value" title={inventory ? iskFull(inventory.value) : 'Sin datos'}>
+                  {inventory && inventory.stacks > 0 ? isk(inventory.value) : '—'}
+                </span>
+              </div>
             </section>
 
             <section class="card">
@@ -133,15 +160,37 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
             </section>
 
             <div class="split">
-              <RefTypeBars title="De dónde viene el ISK" kind="income" rows={incomeRows} />
-              <RefTypeBars title="En qué se va" kind="expenses" rows={expenseRows} />
+              <BarList title="De dónde viene el ISK" kind="income" rows={incomeRows} />
+              <BarList title="En qué se va" kind="expenses" rows={expenseRows} />
             </div>
 
             {(summary.market.sold.length > 0 || summary.market.bought.length > 0) && (
               <div class="split">
-                <MarketItems title="Mercado: lo más vendido" items={summary.market.sold} />
-                <MarketItems title="Mercado: lo más comprado" items={summary.market.bought} />
+                <MarketItems title="Mercado: lo más vendido" items={summary.market.sold.map((i) => ({ ...i, unitPrice: i.avgPrice }))} />
+                <MarketItems title="Mercado: lo más comprado" items={summary.market.bought.map((i) => ({ ...i, unitPrice: i.avgPrice }))} />
               </div>
+            )}
+
+            {inventory && inventory.stacks > 0 && (
+              <>
+                <div class="split">
+                  <BarList title="Dónde está tu inventario" kind="inventory" rows={locationRows} limit={11} />
+                  <MarketItems
+                    title="Lo más valioso"
+                    items={valuableItems}
+                    iskLabel="Valor"
+                    priceLabel="Precio unitario"
+                    empty="Sin inventario sincronizado."
+                  />
+                </div>
+                <p class="muted small note">
+                  Inventario valorado con el precio medio de ESI
+                  {inventory.pricesUpdatedAt && <> (actualizado {ago(inventory.pricesUpdatedAt)})</>}. Las copias de
+                  blueprint cuentan como 0{inventory.unpricedTypes > 0 && (
+                    <>; {inventory.unpricedTypes} {inventory.unpricedTypes === 1 ? 'tipo de ítem' : 'tipos de ítem'} sin precio</>
+                  )}.
+                </p>
+              </>
             )}
 
             <section class="card">
@@ -152,6 +201,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
                     <tr>
                       <th>Personaje</th>
                       <th>Saldo</th>
+                      <th>Inventario</th>
                       <th>Ingresos</th>
                       <th>Gastos</th>
                       <th>Neto</th>
@@ -176,6 +226,9 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
                         </td>
                         <td title={c.balance === null ? 'Sin movimientos sincronizados' : iskFull(c.balance)}>
                           {c.balance === null ? '—' : isk(c.balance)}
+                        </td>
+                        <td title={inventoryByChar.has(c.id) ? iskFull(inventoryByChar.get(c.id)!) : 'Sin inventario sincronizado'}>
+                          {inventoryByChar.has(c.id) ? isk(inventoryByChar.get(c.id)!) : '—'}
                         </td>
                         <td>{isk(c.income)}</td>
                         <td>{isk(-c.expenses)}</td>
@@ -213,6 +266,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
     --accent: #2a78d6;
     --income: #2a78d6;
     --expenses: #e34948;
+    --inventory: #1baf7a;
     --critical: #d03b3b;
   }
   @media (prefers-color-scheme: dark) {
@@ -231,6 +285,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
       --accent: #3987e5;
       --income: #3987e5;
       --expenses: #e66767;
+      --inventory: #199e70;
       --critical: #e66767;
     }
   }
@@ -249,6 +304,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
     --accent: #3987e5;
     --income: #3987e5;
     --expenses: #e66767;
+    --inventory: #199e70;
     --critical: #e66767;
   }
 
@@ -341,7 +397,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
   }
   .stats {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr repeat(4, 1fr);
     gap: 16px;
   }
   .stats > div {
@@ -373,7 +429,7 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
   }
   @media (max-width: 800px) {
     .stats {
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 8px;
     }
     .stats > div:not(.hero) {
@@ -398,6 +454,9 @@ const expenseRows = summary?.byRefType.map((r) => ({ refType: r.refType, value: 
   .small {
     font-size: 12px;
     margin: 12px 0 0;
+  }
+  .note {
+    margin: -8px 4px 0;
   }
   .notice {
     margin: 0;

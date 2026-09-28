@@ -14,7 +14,9 @@ Producción local: `bun run build && bun run start`.
 - Neto, ingresos, gastos y saldo total del período (7 / 30 / 90 días)
 - Flujo diario (ingresos arriba, gastos abajo) con tooltip y vista de tabla
 - Ingresos y gastos por `ref_type`
-- Tabla por personaje con saldo, neto y último sync
+- Mercado por ítem (lo más vendido y comprado)
+- Inventario: valor total, dónde está y los ítems más valiosos (precio medio de ESI)
+- Tabla por personaje con saldo, inventario, neto y último sync
 - Botón «Sincronizar ahora» → `POST /sync/all` de la API
 
 Las transferencias entre tus propios personajes se excluyen del consolidado (se anulan entre sí).
