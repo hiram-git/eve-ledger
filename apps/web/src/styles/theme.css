@@ -144,10 +144,6 @@ a {
 .micro-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font: 500 11px var(--mono);
-  letter-spacing: 0.16em;
-  white-space: nowrap;
 }
 .brand-square {
   display: grid;
@@ -159,9 +155,6 @@ a {
   color: var(--cyan);
   font: 700 15px var(--display);
   letter-spacing: 0;
-}
-.micro-brand .divider {
-  color: #3d5566;
 }
 .utility-right {
   display: flex;
@@ -196,14 +189,6 @@ a {
   50% {
     opacity: 0.35;
   }
-}
-
-.wordmark {
-  margin: 0;
-  font: 700 17px/1 var(--display);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text);
 }
 
 /* Oculto hasta recibir el foco con Tab: primera parada de la página */
@@ -552,7 +537,7 @@ main {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* ───── Tablas ───── */
@@ -615,21 +600,25 @@ td.neg {
 }
 
 /* ───── Pie ───── */
-footer {
+/* footer.shell: la clase .shell pone margin: 0 auto y, sin este selector, anulaba el margen superior */
+footer.shell {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px 20px;
-  margin-top: 36px;
-  padding: 22px 0 28px;
+  margin-top: 40px;
+  padding: 20px 0 28px;
   border-top: 1px solid #1f2d38;
   font-size: 11px;
   color: #6f8a9c;
 }
+footer.shell span {
+  text-wrap: balance;
+}
 footer .footer-brand {
   font: 500 11px var(--mono);
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
   color: #a3baca;
 }
 
@@ -637,10 +626,6 @@ footer .footer-brand {
 @media (max-width: 1040px) {
   .shell {
     width: calc(100% - 40px);
-  }
-  .utility .micro-brand .muted,
-  .utility .micro-brand .divider {
-    display: none;
   }
 }
 @media (max-width: 750px) {

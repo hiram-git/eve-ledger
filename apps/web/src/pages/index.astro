@@ -107,7 +107,8 @@ const locationRows: BarRow[] =
     const full = locationLabel(l.locationId, l.name);
     return { label: shortStation(full), value: l.value, detail: `${full} · ${m.stacks(l.stacks)}` };
   }) ?? [];
-const valuableItems = inventory?.topItems.map((i) => ({ ...i, isk: i.value })) ?? [];
+// Lo más valioso: los 8 primeros; el detalle completo está en GET /assets
+const valuableItems = inventory?.topItems.slice(0, 8).map((i) => ({ ...i, isk: i.value })) ?? [];
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 ---
 
@@ -481,7 +482,8 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     align-items: baseline;
     gap: 6px;
   }
-  .signed .trend {
+  /* :global porque la clase se pasa al svg del componente Icon, que no lleva el ámbito de esta página */
+  .signed :global(.trend) {
     align-self: center;
     width: 28px;
     height: 28px;
@@ -598,7 +600,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .pilot-strip a.stale {
     border-color: #6b5530;
   }
-  .stale-icon {
+  :global(.stale-icon) {
     width: 13px;
     height: 13px;
     color: var(--warning);
@@ -609,7 +611,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   td.last-sync.stale {
     color: var(--warning);
   }
-  td.last-sync .stale-icon {
+  td.last-sync :global(.stale-icon) {
     margin-right: 6px;
     vertical-align: -2px;
   }
