@@ -30,7 +30,7 @@ const total = sorted.reduce((n, r) => n + r.value, 0);
 
 <section class="panel">
   <div class="panel-heading">
-    <h3>{title}</h3>
+    <h2>{title}</h2>
     {total > 0 && <span class="meta" title={full(total)}>{m.total(fmt(total))}</span>}
   </div>
   <div class="panel-body">

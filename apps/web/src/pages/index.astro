@@ -94,6 +94,13 @@ const partialHistory = summary && summary.coverage.firstEntryAt && summary.cover
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 const delta = summary && summary.previous.complete ? summary.totals.net - summary.previous.net : undefined;
 
+// Neto con cobertura parcial: el título lo dice (90 días pedidos, 42 con historial)
+const coverageNote = partialHistory && summary ? ` (${m.onlyCovered(summary.coverage.coveredDays)})` : '';
+// Desglose por actividad en la tarjeta de Neto (orden fijo de la API: PvE, PvP, Trading, Otros)
+const actMax = Math.max(1, ...(summary?.byActivity ?? []).map((a) => Math.abs(a.net)));
+const actBar = (v: number) => (v >= 0 ? `left:50%;width:${(v / actMax) * 50}%` : `right:50%;width:${(-v / actMax) * 50}%`);
+const out = (v: number) => (v ? -v : 0);
+
 // Rango real del período en hora de EVE, para el subtítulo de la navegación
 const range = summary ? `${date(summary.period.from)} – ${date(summary.period.to)}` : undefined;
 
@@ -107,8 +114,8 @@ const locationRows: BarRow[] =
     const full = locationLabel(l.locationId, l.name);
     return { label: shortStation(full), value: l.value, detail: `${full} · ${m.stacks(l.stacks)}` };
   }) ?? [];
-// Lo más valioso: los 8 primeros; el detalle completo está en GET /assets
-const valuableItems = inventory?.topItems.slice(0, 8).map((i) => ({ ...i, isk: i.value })) ?? [];
+// Lo más valioso: los 6 primeros; el detalle completo está en GET /assets
+const valuableItems = inventory?.topItems.slice(0, 6).map((i) => ({ ...i, isk: i.value })) ?? [];
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 ---
 
@@ -236,6 +243,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
                         {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
                       </span>
+                      {isStale(c.lastSyncAt) && <span class="sr-only">{m.noSyncSince(rel(c.lastSyncAt))}</span>}
                     </a>
                   </li>
                 ))}
@@ -257,7 +265,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   <div class="fig">
                     <span class="label">
                       <Icon name="activity" />
-                      {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}
+                      {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}{coverageNote}
                     </span>
                     <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
                       {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
@@ -265,16 +273,24 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <small>ISK</small>
                       <span class="sr-only">{summary.totals.net >= 0 ? m.gain : m.loss}</span>
                     </span>
-                    <p class="versus">
-                      {delta !== undefined ? (
-                        <>
-                          <span class:list={['delta', sign(delta)]}>{fmt(delta, { sign: true })}</span>{' '}
-                          {m.versus(days, fmt(summary.previous.net, { sign: true }))}
-                        </>
+                    {
+                      delta !== undefined ? (
+                        <p class="versus compare">
+                          {delta === 0 ? (
+                            m.versusSame(days)
+                          ) : (
+                            <span class:list={['delta', sign(delta)]}>
+                              <Icon name={delta > 0 ? 'up' : 'down'} />
+                              {delta > 0
+                                ? m.versusMore(fmt(delta), days, fmt(summary.previous.net, { sign: true }))
+                                : m.versusLess(fmt(-delta), days, fmt(summary.previous.net, { sign: true }))}
+                            </span>
+                          )}
+                        </p>
                       ) : (
-                        <>{m.noPrevious(days)}</>
-                      )}
-                    </p>
+                        <p class="versus">{m.noPrevious(days)}</p>
+                      )
+                    }
                   </div>
                   <div class="fig today" title={m.todayTitle(full(summary.today.net))}>
                     <span class="label">
@@ -294,30 +310,49 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                     </p>
                   </div>
                 </div>
-                <div class="ratio" aria-hidden="true">
-                  {summary.totals.income > 0 && (
-                    <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />
-                  )}
-                  {summary.totals.expenses > 0 && (
-                    <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />
-                  )}
+                <div class="composition">
+                  <div class="flow">
+                    <div class="ratio" aria-hidden="true">
+                      {summary.totals.income > 0 && (
+                        <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />
+                      )}
+                      {summary.totals.expenses > 0 && (
+                        <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />
+                      )}
+                    </div>
+                    <dl class="breakdown">
+                      <div>
+                        <dt>
+                          <i class="key income" />
+                          {m.income}
+                        </dt>
+                        <dd title={full(summary.totals.income)}>{fmt(summary.totals.income)}</dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <i class="key expenses" />
+                          {m.expenses}
+                        </dt>
+                        <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  {
+                    summary.byActivity.length > 0 && (
+                      <ul class="acts" aria-label={m.byActivity}>
+                        {summary.byActivity.map((a) => (
+                          <li title={`${m.activityHint[a.activity]} · ${m.activityInOut(full(a.income), full(out(a.expenses)))}`}>
+                            <span class="act-name">{m.activityName[a.activity]}</span>
+                            <span class="act-bar" aria-hidden="true">
+                              <i class:list={[sign(a.net)]} style={actBar(a.net)} />
+                            </span>
+                            <span class:list={['act-net', sign(a.net)]}>{fmt(a.net, { sign: true })}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  }
                 </div>
-                <dl class="breakdown">
-                  <div>
-                    <dt>
-                      <i class="key income" />
-                      {m.income}
-                    </dt>
-                    <dd title={full(summary.totals.income)}>{fmt(summary.totals.income)}</dd>
-                  </div>
-                  <div>
-                    <dt>
-                      <i class="key expenses" />
-                      {m.expenses}
-                    </dt>
-                    <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
-                  </div>
-                </dl>
                 {summary.internalTransfers > 0 && (
                   <span class="sub">{m.internal(fmt(summary.internalTransfers))}</span>
                 )}
@@ -360,7 +395,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             <section class="panel">
               <div class="panel-heading">
-                <h3>{m.dailyFlow}</h3>
+                <h2>{m.dailyFlow}</h2>
                 <span class="meta">{m.eveTimeUtc}</span>
               </div>
               <div class="panel-body">
@@ -372,13 +407,13 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             <section class="panel">
               <div class="panel-heading">
-                <h3 id="pilotos">{m.pilots}</h3>
+                <h2 id="pilotos">{m.pilots}</h2>
                 <a class="meta link" href="/pilotos">
                   <Icon name="users" />
                   {m.managePilots}
                 </a>
               </div>
-              <div class="scroll pilots-table">
+              <div class="scroll pilots-table" role="group" aria-label={m.pilots}>
                 <table class="pilots">
                   <thead>
                     <tr>
@@ -404,7 +439,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                               loading="lazy"
                               onerror="this.style.visibility='hidden'"
                             />
-                            <a href={href(days, c.id)} title={m.viewLedger(c.name)}>{c.name}</a>
+                            {c.name}
                           </span>
                         </td>
                         <td title={c.balance === null ? m.noEntries : full(c.balance)}>
@@ -417,9 +452,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                         >
                           {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
                         </td>
-                        <td>{fmt(c.income)}</td>
-                        <td>{fmt(-c.expenses)}</td>
-                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{fmt(c.net, { sign: true })}</td>
+                        <td>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
+                        <td>{c.lastSyncAt ? fmt(-c.expenses) : '—'}</td>
+                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</td>
                         <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
                           {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
                           {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
@@ -462,15 +497,15 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                         </div>
                         <div class:list={['net', { pos: c.net > 0, neg: c.net < 0 }]}>
                           <dt>{m.net}</dt>
-                          <dd title={`${m.income} ${full(c.income)} · ${m.expenses} ${full(-c.expenses)}`}>{fmt(c.net, { sign: true })}</dd>
+                          <dd title={`${m.income} ${full(c.income)} · ${m.expenses} ${full(-c.expenses)}`}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</dd>
                         </div>
                         <div class="minor">
                           <dt>{m.income}</dt>
-                          <dd>{fmt(c.income)}</dd>
+                          <dd>{c.lastSyncAt ? fmt(c.income) : '—'}</dd>
                         </div>
                         <div class="minor">
                           <dt>{m.expenses}</dt>
-                          <dd>{fmt(c.expenses ? -c.expenses : 0)}</dd>
+                          <dd>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</dd>
                         </div>
                       </dl>
                     </li>
@@ -529,6 +564,92 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .fig.today .value {
     font-size: 28px;
   }
+  /* «Hoy» sin movimientos: un cero enorme parece un fallo; se apaga y se queda pequeño */
+  .fig.today .value.zero {
+    font-size: 28px;
+    color: var(--text-muted);
+  }
+  .composition {
+    display: grid;
+    gap: 14px;
+  }
+  .flow {
+    min-width: 0;
+  }
+  .acts {
+    display: grid;
+    align-content: start;
+    gap: 2px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .acts li {
+    display: grid;
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 28px;
+  }
+  .act-name {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  /* Barra divergente desde un eje central: hacia la derecha suma, hacia la izquierda resta */
+  .act-bar {
+    position: relative;
+    height: 8px;
+  }
+  .act-bar::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: -4px;
+    bottom: -4px;
+    width: 1px;
+    background: var(--axis);
+  }
+  .act-bar i {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--income);
+    border-radius: 0 3px 3px 0;
+  }
+  .act-bar i.neg {
+    background: var(--expenses);
+    border-radius: 3px 0 0 3px;
+  }
+  .act-net {
+    min-width: 4.5rem;
+    font: 500 13px var(--mono);
+    letter-spacing: -0.02em;
+    text-align: right;
+    color: var(--text);
+  }
+  .act-net.pos {
+    color: var(--positive);
+  }
+  .act-net.neg {
+    color: var(--critical);
+  }
+  .compare {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  /* La comparación es una frase, no una cifra: en la tipografía de la interfaz, no en monoespaciada */
+  .compare .delta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font: 500 14px/1.35 var(--font);
+  }
+  .compare .delta :global(.icon) {
+    align-self: center;
+    width: 14px;
+    height: 14px;
+  }
   @container (min-width: 520px) {
     .headline {
       grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
@@ -544,6 +665,20 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     .fig.today :global(.trend) {
       width: 28px;
       height: 28px;
+    }
+    .fig.today .value.zero {
+      font-size: 28px;
+    }
+    .composition {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: 0;
+    }
+    .flow {
+      padding-right: 24px;
+    }
+    .acts {
+      padding-left: 24px;
+      border-left: 1px solid var(--line);
     }
   }
   .signed {
@@ -574,7 +709,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     color: var(--text-muted);
   }
   .delta {
-    font: 500 12px var(--mono);
+    font: 500 14px var(--mono);
   }
   .worth-head {
     display: flex;
@@ -605,6 +740,8 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     list-style: none;
   }
   .pilot-strip a {
+    /* Contiene el texto oculto del chip: un absolute se escapaba de la fila deslizable y ensanchaba la página */
+    position: relative;
     display: inline-flex;
     align-items: baseline;
     gap: 10px;

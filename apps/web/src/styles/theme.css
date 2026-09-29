@@ -424,7 +424,7 @@ main {
   padding: 16px 22px;
   border-bottom: 1px solid #26313b88;
 }
-.panel-heading h3 {
+.panel-heading h2 {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -618,7 +618,7 @@ footer.shell span {
 }
 footer .footer-brand {
   font: 500 11px var(--mono);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   color: #a3baca;
 }
 
@@ -663,15 +663,25 @@ footer .footer-brand {
     padding: 8px 0;
     flex-wrap: wrap;
   }
+  /* Marca, idioma, estado y Sincronizar en una sola fila; las secciones bajan a la segunda */
   .utility-right {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-end;
     margin-left: auto;
-    gap: 8px 12px;
+    gap: 8px;
   }
-  /* En móvil solo el punto… salvo que el estado sea un aviso */
-  .status-badge:not(.off) .text {
-    display: none;
+  /* En móvil solo el punto (ámbar si el sync automático está desactivado); el texto sigue para lectores de pantalla */
+  .status-badge .text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .sync-form .primary-button {
+    min-height: 40px;
+    padding-inline: 14px;
   }
   .period-meta {
     justify-content: flex-start;
