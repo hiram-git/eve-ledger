@@ -54,7 +54,7 @@ const qty = new Intl.NumberFormat(lang);
                         onerror="this.style.visibility='hidden'"
                       />
                     </span>
-                    <span class="name">{it.name ?? `#${it.typeId}`}</span>
+                    <span class="name" title={it.name ?? undefined}>{it.name ?? `#${it.typeId}`}</span>
                   </span>
                 </td>
                 <td>{qty.format(it.quantity)}</td>

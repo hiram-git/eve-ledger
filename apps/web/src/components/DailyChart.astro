@@ -44,13 +44,19 @@ for (let v = -bottom; v <= top + step / 2; v += step) ticks.push(v);
 const labelEvery = daily.length > 14 ? 7 : daily.length > 7 ? 2 : 1;
 const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i) % labelEvery === 0;
 
-// Una sola parada de Tab (roving tabindex): entra por el día más reciente y se recorre con las flechas
+// Una sola parada de Tab (roving tabindex): entra por el último día con movimientos y se recorre con las flechas
 const hintId = 'daily-chart-hint';
+const hasActivity = (d: (typeof daily)[number]) => d.income > 0 || d.expenses > 0;
+const lastActive = daily.reduce((last, d, i) => (i >= missing && hasActivity(d) ? i : last), -1);
+const entry = lastActive >= 0 ? lastActive : daily.length - 1;
+// Cifras abreviadas (k/M/B) en el tooltip y para el lector de pantalla; las completas están en la tabla
+const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
 ---
 
 <div class="legend" aria-hidden="true">
   <span><i class="key income"></i>{m.income}</span>
   <span><i class="key expenses"></i>{m.expenses}</span>
+  <span><i class="key net"></i>{m.net}</span>
 </div>
 
 <div
@@ -74,7 +80,7 @@ const hintId = 'daily-chart-hint';
         </div>
       )
     }
-    <div class="cols">
+    <div class="cols" role="list">
       {
         daily.map((d, i) => (
           i < missing ? (
@@ -82,16 +88,18 @@ const hintId = 'daily-chart-hint';
           ) : (
           <div
             class="col"
-            role="img"
-            tabindex={i === daily.length - 1 ? 0 : -1}
-            aria-label={m.chartDay(date(d.date), full(d.income), full(out(d.expenses)), full(d.net))}
+            role="listitem"
+            tabindex={i === entry ? 0 : -1}
+            aria-label={m.chartDay(date(d.date), short(d.income), short(out(d.expenses)), short(d.net, { sign: true }))}
             data-date={date(d.date)}
-            data-income={full(d.income)}
-            data-expenses={full(out(d.expenses))}
-            data-net={full(d.net)}
+            data-income={short(d.income)}
+            data-expenses={short(out(d.expenses))}
+            data-net={short(d.net, { sign: true })}
           >
             {d.income > 0 && <div class="bar income" style={`bottom:${zero}%;height:${pct(d.income)}%`} />}
             {d.expenses > 0 && <div class="bar expenses" style={`top:${100 - zero}%;height:${pct(d.expenses)}%`} />}
+            {/* Neto del día: un punto neutro sobre el eje; la barra sola no dice si el día cerró en positivo o en negativo */}
+            {hasActivity(d) && <i class="net-mark" aria-hidden="true" style={`bottom:${pct(d.net + bottom)}%`} />}
           </div>
           )
         ))
@@ -99,7 +107,12 @@ const hintId = 'daily-chart-hint';
     </div>
   </div>
   <div class="x-axis" aria-hidden="true">
-    {daily.map((d, i) => <span>{showLabel(i) ? date(d.date) : ''}</span>)}
+    {
+      daily.map((d, i) => (
+        // data-k: pasos de etiqueta desde el último día (0 = el último); el script omite los impares si no caben
+        <span data-k={showLabel(i) ? (daily.length - 1 - i) / labelEvery : undefined}>{showLabel(i) ? date(d.date) : ''}</span>
+      ))
+    }
   </div>
   <!-- Visual: el lector de pantalla ya lee la etiqueta del día enfocado -->
   <div class="tooltip" aria-hidden="true" hidden></div>
@@ -116,9 +129,9 @@ const hintId = 'daily-chart-hint';
         [...daily].reverse().map((d) => (
           <tr>
             <td>{date(d.date)}</td>
-            <td>{fmt(d.income)}</td>
-            <td>{fmt(out(d.expenses))}</td>
-            <td>{fmt(d.net, { sign: true })}</td>
+            <td>{full(d.income)}</td>
+            <td>{full(out(d.expenses))}</td>
+            <td>{full(d.net)}</td>
           </tr>
         ))
       }
@@ -146,6 +159,17 @@ const hintId = 'daily-chart-hint';
       tip.style.left = `${left}px`;
     };
     const hide = () => (tip.hidden = true);
+    // Etiquetas del eje X: si la cadencia deja menos de ~64 px por etiqueta (móvil, 90 días), muestra una de cada n
+    const axis = chart.querySelector<HTMLElement>('.x-axis')!;
+    const labelled = [...axis.querySelectorAll<HTMLElement>('span[data-k]')];
+    const fitLabels = () => {
+      if (labelled.length < 2) return;
+      const gap = labelled[labelled.length - 1].offsetLeft - labelled[labelled.length - 2].offsetLeft;
+      const stride = Math.max(1, Math.ceil(64 / Math.max(gap, 1)));
+      for (const label of labelled) label.classList.toggle('skip', Number(label.dataset.k) % stride !== 0);
+    };
+    fitLabels();
+    new ResizeObserver(fitLabels).observe(axis);
     const focusAt = (i: number) => {
       const next = cols[Math.min(Math.max(i, 0), cols.length - 1)];
       if (!next) return;
@@ -205,13 +229,28 @@ const hintId = 'daily-chart-hint';
   :global(.key.expenses) {
     background: var(--expenses);
   }
+  /* Neto: punto en el color del texto, no en el de ingresos ni gastos */
+  :global(.key.net) {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text);
+  }
 
   .chart {
     position: relative;
+    /* Margen para que la última etiqueta, centrada bajo su columna, no se recorte en el borde del panel */
+    padding-right: 8px;
     display: grid;
     grid-template-columns: auto 1fr;
     grid-template-rows: 220px auto;
     column-gap: 8px;
+  }
+  @media (max-width: 600px) {
+    /* La última etiqueta de 7 caracteres sobresale ~23 px por la derecha de la columna: margen para que no toque el borde */
+    .chart {
+      padding-right: 22px;
+    }
   }
   .y-axis {
     position: relative;
@@ -275,6 +314,19 @@ const hintId = 'daily-chart-hint';
     font-size: 12px;
     color: var(--text-muted);
   }
+  .net-mark {
+    position: absolute;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    margin-bottom: -3.5px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: var(--text);
+    /* Anillo del color del panel para separarlo de la barra que cruza */
+    box-shadow: 0 0 0 2px #0f1822;
+    pointer-events: none;
+  }
   .bar {
     position: absolute;
     left: 50%;
@@ -305,6 +357,10 @@ const hintId = 'daily-chart-hint';
     width: 0;
     display: flex;
     justify-content: center;
+  }
+  /* Etiquetas que no caben en el ancho disponible: las omite el script, sin cambiar la cadencia del resto */
+  .x-axis span.skip {
+    visibility: hidden;
   }
   .tooltip {
     position: absolute;
@@ -355,11 +411,12 @@ const hintId = 'daily-chart-hint';
     visibility: visible;
   }
   .table-view {
-    margin-top: 16px;
+    margin-top: 4px;
     font-size: 13px;
   }
   .table-view summary {
     cursor: pointer;
+    padding: 12px 0;
     font-size: 12px;
     color: var(--text-secondary);
   }

@@ -16,7 +16,7 @@ const full = (v: number) => iskFull(v, lang);
 
 
 const W = 560;
-const H = 230;
+const H = 200;
 const PAD = 44; // margen para que las etiquetas no se corten
 
 const nodes = map.nodes;
@@ -168,6 +168,8 @@ const summary = m.mapSummary(invCount, earnCount);
     display: block;
     width: 100%;
     height: auto;
+    /* En tablet el ancho completo daba un mapa de casi 300 px de alto para 3 puntos */
+    max-height: 230px;
     border-radius: 6px;
     background: radial-gradient(ellipse at 50% 50%, #0f2230, #0a121a 75%);
     border: 1px solid var(--line);

@@ -630,7 +630,7 @@ footer .footer-brand {
 }
 @media (max-width: 750px) {
   .shell {
-    width: calc(100% - 28px);
+    width: calc(100% - 32px);
   }
   .split {
     grid-template-columns: 1fr;
@@ -650,7 +650,8 @@ footer .footer-brand {
     flex-wrap: wrap;
   }
   .nav-tab {
-    padding: 7px 10px;
+    min-height: 40px;
+    padding: 7px 12px;
     font-size: 12px;
   }
   .nav-tab[aria-current='page']::after {
