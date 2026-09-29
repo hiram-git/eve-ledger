@@ -206,7 +206,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     border-radius: 6px;
   }
   .lang-switch a {
-    padding: 3px 7px;
+    padding: 5px 8px;
     border-radius: 4px;
     font: 500 11px/1.4 var(--mono);
     letter-spacing: 0.04em;
@@ -241,6 +241,16 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     }
     .sections a:first-child[aria-current='page']::after {
       left: 0;
+    }
+    /* Objetivos táctiles de 40 px: el selector de idioma medía 21 px de alto y la marca 26 */
+    .micro-brand {
+      padding: 7px 0;
+    }
+    .lang-switch a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 12px;
     }
   }
 </style>

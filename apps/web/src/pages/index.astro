@@ -247,32 +247,53 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               const strip = document.querySelector<HTMLElement>('.pilot-strip ul');
               const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
               if (strip && active && strip.scrollWidth > strip.clientWidth) {
-                strip.scrollLeft = active.parentElement!.offsetLeft - strip.offsetLeft - 14;
+                strip.scrollLeft = active.parentElement!.offsetLeft - strip.offsetLeft - 16;
               }
             </script>
 
             <section class="glance" aria-label={m.summary}>
               <div class="panel stat hero-stat">
-                <span class="label">
-                  <Icon name="activity" />
-                  {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}
-                </span>
-                <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
-                  {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
-                  {fmt(summary.totals.net, { sign: true })}
-                  <small>ISK</small>
-                  <span class="sr-only">{summary.totals.net >= 0 ? m.gain : m.loss}</span>
-                </span>
-                <p class="versus">
-                  {delta !== undefined ? (
-                    <>
-                      <span class:list={['delta', sign(delta)]}>{fmt(delta, { sign: true })}</span>{' '}
-                      {m.versus(days, fmt(summary.previous.net, { sign: true }))}
-                    </>
-                  ) : (
-                    <>{m.noPrevious(days)}</>
-                  )}
-                </p>
+                <div class="headline">
+                  <div class="fig">
+                    <span class="label">
+                      <Icon name="activity" />
+                      {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}
+                    </span>
+                    <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
+                      {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
+                      {fmt(summary.totals.net, { sign: true })}
+                      <small>ISK</small>
+                      <span class="sr-only">{summary.totals.net >= 0 ? m.gain : m.loss}</span>
+                    </span>
+                    <p class="versus">
+                      {delta !== undefined ? (
+                        <>
+                          <span class:list={['delta', sign(delta)]}>{fmt(delta, { sign: true })}</span>{' '}
+                          {m.versus(days, fmt(summary.previous.net, { sign: true }))}
+                        </>
+                      ) : (
+                        <>{m.noPrevious(days)}</>
+                      )}
+                    </p>
+                  </div>
+                  <div class="fig today" title={m.todayTitle(full(summary.today.net))}>
+                    <span class="label">
+                      <Icon name="clock" />
+                      {m.today}
+                    </span>
+                    <span class:list={['value', 'signed', sign(summary.today.net)]}>
+                      {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
+                      {fmt(summary.today.net, { sign: true })}
+                      <small>ISK</small>
+                      <span class="sr-only">{summary.today.net >= 0 ? m.gain : m.loss}</span>
+                    </span>
+                    <p class="versus">
+                      {summary.today.income || summary.today.expenses
+                        ? m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))
+                        : m.todayNone}
+                    </p>
+                  </div>
+                </div>
                 <div class="ratio" aria-hidden="true">
                   {summary.totals.income > 0 && (
                     <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />
@@ -297,16 +318,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                     <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
                   </div>
                 </dl>
-                <div class="today" title={m.todayTitle(full(summary.today.net))}>
-                  <span class="today-label">
-                    <Icon name="clock" />
-                    {m.today}
-                  </span>
-                  <span class:list={['today-value', sign(summary.today.net)]}>{fmt(summary.today.net, { sign: true })}</span>
-                  <span class="today-detail">
-                    {m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))}
-                  </span>
-                </div>
                 {summary.internalTransfers > 0 && (
                   <span class="sub">{m.internal(fmt(summary.internalTransfers))}</span>
                 )}
@@ -357,7 +368,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               </div>
             </section>
 
-            <ActivityList activities={summary.byActivity} net={summary.totals.net} />
+            <ActivityList activities={summary.byActivity} />
 
             <section class="panel">
               <div class="panel-heading">
@@ -367,7 +378,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   {m.managePilots}
                 </a>
               </div>
-              <div class="scroll">
+              <div class="scroll pilots-table">
                 <table class="pilots">
                   <thead>
                     <tr>
@@ -418,6 +429,54 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   </tbody>
                 </table>
               </div>
+              {/* Móvil: una tarjeta por piloto con nombre, neto y último sync; la tabla de 7 columnas se oculta */}
+              <ul class="pilot-cards">
+                {
+                  summary.characters.map((c) => (
+                    <li class:list={{ selected: c.id === pilotId }} aria-current={c.id === pilotId ? 'true' : undefined}>
+                      <div class="card-head">
+                        <a class="who" href={href(days, c.id)} title={m.viewLedger(c.name)}>
+                          <img
+                            src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`}
+                            alt=""
+                            width="28"
+                            height="28"
+                            loading="lazy"
+                            onerror="this.style.display='none'"
+                          />
+                          {c.name}
+                        </a>
+                        <span class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
+                          {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
+                          {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
+                        </span>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>{m.balance}</dt>
+                          <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
+                        </div>
+                        <div>
+                          <dt>{m.inventory}</dt>
+                          <dd>{inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}</dd>
+                        </div>
+                        <div class:list={['net', { pos: c.net > 0, neg: c.net < 0 }]}>
+                          <dt>{m.net}</dt>
+                          <dd title={`${m.income} ${full(c.income)} · ${m.expenses} ${full(-c.expenses)}`}>{fmt(c.net, { sign: true })}</dd>
+                        </div>
+                        <div class="minor">
+                          <dt>{m.income}</dt>
+                          <dd>{fmt(c.income)}</dd>
+                        </div>
+                        <div class="minor">
+                          <dt>{m.expenses}</dt>
+                          <dd>{fmt(c.expenses ? -c.expenses : 0)}</dd>
+                        </div>
+                      </dl>
+                    </li>
+                  ))
+                }
+              </ul>
               <p class="panel-note">
                 {m.noteBalance}
                 {inventory?.pricesUpdatedAt && m.notePrices(rel(inventory.pricesUpdatedAt))}
@@ -449,33 +508,43 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 <style>
   .glance {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    /* El neto lidera (~60 %); Patrimonio y el mapa apoyan */
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
     gap: 16px;
   }
-  .today {
+  /* Neto del período y «Hoy» como pareja de cifras grandes: contenedor para que dependa del ancho de la tarjeta */
+  .hero-stat {
+    container-type: inline-size;
+  }
+  .headline {
     display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: baseline;
-    gap: 2px 12px;
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
+    gap: 14px;
   }
-  .today-label {
-    display: inline-flex;
-    align-items: center;
+  .fig {
+    display: flex;
+    flex-direction: column;
     gap: 6px;
-    font-size: 13px;
-    color: var(--text-secondary);
+    min-width: 0;
   }
-  .today-label .icon {
-    width: 14px;
-    height: 14px;
+  .fig.today .value {
+    font-size: 28px;
   }
-  .today-value {
-    font: 500 22px var(--mono);
-    letter-spacing: -0.03em;
-    color: var(--text);
+  @container (min-width: 520px) {
+    .headline {
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+      gap: 0;
+    }
+    .fig.today {
+      padding-left: 24px;
+      border-left: 1px solid var(--line);
+    }
+    .fig.today .value {
+      font-size: 44px;
+    }
+    .fig.today :global(.trend) {
+      width: 28px;
+      height: 28px;
+    }
   }
   .signed {
     display: inline-flex;
@@ -506,11 +575,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   }
   .delta {
     font: 500 12px var(--mono);
-  }
-  .today-detail {
-    grid-column: 2;
-    font-size: 12px;
-    color: var(--text-muted);
   }
   .worth-head {
     display: flex;
@@ -571,12 +635,91 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     .pilot-strip ul {
       flex-wrap: nowrap;
       overflow-x: auto;
-      margin: 0 -14px;
-      padding: 0 14px 2px;
+      margin: 0 -16px;
+      padding: 0 16px 2px;
       scrollbar-width: none;
     }
     .pilot-strip li {
       flex-shrink: 0;
+    }
+    .pilot-strip a {
+      align-items: center;
+      min-height: 40px;
+    }
+  }
+  .pilot-cards {
+    display: none;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (max-width: 600px) {
+    .pilots-table {
+      display: none;
+    }
+    .pilot-cards {
+      display: block;
+    }
+    .pilot-cards li {
+      padding: 0 16px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .pilot-cards li.selected {
+      background: #61cce50d;
+      box-shadow: inset 2px 0 var(--cyan);
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .card-head .who {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      margin: 0;
+      padding: 0;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .card-head img {
+      border-radius: 4px;
+      border: 1px solid var(--line-strong);
+    }
+    .pilot-cards .last-sync {
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .pilot-cards .last-sync:not(.stale) {
+      color: var(--text-muted);
+    }
+    .pilot-cards dl {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px 12px;
+      margin: 0;
+    }
+    .pilot-cards dt {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .pilot-cards dd {
+      margin: 2px 0 0;
+      font: 500 16px var(--mono);
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .pilot-cards .net.pos dd {
+      color: var(--positive);
+    }
+    .pilot-cards .net.neg dd {
+      color: var(--critical);
+    }
+    .pilot-cards .minor dd {
+      font-size: 13px;
+      color: var(--text-secondary);
     }
   }
   tr.selected td {
@@ -585,7 +728,10 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   tr.selected td:first-child {
     box-shadow: inset 2px 0 var(--cyan);
   }
+  /* El enlace ocupa toda la altura de la fila para que sea fácil de acertar (medía 16 px) */
   .who a {
+    padding-block: 14px;
+    margin-block: -14px;
     color: inherit;
     text-decoration: none;
   }
@@ -611,7 +757,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   td.last-sync.stale {
     color: var(--warning);
   }
-  td.last-sync :global(.stale-icon) {
+  .last-sync :global(.stale-icon) {
     margin-right: 6px;
     vertical-align: -2px;
   }
@@ -621,7 +767,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     gap: 6px;
     color: var(--text-secondary);
   }
-  .period-meta .coverage .icon {
+  .period-meta .coverage :global(.icon) {
     width: 14px;
     height: 14px;
     color: var(--cyan-dim);
@@ -686,17 +832,20 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     height: 8px;
     border-radius: 2px;
   }
-  .stat .sub {
-    margin-top: 6px;
+  /* La nota de transferencias internas cierra la tarjeta: queda alineada con la de «sin ubicar» de Patrimonio */
+  .hero-stat .sub {
+    margin-top: auto;
+    padding-top: 10px;
   }
   .panel-heading a.link {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-height: 40px;
     font: 500 12px var(--font);
     color: var(--cyan);
   }
-  .panel-heading a.link .icon {
+  .panel-heading a.link :global(.icon) {
     width: 14px;
     height: 14px;
   }

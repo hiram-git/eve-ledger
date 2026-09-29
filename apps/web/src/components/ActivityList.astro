@@ -7,9 +7,8 @@ import { getLang, t } from '../lib/i18n';
 
 interface Props {
   activities: Summary['byActivity'];
-  net: number;
 }
-const { activities, net } = Astro.props;
+const { activities } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
@@ -27,7 +26,6 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 <section class="panel">
   <div class="panel-heading">
     <h3>{m.byActivity}</h3>
-    <span class="meta" title={full(net)}>{m.net} {fmt(net, { sign: true })}</span>
   </div>
   {
     rows.length === 0 ? (
