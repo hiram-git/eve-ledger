@@ -187,7 +187,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
             <div class="who">
               <img src={portrait(p.id)} alt="" width="56" height="56" loading="lazy" onerror="this.style.visibility='hidden'" />
               <div>
-                <h2>{p.name}</h2>
+                <h2><a href={`/?pilot=${p.id}`} title={m.viewLedger(p.name)}>{p.name}</a></h2>
                 <p class="since">
                   {m.linkedOn} <time datetime={p.createdAt}>{longDate(p.createdAt, lang)}</time>
                 </p>
@@ -387,6 +387,14 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     border-radius: 6px;
     border: 1px solid var(--line-strong);
     background: #162834;
+  }
+  .who h2 a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .who h2 a:hover {
+    color: var(--cyan);
+    text-decoration: underline;
   }
   .who h2 {
     font-size: 16px;

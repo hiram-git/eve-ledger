@@ -55,10 +55,10 @@ export async function listTransactions(f: TransactionFilter) {
 
 // Revisión de mercado: por ítem, lo vendido y lo comprado en el período (sin operaciones internas),
 // ordenado por ISK movido. El neto por ítem es ventas − compras, sin comisiones ni impuestos.
-export async function marketReview(from: Date, limit = 15) {
+export async function marketReview(from: Date, characterId?: number, limit = 15) {
   const soldIsk = sql<number>`coalesce(sum(case when ${tx.isBuy} = 0 then ${tx.quantity} * ${tx.unitPrice} end), 0)`;
   const boughtIsk = sql<number>`coalesce(sum(case when ${tx.isBuy} = 1 then ${tx.quantity} * ${tx.unitPrice} end), 0)`;
-  const where = and(gte(tx.date, from), eq(isInternal, 0));
+  const where = and(gte(tx.date, from), eq(isInternal, 0), characterId ? eq(tx.characterId, characterId) : undefined);
 
   const items = await db
     .select({
