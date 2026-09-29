@@ -87,6 +87,11 @@ const lastSync = summary?.characters
 // Antigüedad: datos «viejos» cuando superan dos intervalos de sync (o 2 h si el cron está apagado)
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 const isStale = (iso: string | null | undefined) => !iso || Date.now() - new Date(iso).getTime() > staleAfterMs;
+// Pilotos con datos viejos o sin sync: su causa va visible bajo el filtro, con enlace a Pilotos
+const staleList =
+  summary?.characters
+    .filter((c) => isStale(c.lastSyncAt))
+    .map((c) => `${c.name} (${c.lastSyncAt ? rel(c.lastSyncAt) : m.never})`) ?? [];
 const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
 const partialHistory = summary && summary.coverage.firstEntryAt && summary.coverage.coveredDays < days;
 
@@ -109,10 +114,15 @@ const locationLabel = (id: number, name: string | null) =>
   name ?? (id > 1_000_000_000_000 ? m.structure(id) : `#${id}`);
 // "Jita IV - Moon 4 - Caldari Navy Assembly Plant" → "Jita IV - Moon 4" (el nombre completo va en el tooltip)
 const shortStation = (name: string) => name.split(' - ').slice(0, 2).join(' - ');
+// Ubicaciones en el espacio (raíz = un sistema, no una estación): «Amarr» a secas se confundía con la estación
+const inSpaceRange = (id: number) => id >= 30_000_000 && id <= 32_999_999;
 const locationRows: BarRow[] =
   inventory?.byLocation.map((l) => {
     const full = locationLabel(l.locationId, l.name);
-    return { label: shortStation(full), value: l.value, detail: `${full} · ${m.stacks(l.stacks)}` };
+    const label = inSpaceRange(l.locationId) ? `${shortStation(full)} (${m.inSpace})` : shortStation(full);
+    // Las estructuras sin nombre muestran un ID acortado: el completo va en el detalle
+    const id = l.name ? '' : ` (#${l.locationId})`;
+    return { label, value: l.value, detail: `${full}${id} · ${m.stacks(l.stacks)}` };
   }) ?? [];
 // Lo más valioso: los 6 primeros; el detalle completo está en GET /assets
 const valuableItems = inventory?.topItems.slice(0, 6).map((i) => ({ ...i, isk: i.value })) ?? [];
@@ -139,14 +149,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             <span class="coverage" title={m.coverageTitle}>
               <Icon name="info" />
               {m.coverage(date(summary!.coverage.firstEntryAt!), summary!.coverage.coveredDays, days)}
-            </span>
-          )
-        }
-        {
-          lastSync && (
-            <span class:list={['fresh', { stale: isStale(lastSync) }]}>
-              <Icon name={isStale(lastSync) ? 'alert' : 'activity'} />
-              {m.updated} <time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
             </span>
           )
         }
@@ -259,7 +261,18 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               }
             </script>
 
-            <section class="glance" aria-label={m.summary}>
+            {
+              staleList.length > 0 && (
+                <p class="pilot-health">
+                  <Icon name="alert" class="stale-icon" />
+                  <span>{m.pilotsStale(staleList.length, summary.characters.length, staleList.join(', '))}.</span>
+                  <a href="/pilotos">{m.reviewPilots}</a>
+                </p>
+              )
+            }
+
+            <section class="glance" aria-labelledby="glance-title">
+              <h2 id="glance-title" class="sr-only">{m.net} · {m.netWorth}</h2>
               <div class="panel stat hero-stat">
                 <div class="headline">
                   <div class="fig">
@@ -308,6 +321,14 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                         ? m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))
                         : m.todayNone}
                     </p>
+                    {
+                      lastSync && (
+                        <p class:list={['versus', 'asof', { stale: isStale(lastSync) }]}>
+                          {isStale(lastSync) && <Icon name="alert" class="stale-icon" />}
+                          {m.asOfSync('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
+                        </p>
+                      )
+                    }
                   </div>
                 </div>
                 <div class="composition">
@@ -350,6 +371,14 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                           </li>
                         ))}
                       </ul>
+                    )
+                  }
+                  {
+                    summary.byActivity.length > 0 && (
+                      <a class="acts-link" href="#por-actividad">
+                        {m.activityDetailLink}
+                        <i class="chev" aria-hidden="true" />
+                      </a>
                     )
                   }
                 </div>
@@ -614,12 +643,34 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     position: absolute;
     top: 0;
     bottom: 0;
-    background: var(--income);
+    background: var(--positive);
     border-radius: 0 3px 3px 0;
   }
   .act-bar i.neg {
-    background: var(--expenses);
+    background: var(--critical);
     border-radius: 3px 0 0 3px;
+  }
+  .acts-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-self: end;
+    min-height: 40px;
+    font-size: 13px;
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  .acts-link:hover {
+    text-decoration: underline;
+  }
+  /* Chevrón hacia abajo (una flecha de tendencia se leería como un dato negativo) */
+  .acts-link .chev {
+    width: 7px;
+    height: 7px;
+    margin-top: -3px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
   }
   .act-net {
     min-width: 4.5rem;
@@ -705,8 +756,36 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     color: var(--text);
   }
   .versus {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
+  }
+  .asof {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .asof.stale {
+    color: var(--warning);
+  }
+  /* Pilotos con datos viejos: la causa y el enlace, en una línea bajo el filtro */
+  .pilot-health {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin: -4px 0 0;
+    font-size: 13px;
+    color: var(--warning);
+  }
+  .pilot-health a {
+    /* Zona táctil ampliada sin mover el texto */
+    padding-block: 11px;
+    margin-block: -11px;
+    color: var(--cyan);
+  }
+  /* Patrimonio es secundario: un escalón claro por debajo de Neto y de Hoy */
+  .worth .value {
+    font-size: 24px;
   }
   .delta {
     font: 500 14px var(--mono);
@@ -826,7 +905,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       border: 1px solid var(--line-strong);
     }
     .pilot-cards .last-sync {
-      font-size: 12px;
+      font-size: 13px;
       white-space: nowrap;
     }
     .pilot-cards .last-sync:not(.stale) {
@@ -839,7 +918,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       margin: 0;
     }
     .pilot-cards dt {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-muted);
     }
     .pilot-cards dd {
@@ -876,8 +955,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     color: var(--cyan);
     text-decoration: underline;
   }
-  .stale,
-  .period-meta .fresh.stale {
+  .stale {
     color: var(--warning);
   }
   .pilot-strip a.stale {
@@ -955,7 +1033,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
   }
   .breakdown dd {

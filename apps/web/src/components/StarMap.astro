@@ -79,7 +79,6 @@ const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r:
         ))
       }
     </g>
-    <circle class="ping" cx={at('JITA')[1]} cy={at('JITA')[2]} r="4"></circle>
     {
       routes.map((r) => (
         <g class="courier">
@@ -126,31 +125,24 @@ const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r:
   .nodes circle {
     fill: #577689;
   }
+  /* Nombres atenuados: es decoración, no debe hablar el mismo idioma que los datos del mapa real */
   .nodes text {
     font: 9px var(--mono);
     letter-spacing: 0.08em;
-    fill: #6c8698;
+    fill: #4a6070;
   }
   .nodes text.sec {
     font-size: 7px;
-    fill: #4c6474;
+    fill: #384b58;
   }
   .nodes .hub circle {
     fill: var(--cyan);
   }
   .nodes .hub text:not(.sec) {
-    fill: #9fd3e3;
+    fill: #6b8f9d;
   }
   .nodes .low circle {
     fill: #9a5a5a;
-  }
-  .ping {
-    fill: none;
-    stroke: var(--cyan);
-    stroke-width: 1;
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: ping 3s ease-out infinite;
   }
   .courier path {
     fill: #a9e7f3;
@@ -159,16 +151,6 @@ const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r:
   @keyframes flow {
     to {
       stroke-dashoffset: -80;
-    }
-  }
-  @keyframes ping {
-    from {
-      transform: scale(1);
-      opacity: 0.9;
-    }
-    to {
-      transform: scale(5);
-      opacity: 0;
     }
   }
   /* En móvil el título ocupa casi todo el ancho: el mapa queda como textura */

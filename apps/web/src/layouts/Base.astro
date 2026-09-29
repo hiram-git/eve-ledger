@@ -30,7 +30,7 @@ const backPath = back.pathname + back.search;
 const cron = !status
   ? undefined
   : !status.enabled
-    ? { cls: 'off', text: m.cronOff }
+    ? { cls: 'off', text: m.cronOff, short: m.cronOffShort }
     : status.running
       ? { cls: 'busy', text: m.syncing }
       : {
@@ -82,6 +82,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
             <span class:list={['status-badge', cron.cls]} title={cronTitle}>
               <i class="dot" />
               <span class="text">{cron.text}</span>
+              {'short' in cron && <span class="text-short" aria-hidden="true">{cron.short}</span>}
             </span>
           )
         }
@@ -113,6 +114,12 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
 
     <slot name="nav" />
 
+    <!-- Aviso de datos nuevos: sustituye a la recarga cuando el usuario está leyendo (detalles abiertos o scroll) -->
+    <div class="update-notice" role="status" hidden>
+      <span>{m.newData}</span>
+      <button type="button">{m.refreshNow}</button>
+    </div>
+
     <main class="shell" id="contenido" tabindex="-1">
       <slot />
     </main>
@@ -139,15 +146,24 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   };
   setInterval(tick, 30_000);
 
-  // Auto-refresco: cuando termina un sync automático nuevo, recargar para mostrar los datos
+  // Auto-refresco: cuando termina un sync automático nuevo se recargan los datos, pero solo si la
+  // recarga no tira la lectura (arriba del todo y sin detalles abiertos); si no, un aviso lo ofrece
   const lastRunAt = document.body.dataset.lastRun || null;
+  const notice = document.querySelector<HTMLElement>('.update-notice')!;
+  notice.querySelector('button')!.addEventListener('click', () => location.reload());
+  let fresh = false;
+  const safeToReload = () => scrollY < 80 && !document.querySelector('details[open]');
   setInterval(async () => {
     if (document.hidden) return;
     try {
       const res = await fetch('/status.json', { cache: 'no-store' });
       if (!res.ok) return;
       const s = (await res.json()) as { running: boolean; lastRunAt: string | null };
-      if (!s.running && s.lastRunAt && s.lastRunAt !== lastRunAt) location.reload();
+      if (!s.running && s.lastRunAt && s.lastRunAt !== lastRunAt) fresh = true;
+      if (fresh) {
+        if (safeToReload()) location.reload();
+        else notice.hidden = false;
+      }
     } catch {
       // API caída: se reintenta en el siguiente ciclo
     }
@@ -206,9 +222,9 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     border-radius: 6px;
   }
   .lang-switch a {
-    padding: 5px 8px;
+    padding: 5px 9px;
     border-radius: 4px;
-    font: 500 11px/1.4 var(--mono);
+    font: 500 12px/1.4 var(--mono);
     letter-spacing: 0.04em;
     color: var(--text-muted);
     text-decoration: none;
@@ -220,12 +236,46 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     background: #16304070;
     color: #8addee;
   }
+  .text-short {
+    display: none;
+  }
+  .update-notice {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 10px 10px 16px;
+    border: 1px solid var(--cyan-dim);
+    border-radius: 8px;
+    background: #0d1a25f2;
+    box-shadow: 0 10px 30px #0008;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .update-notice[hidden] {
+    display: none;
+  }
+  .update-notice button {
+    min-height: 32px;
+    padding: 0 14px;
+    border: 1px solid var(--cyan-dim);
+    border-radius: 6px;
+    background: #16304070;
+    color: #8addee;
+    cursor: pointer;
+  }
+  .update-notice button:hover {
+    background: #1c3a4c;
+  }
   .count {
     min-width: 18px;
     padding: 0 5px;
     border-radius: 9px;
     background: #1b2c3a;
-    font: 500 11px/18px var(--mono);
+    font: 500 12px/18px var(--mono);
     color: var(--text-secondary);
     text-align: center;
   }
@@ -241,6 +291,22 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     }
     .sections a:first-child[aria-current='page']::after {
       left: 0;
+    }
+    /* Sync automático desactivado: chip ámbar con texto corto (solo un punto era una señal solo de color);
+       para hacerle sitio, Sincronizar pasa a solo icono mientras dure el aviso */
+    .text-short {
+      display: inline;
+    }
+    .utility-right:has(.status-badge.off) .sync-form .label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .utility-right:has(.status-badge.off) .sync-form .primary-button {
+      padding-inline: 12px;
     }
     /* Objetivos táctiles de 40 px: el selector de idioma medía 21 px de alto y la marca 26 */
     .micro-brand {

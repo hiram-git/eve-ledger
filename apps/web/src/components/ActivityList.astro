@@ -1,6 +1,6 @@
 ---
-// Neto por actividad (PvE, PvP, trading como margen, otros): una barra divergente por fila desde un eje central.
-// Cada fila se despliega con su detalle por tipo de movimiento de ESI.
+// Detalle por actividad (PvE, PvP, trading como margen, otros). El vistazo con el neto de cada una vive en la
+// tarjeta de Neto: aquí solo lo que hay detrás, por tipo de movimiento de ESI, sin repetir barras ni netos.
 import type { Summary } from '../lib/api';
 import { isk, iskFull, refTypeLabel } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
@@ -17,13 +17,10 @@ const out = (v: number) => (v ? -v : 0);
 
 // Orden fijo (PvE, PvP, Trading, Otros, el de la API): que la fila no cambie de sitio con el período
 const rows = activities;
-const max = Math.max(1, ...rows.map((r) => Math.abs(r.net)));
-// Media pista por lado: el 100 % del neto máximo ocupa la mitad
-const half = (v: number) => `${(Math.abs(v) / max) * 50}%`;
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 ---
 
-<section class="panel">
+<section class="panel" id="por-actividad">
   <div class="panel-heading">
     <h2>{m.byActivity}</h2>
   </div>
@@ -40,18 +37,7 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
                   <span class="name">{m.activityName[a.activity]}</span>
                   <span class="hint">{m.activityHint[a.activity]}</span>
                 </span>
-                <span class="track" aria-hidden="true">
-                  <span
-                    class:list={['bar', sign(a.net)]}
-                    style={a.net >= 0 ? `left:50%;width:${half(a.net)}` : `right:50%;width:${half(a.net)}`}
-                  />
-                </span>
-                <span class="figures">
-                  <span class:list={['net', sign(a.net)]} title={full(a.net)}>
-                    {fmt(a.net, { sign: true })}
-                  </span>
-                  <span class="gross">{m.activityInOut(fmt(a.income), fmt(a.expenses))}</span>
-                </span>
+                <span class="gross" title={`${m.net} ${full(a.net)}`}>{m.activityInOut(fmt(a.income), fmt(a.expenses))}</span>
               </summary>
               <table aria-label={m.activityDetail(m.activityName[a.activity])}>
                 <thead>
@@ -83,6 +69,9 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 </section>
 
 <style>
+  section {
+    scroll-margin-top: 16px;
+  }
   ul {
     list-style: none;
     margin: 0;
@@ -93,8 +82,7 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
   }
   summary {
     display: grid;
-    /* Columnas fijas: el eje central de la barra queda alineado en todas las filas */
-    grid-template-columns: 15rem 1fr 13rem;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 20px;
     padding: 12px 22px 12px 40px;
@@ -140,55 +128,17 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
     color: var(--text);
   }
   .hint {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
   }
-  /* Pista divergente: eje en el centro, positivo a la derecha, negativo a la izquierda */
-  .track {
-    position: relative;
-    height: 14px;
-  }
-  .track::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: -4px;
-    bottom: -4px;
-    width: 1px;
-    background: var(--axis);
-  }
-  .bar {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-  }
-  .bar.pos {
-    background: var(--income);
-    border-radius: 0 4px 4px 0;
-  }
-  .bar.neg {
-    background: var(--expenses);
-    border-radius: 4px 0 0 4px;
-  }
-  .figures {
-    display: grid;
-    justify-items: end;
-    gap: 2px;
-  }
-  .net {
-    font: 500 16px var(--mono);
-    color: var(--text);
-  }
-  .pos.net,
   td.pos {
     color: var(--positive);
   }
-  .neg.net,
   td.neg {
     color: var(--critical);
   }
   .gross {
-    font: 12px var(--mono);
+    font: 13px var(--mono);
     color: var(--text-muted);
     white-space: nowrap;
   }
@@ -211,16 +161,15 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
   }
   @media (max-width: 600px) {
     summary {
-      grid-template-columns: 1fr auto;
-      gap: 6px 12px;
+      grid-template-columns: 1fr;
+      gap: 4px;
       padding: 12px 16px 12px 34px;
     }
     summary::before {
       left: 16px;
     }
-    .track {
-      grid-column: 1 / -1;
-      grid-row: 2;
+    .gross {
+      white-space: normal;
     }
     table {
       margin: 0 16px 14px;
