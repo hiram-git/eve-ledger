@@ -234,7 +234,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       order: 3;
       width: 100%;
       margin: 0;
-      height: 36px;
+      height: 40px;
     }
     .sections a:first-child {
       padding-left: 0;
@@ -244,12 +244,13 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     }
     /* Objetivos táctiles de 40 px: el selector de idioma medía 21 px de alto y la marca 26 */
     .micro-brand {
-      padding: 7px 0;
+      margin-left: -7px;
+      padding: 7px;
     }
     .lang-switch a {
       display: inline-flex;
       align-items: center;
-      min-height: 36px;
+      min-height: 40px;
       padding: 0 12px;
     }
   }

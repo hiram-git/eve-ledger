@@ -15,8 +15,8 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const out = (v: number) => (v ? -v : 0);
 
-// Más relevante primero: mayor neto absoluto
-const rows = [...activities].sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+// Orden fijo (PvE, PvP, Trading, Otros, el de la API): que la fila no cambie de sitio con el período
+const rows = activities;
 const max = Math.max(1, ...rows.map((r) => Math.abs(r.net)));
 // Media pista por lado: el 100 % del neto máximo ocupa la mitad
 const half = (v: number) => `${(Math.abs(v) / max) * 50}%`;
@@ -25,7 +25,7 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 
 <section class="panel">
   <div class="panel-heading">
-    <h3>{m.byActivity}</h3>
+    <h2>{m.byActivity}</h2>
   </div>
   {
     rows.length === 0 ? (

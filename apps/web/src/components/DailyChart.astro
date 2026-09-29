@@ -51,6 +51,8 @@ const lastActive = daily.reduce((last, d, i) => (i >= missing && hasActivity(d) 
 const entry = lastActive >= 0 ? lastActive : daily.length - 1;
 // Cifras abreviadas (k/M/B) en el tooltip y para el lector de pantalla; las completas están en la tabla
 const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
+// Tabla: cifra completa sin repetir «ISK» en cada celda (la unidad va en el encabezado)
+const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
 ---
 
 <div class="legend" aria-hidden="true">
@@ -121,22 +123,31 @@ const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
 
 <details class="table-view">
   <summary>{m.asTable}</summary>
-  <table>
-    <caption class="sr-only">{m.dailyFlow}</caption>
-    <thead><tr><th>{m.day}</th><th>{m.income}</th><th>{m.expenses}</th><th>{m.net}</th></tr></thead>
-    <tbody>
-      {
-        [...daily].reverse().map((d) => (
-          <tr>
-            <td>{date(d.date)}</td>
-            <td>{full(d.income)}</td>
-            <td>{full(out(d.expenses))}</td>
-            <td>{full(d.net)}</td>
-          </tr>
-        ))
-      }
-    </tbody>
-  </table>
+  <div class="scroll" role="group" aria-label={m.dailyFlow}>
+    <table>
+      <caption class="sr-only">{m.dailyFlow}</caption>
+      <thead>
+        <tr>
+          <th>{m.day}</th>
+          <th>{m.income} <span class="unit">ISK</span></th>
+          <th>{m.expenses} <span class="unit">ISK</span></th>
+          <th>{m.net} <span class="unit">ISK</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          [...daily].reverse().map((d) => (
+            <tr>
+              <td>{date(d.date)}</td>
+              <td>{plain(d.income)}</td>
+              <td>{plain(out(d.expenses))}</td>
+              <td>{plain(d.net)}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
 </details>
 
 <script>
@@ -423,7 +434,11 @@ const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
   .table-view summary:hover {
     color: var(--cyan);
   }
-  .table-view table {
+  .table-view .scroll {
     margin-top: 8px;
+  }
+  .unit {
+    font-weight: 400;
+    color: var(--text-muted);
   }
 </style>

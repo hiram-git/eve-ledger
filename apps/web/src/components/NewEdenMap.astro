@@ -15,9 +15,10 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 
 
-const W = 560;
-const H = 200;
-const PAD = 44; // margen para que las etiquetas no se corten
+// El viewBox mide casi lo mismo que la tarjeta en escritorio (~430 px): las etiquetas de 11,5 px salen a ~11 px
+const W = 440;
+const H = 160;
+const PAD = 40; // margen para que las etiquetas no se corten
 
 const nodes = map.nodes;
 const xs = nodes.map((n) => n.x);
@@ -72,8 +73,8 @@ const inside = (b: Box) => b.x1 >= 2 && b.x2 <= W - 2 && b.y1 >= 2 && b.y2 <= H 
 const order = [...placed].sort((a, b) => b.earnedToday - a.earnedToday || b.inventory - a.inventory);
 for (const n of order) {
   if (!labelled.has(n.systemId)) continue;
-  const w = Math.max(n.name.length * 6.6, ...n.lines.map((l) => l.length * 6.8)) + 4;
-  const h = 14 + n.lines.length * 12;
+  const w = Math.max(n.name.length * 7, ...n.lines.map((l) => l.length * 7.2)) + 4;
+  const h = 15 + n.lines.length * 13;
   const gap = n.r + 8;
   const options: (Label & { box: Box })[] = [];
   // A los lados (centrado, más arriba o más abajo) y encima/debajo
@@ -124,7 +125,7 @@ const summary = m.mapSummary(invCount, earnCount);
                 <text x={labels.get(n.systemId)!.tx} y={labels.get(n.systemId)!.ty} text-anchor={labels.get(n.systemId)!.anchor}>
                   <tspan class="name">{n.name}</tspan>
                   {n.lines.map((l, i) => (
-                    <tspan class:list={['val', { gain: i === n.lines.length - 1 && n.earnedToday > 0 }]} x={labels.get(n.systemId)!.tx} dy={i === 0 ? 13 : 12}>
+                    <tspan class:list={['val', { gain: i === n.lines.length - 1 && n.earnedToday > 0 }]} x={labels.get(n.systemId)!.tx} dy={i === 0 ? 14 : 13}>
                       {l}
                     </tspan>
                   ))}
@@ -149,7 +150,7 @@ const summary = m.mapSummary(invCount, earnCount);
   }
   <figcaption>
     <span class="legend-key"><i class="held" />{m.mapLegendInventory}</span>
-    <span class="legend-key"><i class="earned" />{m.mapLegendToday}</span>
+    {earnCount > 0 && <span class="legend-key"><i class="earned" />{m.mapLegendToday}</span>}
     {
       map.unplaced.value > 0 && (
         <span class="unplaced" title={m.mapUnplacedTitle}>
@@ -212,7 +213,7 @@ const summary = m.mapSummary(invCount, earnCount);
     }
   }
   text {
-    font: 11px var(--font);
+    font: 11.5px var(--font);
     fill: var(--text-secondary);
   }
   .name {
@@ -220,7 +221,7 @@ const summary = m.mapSummary(invCount, earnCount);
     fill: var(--text);
   }
   .val {
-    font: 11px var(--mono);
+    font: 11.5px var(--mono);
     fill: var(--text-secondary);
   }
   .val.gain {

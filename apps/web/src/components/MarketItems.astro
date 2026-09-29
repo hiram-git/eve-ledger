@@ -22,14 +22,14 @@ const qty = new Intl.NumberFormat(lang);
 
 <section class="panel">
   <div class="panel-heading">
-    <h3>{title}</h3>
+    <h2>{title}</h2>
     {items.length > 0 && <span class="meta">{m.top(items.length)}</span>}
   </div>
   {
     items.length === 0 ? (
       <p class="empty panel-body">{empty}</p>
     ) : (
-      <div class="scroll">
+      <div class="scroll" role="group" aria-label={title}>
         <table>
           <thead>
             <tr>
@@ -79,6 +79,24 @@ const qty = new Intl.NumberFormat(lang);
 </section>
 
 <style>
+  /* La tarjeta es el contenedor: el precio unitario se oculta según su ancho, no el de la ventana */
+  .panel {
+    container-type: inline-size;
+  }
+  @container (max-width: 520px) {
+    th:nth-child(4),
+    td:nth-child(4) {
+      display: none;
+    }
+    table th:nth-child(3),
+    table td:nth-child(3) {
+      padding-right: 22px;
+    }
+  }
+  /* Filas más compactas: 8 ítems ocupaban 400 px junto a una lista de 5 ubicaciones */
+  table td {
+    padding-block: 7px;
+  }
   table th:first-child,
   table td:first-child {
     padding-left: 22px;
@@ -113,10 +131,6 @@ const qty = new Intl.NumberFormat(lang);
   }
   /* En móvil: sin precio unitario (queda en el tooltip del total) y celdas más compactas */
   @media (max-width: 480px) {
-    th:nth-child(4),
-    td:nth-child(4) {
-      display: none;
-    }
     th,
     td {
       padding: 8px 6px;

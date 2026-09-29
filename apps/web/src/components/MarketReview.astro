@@ -21,10 +21,10 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
 <section class="panel">
   <details>
     <summary class="panel-heading">
-      <h3>{m.marketReview}</h3>
+      <h2>{m.marketReview}</h2>
       <span class="meta">{m.marketReviewMeta(market.totals.items, fmt(market.totals.sold), fmt(market.totals.bought))}</span>
     </summary>
-    <div class="scroll">
+    <div class="scroll" role="group" aria-label={m.marketReview}>
       <table>
         <caption class="sr-only">{m.topBy(market.items.length)}</caption>
         <thead>
