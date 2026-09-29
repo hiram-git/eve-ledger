@@ -121,7 +121,7 @@ const es = {
   activityDetail: (name: string) => `Desglose de ${name}`,
   entryType: 'Tipo de movimiento',
   activityNote:
-    'El trading cuenta como su margen neto en ingresos, gastos y gráfico: comprar stock lo baja hasta que lo vendes. Las naves compradas en el mercado cuentan como trading, no como PvP',
+    'Ingresos, gastos y gráfico incluyen todas las compras y ventas de mercado; aquí el trading se muestra como su margen (ventas − compras − comisiones). Las naves compradas en el mercado cuentan como trading, no como PvP',
   marketReview: 'Revisión de mercado',
   marketReviewMeta: (n: number, sold: string, bought: string) =>
     `${n} ${plural(n, 'ítem', 'ítems')} · vendido ${sold} · comprado ${bought}`,
@@ -326,7 +326,7 @@ const en: Messages = {
   activityDetail: (name) => `${name} breakdown`,
   entryType: 'Entry type',
   activityNote:
-    'Trading counts as its net margin in income, expenses and the chart: buying stock lowers it until you sell. Ships bought on the market count as trading, not PvP',
+    'Income, expenses and the chart include every market purchase and sale; here trading is shown as its margin (sales − purchases − fees). Ships bought on the market count as trading, not PvP',
   marketReview: 'Market review',
   marketReviewMeta: (n, sold, bought) => `${n} ${plural(n, 'item', 'items')} · sold ${sold} · bought ${bought}`,
   sold: 'Sold',
@@ -526,7 +526,7 @@ const de: Messages = {
   activityDetail: (name) => `Aufschlüsselung ${name}`,
   entryType: 'Buchungstyp',
   activityNote:
-    'Handel zählt mit seiner Nettomarge in Einnahmen, Ausgaben und Diagramm: Lagerkäufe senken sie, bis du verkaufst. Auf dem Markt gekaufte Schiffe zählen als Handel, nicht als PvP',
+    'Einnahmen, Ausgaben und Diagramm enthalten alle Marktkäufe und -verkäufe; hier erscheint der Handel als Marge (Verkäufe − Käufe − Gebühren). Auf dem Markt gekaufte Schiffe zählen als Handel, nicht als PvP',
   marketReview: 'Marktübersicht',
   marketReviewMeta: (n, sold, bought) => `${n} ${plural(n, 'Artikel', 'Artikel')} · verkauft ${sold} · gekauft ${bought}`,
   sold: 'Verkauft',
