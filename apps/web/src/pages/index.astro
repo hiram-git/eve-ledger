@@ -8,6 +8,7 @@ import MarketReview from '../components/MarketReview.astro';
 import ActivityList from '../components/ActivityList.astro';
 import BarList, { type BarRow } from '../components/BarList.astro';
 import {
+  ApiError,
   getInventory,
   getMap,
   getSummary,
@@ -32,6 +33,10 @@ const rel = (iso: string | null) => ago(iso, lang);
 const PERIODS = [7, 30, 90];
 const q = Astro.url.searchParams;
 const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 30;
+// ?pilot=ID: el ledger de un solo piloto
+const pilotParam = Number(q.get('pilot'));
+const pilotId = Number.isSafeInteger(pilotParam) && pilotParam > 0 ? pilotParam : undefined;
+const href = (d: number, pilot?: number) => `/?days=${d}${pilot ? `&pilot=${pilot}` : ''}`;
 
 let summary: Summary | undefined;
 let status: SyncStatus | undefined;
@@ -42,14 +47,19 @@ try {
   // Inventario y mapa son opcionales: si fallan, el resto del dashboard se muestra igual
   const optional = <T,>(p: Promise<T>) => p.catch((err) => (console.error(err), undefined));
   [summary, status, inventory, geo] = await Promise.all([
-    getSummary(days),
+    getSummary(days, pilotId),
     getSyncStatus(),
-    optional(getInventory()),
-    optional(getMap()),
+    optional(getInventory(pilotId)),
+    optional(getMap(pilotId)),
   ]);
 } catch (err) {
+  // Un piloto que ya no está vinculado (enlace viejo): volver al consolidado
+  if (pilotId && err instanceof ApiError && err.status === 404) return Astro.redirect(href(days));
   apiError = err instanceof Error ? err.message : String(err);
 }
+const selected = pilotId ? summary?.characters.find((c) => c.id === pilotId) : undefined;
+// Neto consolidado = suma de los netos por piloto (el trading se pliega por piloto, pero el neto es aditivo)
+const allNet = summary?.characters.reduce((n, c) => n + c.net, 0) ?? 0;
 
 const synced = q.get('synced');
 const syncErrors = q.get('syncErrors');
@@ -100,7 +110,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       <div class="nav-tabs">
         {
           PERIODS.map((p) => (
-            <a class="nav-tab" href={`/?days=${p}`} aria-current={p === days ? 'page' : undefined}>
+            <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'page' : undefined}>
               <Icon name="clock" />
               {m.days(p)}
             </a>
@@ -128,7 +138,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       </p>
     </nav>
 
-      <h1 class="sr-only">{m.summaryH1(days)}</h1>
+      <h1 class="sr-only">{selected ? m.summaryH1Pilot(selected.name, days) : m.summaryH1(days)}</h1>
 
       {
         synced !== null && (
@@ -196,11 +206,51 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       {
         summary && summary.characters.length > 0 && (
           <>
+            <nav class="pilot-strip" aria-label={m.filterByPilot}>
+              <ul>
+                <li>
+                  <a
+                    href={href(days)}
+                    aria-current={!pilotId ? 'page' : undefined}
+                    title={m.allPilotsTitle(full(allNet), days)}
+                  >
+                    <span class="pilot-name">{m.allPilots}</span>
+                    <span class:list={['pilot-net', { pos: allNet > 0, neg: allNet < 0 }]}>{fmt(allNet, { sign: true })}</span>
+                  </a>
+                </li>
+                {summary.characters.map((c) => (
+                  <li>
+                    <a
+                      href={href(days, c.id)}
+                      aria-current={c.id === pilotId ? 'page' : undefined}
+                      class:list={{ stale: isStale(c.lastSyncAt) }}
+                      title={m.pilotNetTitle(c.name, full(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
+                    >
+                      {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
+                      <span class="pilot-name">{c.name}</span>
+                      <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
+                        {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            <script>
+              // En móvil la fila se desliza: que el piloto activo quede a la vista
+              const strip = document.querySelector<HTMLElement>('.pilot-strip ul');
+              const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+              if (strip && active && strip.scrollWidth > strip.clientWidth) {
+                strip.scrollLeft = active.parentElement!.offsetLeft - strip.offsetLeft - 14;
+              }
+            </script>
+
             <section class="glance" aria-label={m.summary}>
               <div class="panel stat hero-stat">
                 <span class="label">
                   <Icon name="activity" />
-                  {m.netPeriod(days)}
+                  {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}
                 </span>
                 <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
                   {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
@@ -291,23 +341,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               </div>
             </section>
 
-            <ul class="pilot-strip" aria-label={m.netByPilot}>
-              {summary.characters.map((c) => (
-                <li>
-                  <a
-                    href="#pilotos"
-                    class:list={{ stale: isStale(c.lastSyncAt) }}
-                    title={m.pilotNetTitle(c.name, full(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
-                  >
-                    {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
-                    <span class="pilot-name">{c.name}</span>
-                    <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
-                      {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
 
             <section class="panel">
               <div class="panel-heading">
@@ -344,7 +377,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   </thead>
                   <tbody>
                     {summary.characters.map((c) => (
-                      <tr>
+                      <tr class:list={{ selected: c.id === pilotId }} aria-current={c.id === pilotId ? 'true' : undefined}>
                         <td>
                           <span class="who">
                             <img
@@ -355,7 +388,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                               loading="lazy"
                               onerror="this.style.visibility='hidden'"
                             />
-                            {c.name}
+                            <a href={href(days, c.id)} title={m.viewLedger(c.name)}>{c.name}</a>
                           </span>
                         </td>
                         <td title={c.balance === null ? m.noEntries : full(c.balance)}>
@@ -489,7 +522,11 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     grid-template-columns: repeat(2, auto);
     gap: 20px;
   }
+  /* Elemento de la rejilla de main: sin esto crece al ancho de los chips en vez de deslizarse */
   .pilot-strip {
+    min-width: 0;
+  }
+  .pilot-strip ul {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -512,6 +549,43 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .pilot-strip a:hover {
     border-color: var(--line-strong);
     color: var(--text);
+  }
+  /* Filtro activo: estado, por eso en cian */
+  .pilot-strip a[aria-current='page'],
+  .pilot-strip a.stale[aria-current='page'] {
+    border-color: var(--cyan-dim);
+    background: #61cce514;
+    color: var(--text);
+  }
+  .pilot-strip a[aria-current='page'] .pilot-name {
+    font-weight: 600;
+  }
+  /* Móvil: una sola fila deslizable a sangre, para no empujar el neto hacia abajo */
+  @media (max-width: 750px) {
+    .pilot-strip ul {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      margin: 0 -14px;
+      padding: 0 14px 2px;
+      scrollbar-width: none;
+    }
+    .pilot-strip li {
+      flex-shrink: 0;
+    }
+  }
+  tr.selected td {
+    background: #61cce50d;
+  }
+  tr.selected td:first-child {
+    box-shadow: inset 2px 0 var(--cyan);
+  }
+  .who a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .who a:hover {
+    color: var(--cyan);
+    text-decoration: underline;
   }
   .stale,
   .period-meta .fresh.stale {

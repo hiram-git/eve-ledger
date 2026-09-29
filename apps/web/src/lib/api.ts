@@ -19,6 +19,8 @@ export type MarketItem = {
 export type Summary = {
   period: { days: number; from: string; to: string };
   totals: Flow;
+  // Piloto filtrado (null = todos); characters siempre trae la lista completa
+  characterId: number | null;
   balance: number;
   internalTransfers: number;
   characters: (Flow & {
@@ -76,15 +78,27 @@ export type SyncStatus = {
   lastRun: { startedAt: string; finishedAt: string; inserted: number; errors: number; characters: number } | null;
 };
 
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, init);
-  if (!res.ok) throw new Error(`API ${res.status} en ${path}: ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, `API ${res.status} en ${path}: ${await res.text()}`);
   return res.json() as Promise<T>;
 }
 
-export const getSummary = (days: number) => call<Summary>(`/summary?days=${days}`);
-export const getInventory = () => call<Inventory>('/inventory');
-export const getMap = () => call<GeoMap>('/map');
+// characterId opcional: el ledger de un solo piloto (la API responde 404 si no está vinculado)
+const pilotQuery = (characterId?: number) => (characterId ? `characterId=${characterId}` : '');
+export const getSummary = (days: number, characterId?: number) =>
+  call<Summary>(`/summary?days=${days}&${pilotQuery(characterId)}`);
+export const getInventory = (characterId?: number) => call<Inventory>(`/inventory?${pilotQuery(characterId)}`);
+export const getMap = (characterId?: number) => call<GeoMap>(`/map?${pilotQuery(characterId)}`);
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
 

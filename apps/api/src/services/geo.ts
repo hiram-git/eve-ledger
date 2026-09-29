@@ -86,7 +86,7 @@ export type MapNode = {
 };
 
 // Datos del mapa «tu New Eden»: dónde está el inventario y dónde se ganó ISK hoy
-export async function getMap() {
+export async function getMap(characterId?: number) {
   const now = new Date();
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
@@ -100,6 +100,7 @@ export async function getMap() {
     .from(assets)
     .leftJoin(marketPrices, eq(marketPrices.typeId, assets.typeId))
     .leftJoin(stationSystems, eq(stationSystems.stationId, assets.rootLocationId))
+    .where(characterId ? eq(assets.characterId, characterId) : undefined)
     .groupBy(assets.rootLocationId);
 
   const inventory = new Map<number, number>();
@@ -119,7 +120,14 @@ export async function getMap() {
   const earnedRows = await db
     .select({ systemId: walletJournal.contextId, earned: sql<number>`sum(${walletJournal.amount})` })
     .from(walletJournal)
-    .where(and(systemContext, gte(walletJournal.date, todayStart), sql`${walletJournal.amount} > 0`))
+    .where(
+      and(
+        systemContext,
+        gte(walletJournal.date, todayStart),
+        sql`${walletJournal.amount} > 0`,
+        characterId ? eq(walletJournal.characterId, characterId) : undefined,
+      ),
+    )
     .groupBy(walletJournal.contextId);
   const earned = new Map(earnedRows.filter((r) => r.systemId).map((r) => [r.systemId!, r.earned]));
 

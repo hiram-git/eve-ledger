@@ -13,7 +13,9 @@ export const unitPrice = sql<number>`(case when ${a.isBlueprintCopy} then 0 else
 const value = sql<number>`coalesce(sum(${a.quantity} * ${unitPrice}), 0)`;
 const priced = eq(p.typeId, a.typeId);
 
-export async function getInventory({ locations = 10, items = 15 } = {}) {
+// characterId opcional: solo el inventario de ese piloto (byCharacter siempre incluye a todos)
+export async function getInventory({ locations = 10, items = 15, characterId }: { locations?: number; items?: number; characterId?: number } = {}) {
+  const pilot = characterId ? eq(a.characterId, characterId) : undefined;
   const [totals] = await db
     .select({
       value,
@@ -23,7 +25,8 @@ export async function getInventory({ locations = 10, items = 15 } = {}) {
       assetsUpdatedAt: max(a.updatedAt),
     })
     .from(a)
-    .leftJoin(p, priced);
+    .leftJoin(p, priced)
+    .where(pilot);
 
   const byCharacter = await db
     .select({ characterId: a.characterId, name: characters.name, value, updatedAt: max(a.updatedAt) })
@@ -43,6 +46,7 @@ export async function getInventory({ locations = 10, items = 15 } = {}) {
     .from(a)
     .leftJoin(p, priced)
     .leftJoin(locationName, eq(locationName.id, a.rootLocationId))
+    .where(pilot)
     .groupBy(a.rootLocationId)
     .orderBy(desc(value));
 
@@ -57,6 +61,7 @@ export async function getInventory({ locations = 10, items = 15 } = {}) {
     .from(a)
     .leftJoin(p, priced)
     .leftJoin(itemName, eq(itemName.id, a.typeId))
+    .where(pilot)
     .groupBy(a.typeId)
     .orderBy(desc(value))
     .limit(items);

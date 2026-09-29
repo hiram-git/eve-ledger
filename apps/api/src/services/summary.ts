@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, min, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, min, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, walletJournal } from '../db/schema';
 import { ACTIVITIES, activityOf, foldBy, foldTrading } from '../lib/activities';
@@ -27,21 +27,25 @@ const withNet = <T extends { income: number; expenses: number }>(r: T): T & { ne
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 // Ingresos, gastos y neto entre dos instantes, sin transferencias internas y con el trading como margen
-async function flowBetween(from: Date, to?: Date) {
+async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date) {
   const rows = await db
     .select({ activity, income, expenses })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), to ? lt(walletJournal.date, to) : undefined, eq(isInternal, 0)))
+    .where(and(gte(walletJournal.date, from), to ? lt(walletJournal.date, to) : undefined, eq(isInternal, 0), pilot))
     .groupBy(activity);
   return foldTrading(rows);
 }
 
-export async function getSummary(days: number) {
+// characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos siguen
+// sin contar (mover ISK no es ganarlo); la lista de pilotos se devuelve siempre completa.
+export async function getSummary(days: number, characterId?: number) {
   const now = new Date();
   // Desde el inicio del día UTC, para que el primer día de la serie esté completo
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
-  const inPeriod = and(gte(walletJournal.date, from), eq(isInternal, 0));
+  const pilot = characterId ? eq(walletJournal.characterId, characterId) : undefined;
+  const allPilots = and(gte(walletJournal.date, from), eq(isInternal, 0));
+  const inPeriod = and(allPilots, pilot);
 
   const activityRows = await db
     .select({ activity, income, expenses, count: sql<number>`count(*)` })
@@ -51,12 +55,12 @@ export async function getSummary(days: number) {
   const totals = foldTrading(activityRows);
 
   // «Hoy» = día de EVE en curso (desde 00:00 UTC) y el período anterior de igual duración
-  const today = await flowBetween(todayStart);
+  const today = await flowBetween(pilot, todayStart);
   const previousFrom = new Date(from.getTime() - days * DAY_MS);
-  const previous = await flowBetween(previousFrom, from);
+  const previous = await flowBetween(pilot, previousFrom, from);
 
   // Cobertura: el historial empieza con el primer movimiento guardado, no con el período pedido
-  const [first] = await db.select({ at: min(walletJournal.date) }).from(walletJournal);
+  const [first] = await db.select({ at: min(walletJournal.date) }).from(walletJournal).where(pilot);
   const firstEntryAt = first?.at ?? null;
   const coveredDays = !firstEntryAt
     ? 0
@@ -69,12 +73,12 @@ export async function getSummary(days: number) {
   const [internal] = await db
     .select({ volume: income })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), eq(isInternal, 1)));
+    .where(and(gte(walletJournal.date, from), eq(isInternal, 1), pilot));
 
   const byCharacterRows = await db
     .select({ characterId: walletJournal.characterId, activity, income, expenses })
     .from(walletJournal)
-    .where(inPeriod)
+    .where(allPilots)
     .groupBy(walletJournal.characterId, activity);
 
   const refType = walletJournal.refType;
@@ -126,7 +130,8 @@ export async function getSummary(days: number) {
   return {
     period: { days, from, to: now },
     totals: totals as Totals,
-    balance: perCharacter.reduce((n, c) => n + (c.balance ?? 0), 0),
+    characterId: characterId ?? null,
+    balance: perCharacter.filter((c) => !characterId || c.id === characterId).reduce((n, c) => n + (c.balance ?? 0), 0),
     internalTransfers: internal.volume,
     characters: perCharacter,
     // Por actividad, con ingresos y gastos brutos (el margen del trading es su neto) y su detalle por ref_type
@@ -147,6 +152,6 @@ export async function getSummary(days: number) {
     today,
     previous: { ...previous, complete: previousComplete },
     coverage: { firstEntryAt, coveredDays },
-    market: await marketReview(from),
+    market: await marketReview(from, characterId),
   };
 }
