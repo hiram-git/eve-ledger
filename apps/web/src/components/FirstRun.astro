@@ -1,0 +1,160 @@
+---
+// Primer uso, sin pilotos vinculados: qué responde el ledger, los tres pasos y por qué hay prisa
+// (ESI solo guarda ~30 días de wallet). La única acción es vincular el primer piloto.
+import Icon from './Icon.astro';
+import { loginUrl } from '../lib/api';
+import { getLang, t } from '../lib/i18n';
+
+interface Props {
+  slots: number;
+}
+const { slots } = Astro.props;
+const m = t(getLang(Astro));
+
+const steps = [
+  { icon: 'plus', title: m.step1Title, text: m.step1 },
+  { icon: 'refresh', title: m.step2Title, text: m.step2 },
+  { icon: 'users', title: m.step3Title(slots), text: m.step3 },
+] as const;
+---
+
+<section class="panel first-run" aria-labelledby="first-run-title">
+  <div class="intro">
+    <h2 id="first-run-title">{m.firstRunTitle}</h2>
+    <p class="lead">{m.firstRunLead}</p>
+    <a class="primary-button" href={loginUrl}>
+      <Icon name="plus" />
+      {m.firstRunCta}
+    </a>
+  </div>
+
+  <ol class="steps" aria-label={m.firstRunSteps}>
+    {
+      steps.map((s, i) => (
+        <li class:list={{ current: i === 0 }}>
+          <Icon name={s.icon} />
+          <div>
+            <h3>{s.title}</h3>
+            <p>{s.text}</p>
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+
+  <div class="notice warning retention">
+    <Icon name="clock" />
+    <p><strong>{m.retentionTitle}.</strong> {m.retention}</p>
+  </div>
+
+  <p class="privacy">
+    <Icon name="info" />
+    <span>{m.privacyA} <strong>{m.privacyRead}</strong> {m.privacyB}</span>
+  </p>
+</section>
+
+<style>
+  .first-run {
+    display: grid;
+    gap: 24px;
+    padding: 36px 36px 28px;
+  }
+  .intro {
+    display: grid;
+    justify-items: start;
+    gap: 14px;
+    max-width: 44rem;
+  }
+  h2 {
+    margin: 0;
+    font-size: 26px;
+    line-height: 1.2;
+    font-weight: 600;
+    color: var(--text);
+    text-wrap: balance;
+  }
+  .lead {
+    margin: 0 0 6px;
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .steps li {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-2);
+  }
+  /* El paso en el que estás: estado, por eso en cian */
+  .steps li.current {
+    border-color: var(--cyan-dim);
+  }
+  .steps li.current > :global(.icon) {
+    color: var(--cyan);
+  }
+  .steps :global(.icon) {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+    color: var(--text-muted);
+  }
+  h3 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .steps p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .retention p {
+    margin: 0;
+    line-height: 1.5;
+  }
+  .privacy {
+    display: flex;
+    gap: 10px;
+    margin: 0;
+    max-width: 48rem;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+  .privacy :global(.icon) {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+  }
+  .privacy strong {
+    color: var(--text-secondary);
+  }
+  @media (max-width: 860px) {
+    .steps {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 600px) {
+    .first-run {
+      padding: 24px 18px 20px;
+      gap: 20px;
+    }
+    h2 {
+      font-size: 21px;
+    }
+  }
+</style>

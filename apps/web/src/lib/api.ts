@@ -30,7 +30,7 @@ export type Summary = {
     balance: number | null;
     balanceAt: string | null;
   })[];
-  // Brutos por actividad; en el trading, su neto es el margen que entra en totals
+  // Brutos por actividad (totals también es bruto); el neto del trading es su margen
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
   daily: (Flow & { date: string })[];
   today: Flow;

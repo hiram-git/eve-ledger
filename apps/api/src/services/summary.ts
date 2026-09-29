@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, lt, min, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, walletJournal } from '../db/schema';
-import { ACTIVITIES, activityOf, foldBy, foldTrading } from '../lib/activities';
+import { ACTIVITIES, activityOf } from '../lib/activities';
 import { marketReview } from './transactions';
 
 const DAY_MS = 86_400_000;
@@ -26,14 +26,14 @@ const withNet = <T extends { income: number; expenses: number }>(r: T): T & { ne
 // Fecha UTC (hora de EVE) en formato YYYY-MM-DD
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
-// Ingresos, gastos y neto entre dos instantes, sin transferencias internas y con el trading como margen
+// Ingresos, gastos y neto entre dos instantes, sin transferencias internas. Brutos: las compras de
+// mercado son gasto y las ventas ingreso; el margen del trading solo se muestra en byActivity
 async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date) {
-  const rows = await db
-    .select({ activity, income, expenses })
+  const [row] = await db
+    .select({ income, expenses })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), to ? lt(walletJournal.date, to) : undefined, eq(isInternal, 0), pilot))
-    .groupBy(activity);
-  return foldTrading(rows);
+    .where(and(gte(walletJournal.date, from), to ? lt(walletJournal.date, to) : undefined, eq(isInternal, 0), pilot));
+  return withNet(row);
 }
 
 // characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos siguen
@@ -52,7 +52,10 @@ export async function getSummary(days: number, characterId?: number) {
     .from(walletJournal)
     .where(inPeriod)
     .groupBy(activity);
-  const totals = foldTrading(activityRows);
+  const totals = withNet({
+    income: activityRows.reduce((n, r) => n + r.income, 0),
+    expenses: activityRows.reduce((n, r) => n + r.expenses, 0),
+  });
 
   // «Hoy» = día de EVE en curso (desde 00:00 UTC) y el período anterior de igual duración
   const today = await flowBetween(pilot, todayStart);
@@ -75,11 +78,11 @@ export async function getSummary(days: number, characterId?: number) {
     .from(walletJournal)
     .where(and(gte(walletJournal.date, from), eq(isInternal, 1), pilot));
 
-  const byCharacterRows = await db
-    .select({ characterId: walletJournal.characterId, activity, income, expenses })
+  const byCharacter = await db
+    .select({ characterId: walletJournal.characterId, income, expenses })
     .from(walletJournal)
     .where(allPilots)
-    .groupBy(walletJournal.characterId, activity);
+    .groupBy(walletJournal.characterId);
 
   const refType = walletJournal.refType;
   const byRefType = await db
@@ -89,14 +92,10 @@ export async function getSummary(days: number, characterId?: number) {
     .groupBy(refType);
 
   const day = sql<string>`date(${walletJournal.date}, 'unixepoch')`;
-  const dailyRows = await db
-    .select({ day, activity, income, expenses })
-    .from(walletJournal)
-    .where(inPeriod)
-    .groupBy(day, activity);
+  const dailyRows = await db.select({ day, income, expenses }).from(walletJournal).where(inPeriod).groupBy(day);
 
   // Serie diaria completa, con ceros en los días sin movimientos
-  const dailyMap = foldBy(dailyRows, (r) => r.day);
+  const dailyMap = new Map(dailyRows.map((r) => [r.day, r]));
   const daily = Array.from({ length: days }, (_, i) => {
     const d = isoDay(new Date(from.getTime() + i * DAY_MS));
     return withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0 });
@@ -104,7 +103,7 @@ export async function getSummary(days: number, characterId?: number) {
 
   // Saldo = el balance del último movimiento sincronizado de cada personaje
   const chars = await db.select({ id: characters.id, name: characters.name, lastSyncAt: characters.lastSyncAt }).from(characters);
-  const charMap = foldBy(byCharacterRows, (r) => r.characterId);
+  const charMap = new Map(byCharacter.map((r) => [r.characterId, r]));
   const perCharacter = await Promise.all(
     chars.map(async (c) => {
       const [last] = await db
@@ -134,7 +133,7 @@ export async function getSummary(days: number, characterId?: number) {
     balance: perCharacter.filter((c) => !characterId || c.id === characterId).reduce((n, c) => n + (c.balance ?? 0), 0),
     internalTransfers: internal.volume,
     characters: perCharacter,
-    // Por actividad, con ingresos y gastos brutos (el margen del trading es su neto) y su detalle por ref_type
+    // Por actividad, con brutos y detalle por ref_type; el neto del trading es su margen
     byActivity: ACTIVITIES.map((a) => {
       const row = activityRows.find((r) => r.activity === a);
       return withNet({

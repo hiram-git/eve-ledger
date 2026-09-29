@@ -45,34 +45,3 @@ export const activityOf = (refType: SQL | { getSQL(): SQL }) =>
     when ${refType} in (${list(REF_TYPES.pvp)}) then 'pvp'
     when ${refType} in (${list(REF_TYPES.trading)}) then 'trading'
     else 'other' end)`;
-
-type Flow = { income: number; expenses: number };
-
-// El trading cuenta como margen neto: ventas − compras − comisiones del mismo ámbito
-// (período, día o piloto). Si el margen es positivo suma a ingresos; si es negativo, a gastos.
-// El neto no cambia; solo evita que mover ISK por el mercado infle ingresos y gastos.
-export function foldTrading(rows: (Flow & { activity: Activity })[]): Flow & { net: number } {
-  let income = 0;
-  let expenses = 0;
-  for (const r of rows) {
-    if (r.activity === 'trading') {
-      const margin = r.income - r.expenses;
-      if (margin > 0) income += margin;
-      else expenses -= margin;
-    } else {
-      income += r.income;
-      expenses += r.expenses;
-    }
-  }
-  return { income, expenses, net: income - expenses };
-}
-
-// foldTrading por grupos (día, personaje…)
-export function foldBy<K, R extends Flow & { activity: Activity }>(rows: R[], key: (r: R) => K) {
-  const groups = new Map<K, R[]>();
-  for (const r of rows) {
-    const k = key(r);
-    groups.set(k, [...(groups.get(k) ?? []), r]);
-  }
-  return new Map([...groups].map(([k, g]) => [k, foldTrading(g)]));
-}
