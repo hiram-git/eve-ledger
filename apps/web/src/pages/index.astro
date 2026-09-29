@@ -1,5 +1,8 @@
 ---
+import { PILOT_SLOTS } from 'astro:env/server';
 import Base from '../layouts/Base.astro';
+import FirstRun from '../components/FirstRun.astro';
+import FirstSync from '../components/FirstSync.astro';
 import DailyChart from '../components/DailyChart.astro';
 import Icon from '../components/Icon.astro';
 import NewEdenMap from '../components/NewEdenMap.astro';
@@ -13,7 +16,6 @@ import {
   getMap,
   getSummary,
   getSyncStatus,
-  loginUrl,
   syncLogUrl,
   type GeoMap,
   type Inventory,
@@ -58,6 +60,10 @@ try {
   apiError = err instanceof Error ? err.message : String(err);
 }
 const selected = pilotId ? summary?.characters.find((c) => c.id === pilotId) : undefined;
+// Primer uso: sin pilotos, o con pilotos pero ningún movimiento guardado todavía (primer sync)
+const noPilots = !!summary && summary.characters.length === 0;
+const waiting = !!summary && summary.characters.length > 0 && !pilotId && !summary.coverage.firstEntryAt;
+const dashboard = !!summary && summary.characters.length > 0 && !waiting;
 // Neto consolidado = suma de los netos por piloto (el trading se pliega por piloto, pero el neto es aditivo)
 const allNet = summary?.characters.reduce((n, c) => n + c.net, 0) ?? 0;
 
@@ -106,6 +112,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 ---
 
 <Base section="resumen" status={status} pilots={summary?.characters.length}>
+    {dashboard && (
     <nav class="main-nav shell" aria-label={m.period} slot="nav">
       <div class="nav-tabs">
         {
@@ -137,6 +144,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
         }
       </p>
     </nav>
+    )}
 
       <h1 class="sr-only">{selected ? m.summaryH1Pilot(selected.name, days) : m.summaryH1(days)}</h1>
 
@@ -157,7 +165,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
         )
       }
       {
-        summary && summary.characters.length > 0 && isStale(lastSync) && (
+        dashboard && isStale(lastSync) && (
           <div class="notice warning" role="status">
             <Icon name="alert" />
             <p>
@@ -193,18 +201,14 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       }
 
       {
-        summary && summary.characters.length === 0 && (
-          <div class="notice">
-            <Icon name="users" />
-            <p>
-              {m.noPilots} <a href={loginUrl}>{m.linkFirst}</a> {m.thenSync}
-            </p>
-          </div>
-        )
+        noPilots && <FirstRun slots={PILOT_SLOTS} />
+      }
+      {
+        waiting && <FirstSync pilots={summary!.characters} slots={PILOT_SLOTS} />
       }
 
       {
-        summary && summary.characters.length > 0 && (
+        dashboard && summary && (
           <>
             <nav class="pilot-strip" aria-label={m.filterByPilot}>
               <ul>

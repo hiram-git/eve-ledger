@@ -1,0 +1,136 @@
+---
+// Pilotos vinculados pero sin ningún movimiento de wallet guardado todavía: en vez de un
+// dashboard lleno de ceros, el estado de cada piloto y qué hacer si no llega nada.
+import Icon from './Icon.astro';
+import { loginUrl, type Summary } from '../lib/api';
+import { getLang, t } from '../lib/i18n';
+
+interface Props {
+  pilots: Summary['characters'];
+  slots: number;
+}
+const { pilots, slots } = Astro.props;
+const m = t(getLang(Astro));
+const pending = pilots.some((p) => !p.lastSyncAt);
+---
+
+<section class="panel first-sync" aria-labelledby="first-sync-title" data-pending={pending ? '' : undefined}>
+  <h2 id="first-sync-title">{m.waitingTitle}</h2>
+  <p class="lead">{m.waitingLead}</p>
+  <ul>
+    {
+      pilots.map((p) => (
+        <li>
+          <span class="name">{p.name}</span>
+          <span class:list={['state', { pending: !p.lastSyncAt }]}>
+            <Icon name={p.lastSyncAt ? 'activity' : 'clock'} />
+            {p.lastSyncAt ? m.waitingEmpty : m.waitingPending}
+          </span>
+        </li>
+      ))
+    }
+  </ul>
+  <p class="hint">
+    {pending && <>{m.waitingAuto} </>}
+    {m.waitingHint}
+  </p>
+  <div class="actions">
+    {
+      pilots.length < slots && (
+        <a class="secondary-button" href={loginUrl}>
+          <Icon name="plus" />
+          {m.linkPilot}
+        </a>
+      )
+    }
+    <a class="secondary-button" href="/pilotos">
+      <Icon name="users" />
+      {m.managePilots}
+    </a>
+  </div>
+</section>
+
+<script>
+  // Mientras algún piloto hace su primer sync, recargar cada 15 s (como mucho 2 min)
+  if (document.querySelector('.first-sync[data-pending]')) {
+    const tries = Number(sessionStorage.getItem('first-sync-reload') ?? 0);
+    if (tries < 8) {
+      setTimeout(() => {
+        sessionStorage.setItem('first-sync-reload', String(tries + 1));
+        location.reload();
+      }, 15_000);
+    }
+  } else {
+    sessionStorage.removeItem('first-sync-reload');
+  }
+</script>
+
+<style>
+  .first-sync {
+    display: grid;
+    justify-items: start;
+    gap: 14px;
+    padding: 32px 36px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .lead,
+  .hint {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .hint {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  ul {
+    display: grid;
+    width: 100%;
+    max-width: 36rem;
+    margin: 4px 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .name {
+    color: var(--text);
+    font-weight: 500;
+  }
+  .state {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .state.pending {
+    color: var(--cyan);
+  }
+  .state :global(.icon) {
+    width: 14px;
+    height: 14px;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  @media (max-width: 600px) {
+    .first-sync {
+      padding: 24px 18px;
+    }
+  }
+</style>

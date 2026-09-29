@@ -82,13 +82,18 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
             </span>
           )
         }
-        <form method="post" action="/sync" class="sync-form">
-          <input type="hidden" name="back" value={backPath} />
-          <button type="submit" class="primary-button" title={m.syncAllTitle}>
-            <Icon name="refresh" />
-            <span class="label">{m.syncAll}</span>
-          </button>
-        </form>
+        {
+          // Sin pilotos no hay nada que sincronizar: la única acción es vincular el primero
+          pilots !== 0 && (
+            <form method="post" action="/sync" class="sync-form">
+              <input type="hidden" name="back" value={backPath} />
+              <button type="submit" class="primary-button" title={m.syncAllTitle}>
+                <Icon name="refresh" />
+                <span class="label">{m.syncAll}</span>
+              </button>
+            </form>
+          )
+        }
       </div>
     </header>
 
