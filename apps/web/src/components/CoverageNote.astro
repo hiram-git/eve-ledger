@@ -1,85 +1,74 @@
 ---
-// Cobertura de una cifra que suma a todos los pilotos (Patrimonio, saldo de Omega): a quién incluye con
-// datos viejos, a quién deja fuera y qué inventario no se puede refrescar, cada uno con su acción.
-// No pinta nada si todos los pilotos están al día. Es un <div>: un <form> dentro de un <p> lo cerraría.
+// Cobertura de una cifra que suma a todos los pilotos (Patrimonio, saldo de Omega): cuánto de ella
+// viene de datos viejos, a quién deja fuera y qué inventario falta. Solo cuantifica: la causa y la
+// acción de cada piloto viven en un único sitio, la línea de salud bajo el filtro. No pinta nada si
+// todos los pilotos están al día.
+import Icon from './Icon.astro';
 import type { Pilot } from '../lib/api';
-import { ago } from '../lib/format';
+import { ago, isk } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { pilotState } from '../lib/pilot-state';
-import { loginUrl } from '../lib/api';
 
 interface Props {
   pilots: Pilot[];
   staleAfterMs: number;
   syncRunning?: boolean;
-  // Vuelta tras un Sincronizar de esta línea
-  back: string;
+  // Lo que aporta cada piloto a la cifra (saldo + inventario en Patrimonio, solo saldo en Omega)
+  amounts: Record<number, number>;
   // Solo saldo (Omega): el inventario que falta no le afecta
   walletOnly?: boolean;
 }
-const { pilots, staleAfterMs, syncRunning, back, walletOnly } = Astro.props;
+const { pilots, staleAfterMs, syncRunning, amounts, walletOnly } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 const ASSETS_SCOPE = 'esi-assets.read_assets.v1';
 
-type Item = { text: string; action: 'relink' | 'sync' | null; pilot: Pilot };
-const items: Item[] = [];
+let oldValue = 0;
+let oldest: string | null = null;
+const excluded: string[] = [];
+const noInventory: string[] = [];
 for (const p of pilots) {
   const st = pilotState(p, m, staleAfterMs, syncRunning);
-  const relink = st.kind === 'error' && st.hint === m.errToken;
-  if (!p.lastSyncAt) {
-    if (st.kind !== 'pending') items.push({ text: m.coverExcludes(p.name), action: 'sync', pilot: p });
-    else items.push({ text: m.coverExcludes(p.name), action: null, pilot: p });
-  } else if (st.kind !== 'ok') {
-    items.push({ text: m.coverIncludes(p.name, ago(p.lastSyncAt, lang)), action: relink ? 'relink' : 'sync', pilot: p });
-  }
-  if (!walletOnly && p.lastSyncAt && p.missingScopes.includes(ASSETS_SCOPE))
-    items.push({ text: m.coverNoAssets(p.name), action: 'relink', pilot: p });
+  if (!p.lastSyncAt) excluded.push(p.name);
+  else if (st.kind !== 'ok') {
+    oldValue += amounts[p.id] ?? 0;
+    if (!oldest || p.lastSyncAt < oldest) oldest = p.lastSyncAt;
+  } else if (!walletOnly && p.missingScopes.includes(ASSETS_SCOPE)) noInventory.push(p.name);
 }
-// Una acción por piloto: si ya va a revincular por el token, no se repite por el permiso
-const seen = new Set<string>();
-for (const i of items) {
-  const key = `${i.pilot.id}:${i.action}`;
-  if (i.action && seen.has(key)) i.action = null;
-  else seen.add(key);
-}
+const parts = [
+  // «hace 3 d» no se parte en dos líneas
+  oldValue !== 0 && oldest ? m.coverOld(isk(oldValue, { lang }), ago(oldest, lang).replace(/ /g, '\u00a0')) : null,
+  excluded.length ? m.coverExcludes(excluded.join(', ')) : null,
+  noInventory.length ? m.coverNoInventory(noInventory.join(', ')) : null,
+].filter(Boolean);
 ---
 
 {
-  items.length > 0 && (
-    <div class="coverage-note">
-      {items.map((i, n) => (
-        <span class="item">
-          {n > 0 && <span class="sep"> · </span>}
-          {i.text}
-          {i.action === 'relink' && (
-            <>
-              {' → '}
-              <a class="inline-action" href={loginUrl} title={m.relinkAs(i.pilot.name)} aria-label={m.relinkAs(i.pilot.name)}>{m.relink}</a>
-            </>
-          )}
-          {i.action === 'sync' && (
-            <form method="post" action="/sync" class="sync-form inline">
-              <input type="hidden" name="back" value={back} />
-              <input type="hidden" name="character" value={i.pilot.id} />
-              {' → '}
-              <button type="submit" class="inline-action" title={m.syncOneTitle(i.pilot.name)}>{m.syncOne}</button>
-            </form>
-          )}
-        </span>
-      ))}
-    </div>
+  parts.length > 0 && (
+    <p class="coverage-note">
+      <Icon name="alert" class="cover-icon" />
+      <span>{parts.join(' · ')}</span>
+    </p>
   )
 }
 
 <style>
+  /* Texto neutro con un icono ámbar pequeño: informa de cuánto, sin competir con la línea de salud */
   .coverage-note {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     margin: 0;
     font-size: 13px;
-    line-height: 1.6;
-    color: var(--warning);
+    line-height: 1.5;
+    color: var(--text-secondary);
+    text-wrap: pretty;
   }
-  .sep {
-    color: var(--text-muted);
+  .coverage-note :global(.cover-icon) {
+    flex-shrink: 0;
+    width: 13px;
+    height: 13px;
+    align-self: center;
+    color: var(--warning);
   }
 </style>

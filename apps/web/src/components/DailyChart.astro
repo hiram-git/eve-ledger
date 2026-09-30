@@ -8,8 +8,10 @@ interface Props {
   daily: Summary['daily'];
   // Primer día con historial (YYYY-MM-DD): lo anterior no es «cero», es «sin datos»
   firstDate?: string | null;
+  // Día del último sync de un piloto atascado (YYYY-MM-DD): lo posterior tampoco es «cero»
+  lastDate?: string | null;
 }
-const { daily, firstDate } = Astro.props;
+const { daily, firstDate, lastDate } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
@@ -19,6 +21,8 @@ const date = (iso: string) => shortDate(iso, lang);
 const out = (v: number) => (v ? -v : 0);
 
 const missing = firstDate ? daily.filter((d) => d.date < firstDate).length : 0;
+const trailing = lastDate ? daily.filter((d) => d.date > lastDate).length : 0;
+const known = (i: number) => i >= missing && i < daily.length - trailing;
 
 function niceStep(range: number, count = 4) {
   if (range <= 0) return 1;
@@ -54,8 +58,8 @@ const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i
 // Una sola parada de Tab (roving tabindex): entra por el último día con movimientos y se recorre con las flechas
 const hintId = 'daily-chart-hint';
 const hasActivity = (d: (typeof daily)[number]) => d.income > 0 || d.expenses > 0;
-const lastActive = daily.reduce((last, d, i) => (i >= missing && hasActivity(d) ? i : last), -1);
-const entry = lastActive >= 0 ? lastActive : daily.length - 1;
+const lastActive = daily.reduce((last, d, i) => (known(i) && hasActivity(d) ? i : last), -1);
+const entry = lastActive >= 0 ? lastActive : Math.max(missing, daily.length - 1 - trailing);
 // Cifras abreviadas (k/M/B) en el tooltip y para el lector de pantalla; las completas están en la tabla
 const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
 // Tabla: cifra completa sin repetir «ISK» en cada celda (la unidad va en el encabezado)
@@ -90,10 +94,18 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
         </div>
       )
     }
+    {
+      trailing > 0 && (
+        <div class="nodata-band after" style={`width:${(trailing / daily.length) * 100}%`}>
+          {/* Con pocos días la franja es estrecha: la etiqueta solo si cabe */}
+          {trailing / daily.length >= 0.15 && <span>{m.noSyncData}</span>}
+        </div>
+      )
+    }
     <div class="cols" role="list">
       {
         daily.map((d, i) => (
-          i < missing ? (
+          !known(i) ? (
             <div class="col nodata" aria-hidden="true" />
           ) : (
           <div
@@ -317,7 +329,7 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
     outline: 2px solid var(--cyan);
     outline-offset: -1px;
   }
-  /* Días anteriores al primer sync: textura diagonal, sin barras ni tooltip */
+  /* Día sin movimientos: una marca corta en el eje */
   .zero-mark {
     position: absolute;
     left: 25%;
@@ -327,9 +339,12 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
     border-radius: 1px;
     background: var(--text-muted);
   }
+  /* Días sin datos (antes del primer sync o después del último de un piloto atascado): textura diagonal,
+     sin barras ni tooltip */
   .nodata-band {
     position: absolute;
     inset: 0 auto 0 0;
+    overflow: hidden;
     display: grid;
     place-items: center;
     border-radius: 4px;
@@ -337,7 +352,11 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
     border: 1px dashed var(--line-strong);
     pointer-events: none;
   }
+  .nodata-band.after {
+    inset: 0 0 0 auto;
+  }
   .nodata-band span {
+    white-space: nowrap;
     padding: 2px 8px;
     border-radius: 4px;
     background: var(--panel);

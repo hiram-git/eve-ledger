@@ -148,10 +148,12 @@ export type Indicators = {
     missing: number | null;
     surplus: number | null;
     progress: number | null;
-    accountsCovered: number | null;
     avgDailyNet: number;
     paceDays: number;
-    daysToCover: number | null;
+    // Coste de un mes de Omega repartido en 30 días, y qué parte de él paga tu ritmo diario
+    costPerDay: number | null;
+    paceShare: number | null;
+    balances: { characterId: number; balance: number | null }[];
   };
 };
 export const getIndicators = () => call<Indicators>('/indicators');

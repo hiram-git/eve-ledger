@@ -28,7 +28,7 @@ import {
 } from '../lib/api';
 import { ago, isk, iskFull, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
-import { pilotState } from '../lib/pilot-state';
+import { hasIssue, pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -99,9 +99,12 @@ const isStale = (iso: string | null | undefined) => !iso || Date.now() - new Dat
 // Pilotos que necesitan atención: el mismo estado que en /pilotos (error, primer sync o datos viejos),
 // con su causa corta y la acción que toca, en una línea bajo el filtro
 const pilotStates = new Map((pilotList ?? []).map((p) => [p.id, pilotState(p, m, staleAfterMs, status?.running)]));
+const pilotById = new Map((pilotList ?? []).map((p) => [p.id, p]));
+// La línea de salud es el único sitio con causa y acción: sync roto o viejo, sin primer sync o sin permiso
 const needsAttention = (c: { id: number; lastSyncAt: string | null }) => {
   const st = pilotStates.get(c.id);
-  return st ? st.kind !== 'ok' : isStale(c.lastSyncAt);
+  const p = pilotById.get(c.id);
+  return st && p ? hasIssue(p, st) : isStale(c.lastSyncAt);
 };
 type HealthAction = 'relink' | 'sync' | 'review' | null;
 const healthItems =
@@ -112,12 +115,19 @@ const healthItems =
     if (st.kind === 'error') {
       const token = st.hint === m.errToken;
       const kinds: Record<string, string> = { journal: m.kindJournal, transactions: m.kindTransactions, assets: m.kindAssets };
-      const raw = pilotList?.find((p) => p.id === c.id)?.lastError?.kind ?? '';
+      const raw = pilotById.get(c.id)?.lastError?.kind ?? '';
       return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kinds[raw] ?? raw), action: token ? 'relink' : 'review' };
     }
+    // Sync al día, pero le falta un permiso (el de inventario): se arregla revinculando
+    if (st.kind === 'ok') return { id: c.id, name: c.name, cause: m.healthNoAssets, action: 'relink' };
     return { id: c.id, name: c.name, cause: c.lastSyncAt ? m.healthStale(rel(c.lastSyncAt)) : m.healthNoFirst, action: 'sync' };
   }) ?? [];
-const freshCount = summary ? summary.characters.length - healthItems.length : 0;
+// Pilotos con el sync al día (un permiso que falta no cuenta aquí: no hace viejos los datos)
+const freshCount =
+  summary?.characters.filter((c) => {
+    const st = pilotStates.get(c.id);
+    return st ? st.kind === 'ok' : !isStale(c.lastSyncAt);
+  }).length ?? 0;
 // Estado del piloto filtrado: si está roto o viejo, toda la tarjeta de Neto lo dice
 const selectedState = selected ? pilotStates.get(selected.id) : undefined;
 const selectedBroken = !!selectedState && selectedState.kind !== 'ok';
@@ -125,11 +135,19 @@ const selectedBroken = !!selectedState && selectedState.kind !== 'ok';
 const pilotEmpty = !!selected && !selected.lastSyncAt;
 // Su acción ya está en el estado vacío: la línea de salud no la repite
 const healthShown = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id) : healthItems;
-// Consolidado: parte del neto que viene de pilotos con datos viejos o rotos (el neto no cambia, se dice)
-const staleShares = !selected
+// Consolidado: cuánto del neto viene de pilotos con datos viejos o rotos. Una sola línea que cuantifica
+// (el neto no cambia de color; quién y por qué está en la línea de salud)
+const staleNetPilots = !selected
   ? (summary?.characters ?? []).filter((c) => c.lastSyncAt && c.net !== 0 && pilotStates.get(c.id) && pilotStates.get(c.id)!.kind !== 'ok')
   : [];
-const walletsBehind = !selected && (pilotList ?? []).some((p) => pilotStates.get(p.id)?.kind !== 'ok');
+const staleNet = staleNetPilots.reduce((n, c) => n + c.net, 0);
+const staleNetOldest = staleNetPilots.map((c) => c.lastSyncAt!).sort()[0];
+// «hace 3 d» no se parte en dos líneas
+const nbsp = (text: string) => text.replace(/ /g, '\u00a0');
+// Vista de un piloto con el sync atascado: «Hoy» no es cero, es desconocido; el gráfico acaba en su último sync
+const todayUnknown =
+  !!selected && selectedBroken && !!selected.lastSyncAt && selected.lastSyncAt.slice(0, 10) < new Date().toISOString().slice(0, 10);
+const chartLastDate = selected && selectedBroken && selected.lastSyncAt ? selected.lastSyncAt.slice(0, 10) : null;
 // Conciliación de la revisión de mercado: lo que dice el wallet (market_transaction del journal)
 const walletMarket = summary?.byActivity
   .find((a) => a.activity === 'trading')
@@ -175,13 +193,37 @@ const locationRows: BarRow[] =
 // Lo más valioso: los 6 primeros (8 si el mapa comparte la columna de al lado); el detalle completo está en GET /assets
 const valuableItems = inventory?.topItems.slice(0, mapBelow ? 8 : 6).map((i) => ({ ...i, isk: i.value })) ?? [];
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
+// Lo que aporta cada piloto a Patrimonio (saldo + inventario): la nota de cobertura dice cuánto es viejo
+const worthByPilot: Record<number, number> = Object.fromEntries(
+  (summary?.characters ?? []).map((c) => [c.id, (c.balance ?? 0) + (inventoryByChar.get(c.id) ?? 0)]),
+);
+// Vista de un piloto que no está al día (o sin permiso de inventario): de cuándo son su saldo y su inventario
+const selectedPilot = selected ? pilotById.get(selected.id) : undefined;
+const selectedNoAssets = !!selectedPilot?.missingScopes.includes('esi-assets.read_assets.v1');
+const selectedInvAt = selected ? inventory?.byCharacter.find((c) => c.characterId === selected.id)?.updatedAt : undefined;
+const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+const worthNote =
+  selected && selected.lastSyncAt && (selectedBroken || selectedNoAssets)
+    ? capitalize(
+        [
+          selectedBroken ? m.worthStaleBalance(rel(selected.lastSyncAt)) : null,
+          selectedInvAt
+            ? m.worthStaleInventory(rel(selectedInvAt)) + (selectedNoAssets ? ` (${m.scopeMissingShort})` : '')
+            : selectedNoAssets
+              ? m.coverNoInventory(selected.name)
+              : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      )
+    : '';
 ---
 
 <Base
   section="resumen"
   status={status}
   pilots={summary?.characters.length}
-  pilotIssues={[...pilotStates.values()].filter((st) => st.kind !== 'ok').length}
+  pilotIssues={(pilotList ?? []).filter((p) => hasIssue(p, pilotStates.get(p.id)!)).length}
 >
     {dashboard && (
     <nav class="main-nav shell" aria-label={m.period} slot="nav">
@@ -313,7 +355,12 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
               const all = strip?.querySelector<HTMLElement>('li');
               if (strip && active && all && active.parentElement !== all && strip.scrollWidth > strip.clientWidth) {
-                strip.scrollLeft = active.parentElement!.offsetLeft - strip.offsetLeft - all.offsetWidth - 8;
+                const want = active.parentElement!.offsetLeft - strip.offsetLeft - all.offsetWidth;
+                const max = strip.scrollWidth - strip.clientWidth;
+                // Si el chip activo es de los últimos, la fila no llega a ponerlo junto a «Todos» y el anterior
+                // asomaría a medias bajo «Todos» (se leería «40 M» sin su signo): se alarga el final de la fila
+                if (want > max) strip.style.paddingRight = `${parseFloat(getComputedStyle(strip).paddingRight) + want - max}px`;
+                strip.scrollLeft = want;
               }
             </script>
 
@@ -407,12 +454,15 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                           <p class="versus">{firstHistory ? m.noPreviousSince(firstHistory, days) : m.noPrevious(days)}</p>
                         )
                       }
-                      {staleShares.map((c) => (
-                        <p class="versus stale-share">
+                      {staleNet !== 0 && staleNetOldest && (
+                        <p
+                          class="versus stale-share"
+                          title={staleNetPilots.map((c) => `${c.name}: ${fmt(c.net, { sign: true })} (${rel(c.lastSyncAt)})`).join(' · ')}
+                        >
                           <Icon name="alert" class="stale-icon" />
-                          {m.netIncludesStale(fmt(c.net, { sign: true }), c.name, rel(c.lastSyncAt))}
+                          {m.netStaleShare(fmt(staleNet, { sign: true }), nbsp(rel(staleNetOldest)))}
                         </p>
-                      ))}
+                      )}
                     </div>
                     <div class="fig today" title={m.todayTitle(full(summary.today.net))}>
                       <span class="label">
@@ -429,50 +479,25 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <p class="versus">
                         {summary.today.income || summary.today.expenses
                           ? m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))
-                          : m.todayNone}
+                          : todayUnknown
+                            ? m.todayNoData
+                            : m.todayNone}
                       </p>
                       {
                         selected ? (
-                          /* Un solo piloto: su propia frescura y, si está roto, la causa y la acción */
-                          <div class:list={['versus', 'asof', { stale: selectedBroken || isStale(lastSync) }]}>
-                            {(selectedBroken || isStale(lastSync)) && <Icon name="alert" class="stale-icon" />}
-                            {selectedState?.kind === 'pending' ? (
-                              m.statePending
-                            ) : !lastSync ? (
-                              <>
-                                {m.asOfNoFirst} · <a href="/pilotos">{m.syncOne}</a>
-                              </>
-                            ) : selectedState?.kind === 'error' ? (
-                              <>
-                                {m.asOfBroken('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>{' '}
-                                <span class="keep">
-                                  · {selectedState.text} ·{' '}
-                                  {selectedState.hint === m.errToken ? (
-                                    <a class="inline-action" href={loginUrl} title={m.relinkAs(selected.name)} aria-label={m.relinkAs(selected.name)}>{m.relink}</a>
-                                  ) : (
-                                    <a class="inline-action" href="/pilotos">{m.healthReview}</a>
-                                  )}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                {m.asOfSync('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
-                                {isStale(lastSync) && (
-                                  <form method="post" action="/sync" class="sync-form inline">
-                                    <input type="hidden" name="back" value={href(days, pilotId)} />
-                                    <input type="hidden" name="character" value={selected.id} />
-                                    {' · '}
-                                    <button type="submit" class="inline-action" title={m.syncOneTitle(selected.name)}>{m.syncOne}</button>
-                                  </form>
-                                )}
-                              </>
-                            )}
-                          </div>
+                          /* Un solo piloto: de cuándo son sus datos. La causa y la acción están en la línea de salud */
+                          lastSync && (
+                            <p class:list={['versus', 'asof', { stale: selectedBroken }]}>
+                              {selectedBroken && <Icon name="alert" class="stale-icon" />}
+                              {selectedBroken ? m.asOfBroken('') : m.asOfSync('')}
+                              <time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
+                            </p>
+                          )
                         ) : (
                           lastSync && (
-                            /* Consolidado: cuántos pilotos están al día, no solo el sync más reciente */
-                            <p class:list={['versus', 'asof', { stale: isStale(lastSync) || freshCount < summary.characters.length }]}>
-                              {(isStale(lastSync) || freshCount < summary.characters.length) && <Icon name="alert" class="stale-icon" />}
+                            /* Consolidado: cuántos pilotos están al día, en gris; ámbar solo si todo el ledger está viejo */
+                            <p class:list={['versus', 'asof', { stale: isStale(lastSync) }]}>
+                              {isStale(lastSync) && <Icon name="alert" class="stale-icon" />}
                               {freshCount < summary.characters.length
                                 ? m.asOfPartial(freshCount, summary.characters.length, '')
                                 : m.asOfSync('')}
@@ -539,7 +564,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   )}
                 </div>
               </div>
-              <div class:list={['panel', 'stat', 'worth', { compact: !showMap }]}>
+              <div class:list={['panel', 'stat', 'worth', { compact: !showMap, stale: selectedBroken }]}>
                 <div class="worth-head">
                   <div>
                     <span class="label">
@@ -556,7 +581,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <dt>
                         <i class="key balance" />
                         {m.wallets}
-                        {walletsBehind && <Icon name="alert" class="stale-icon" />}
                       </dt>
                       <dd title={full(summary.balance)}>{fmt(summary.balance)}</dd>
                     </div>
@@ -572,7 +596,13 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   </dl>
                 </div>
                 {!selected && pilotList && (
-                  <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} back={href(days)} />
+                  <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} />
+                )}
+                {worthNote && (
+                  <p class="worth-note">
+                    <Icon name="alert" class="stale-icon" />
+                    {worthNote}
+                  </p>
                 )}
                 {showMap && geo && <NewEdenMap map={geo} />}
               </div>
@@ -580,13 +610,13 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             )}
 
             {!pilotEmpty && (
-            <section class="panel">
+            <section class:list={['panel', { 'chart-stale': selectedBroken }]}>
               <div class="panel-heading">
                 <h2>{m.dailyFlow}</h2>
                 <span class="meta">{m.eveTimeUtc}</span>
               </div>
               <div class="panel-body">
-                <DailyChart daily={summary.daily} firstDate={firstDate} />
+                <DailyChart daily={summary.daily} firstDate={firstDate} lastDate={chartLastDate} />
               </div>
             </section>
             )}
@@ -1032,6 +1062,8 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .versus {
     font-size: 13px;
     color: var(--text-muted);
+    /* Sin una palabra suelta en la última línea («… hace 3 / d») */
+    text-wrap: pretty;
   }
   .asof {
     display: block;
@@ -1120,16 +1152,32 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     margin-right: 6px;
     vertical-align: -2px;
   }
+  /* Cuantifica sin alarmar: texto neutro, el icono pequeño es la única marca ámbar */
   .stale-share {
-    color: var(--warning);
+    color: var(--text-secondary);
   }
-  .worth dt :global(.stale-icon) {
-    margin-left: 4px;
-    vertical-align: -2px;
-  }
-  .worth :global(.coverage-note) {
+  .worth :global(.coverage-note),
+  .worth-note {
     flex-basis: 100%;
     margin-top: 10px;
+  }
+  .worth-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  /* Piloto filtrado que no está al día: su patrimonio se apaga como su neto */
+  .worth.stale .value,
+  .worth.stale dd {
+    color: var(--text-secondary);
+  }
+  /* …y su gráfico diario también (la franja «Sin sync» marca los días posteriores a su último sync) */
+  .chart-stale :global(.plot),
+  .chart-stale :global(.legend) {
+    filter: saturate(0.15);
+    opacity: 0.75;
   }
   .empty-pilot .secondary-button {
     min-height: 40px;

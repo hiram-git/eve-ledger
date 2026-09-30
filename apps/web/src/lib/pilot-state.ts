@@ -18,6 +18,10 @@ export function explainError(message: string, m: Messages): string {
 // o el sync nunca se lanzó. Si hay un sync en marcha ahora mismo, sí puede ser el suyo
 const FIRST_SYNC_GRACE_MS = 10 * 60_000;
 
+// Necesita atención: el sync no está al día o le falta algún permiso (ambas cosas se arreglan desde Pilotos).
+// Es lo que cuenta el punto ámbar de «Pilotos» en la navegación
+export const hasIssue = (p: Pilot, st: PilotState) => st.kind !== 'ok' || p.missingScopes.length > 0;
+
 // Estado de sync de un piloto: el mismo en la página de Pilotos y en la línea de avisos del resumen
 export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunning = false): PilotState {
   if (p.lastError) {

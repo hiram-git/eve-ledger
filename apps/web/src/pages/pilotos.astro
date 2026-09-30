@@ -17,7 +17,7 @@ import {
 } from '../lib/api';
 import { ago, isk, iskFull, longDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
-import { pilotState } from '../lib/pilot-state';
+import { hasIssue, pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -80,7 +80,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
   section="pilotos"
   status={status}
   pilots={pilots.length}
-  pilotIssues={rows.filter((r) => r.state.kind !== 'ok').length}
+  pilotIssues={rows.filter((r) => hasIssue(r, r.state)).length}
 >
   <div class="page-head" data-pending={pending ? '1' : undefined}>
     <div>
@@ -239,7 +239,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
             <div class="actions">
               {p.missingScopes.length > 0 || p.state.kind === 'error' ? (
                 <a class="secondary-button" href={loginUrl} title={m.relinkAs(p.name)} aria-label={m.relinkAs(p.name)}>
-                  <Icon name="refresh" />
+                  <Icon name="login" />
                   {m.relink}
                 </a>
               ) : (
@@ -392,8 +392,10 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
   }
   .since {
     margin-top: 2px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
+    /* «Vinculado 16 sept 2026» en una línea */
+    white-space: nowrap;
   }
 
   .state {
@@ -435,14 +437,15 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     color: var(--warning);
   }
   .when {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
   }
+  /* Explicación del error: texto de los tokens (el rojo queda para el neto negativo) y suelo de 13 px */
   .error-msg {
-    max-width: 32ch;
-    font-size: 12px;
-    line-height: 1.4;
-    color: #d9aab1;
+    max-width: 34ch;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-secondary);
   }
   .error-msg.soft {
     color: var(--text-muted);
@@ -544,7 +547,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     color: var(--text);
   }
   .hint {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
   }
 

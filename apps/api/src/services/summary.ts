@@ -36,6 +36,27 @@ async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date) {
   return withNet(row);
 }
 
+// Neto diario de un piloto en los últimos `days` días, medido solo sobre los días de los que hay datos:
+// desde su primer movimiento (si es posterior al inicio) hasta su último sync. Un piloto con el sync
+// atascado cuenta con su ritmo hasta ese sync; sin sync, o sin datos en la ventana, devuelve null
+export async function dailyNetRate(characterId: number, lastSyncAt: Date | null, days: number) {
+  if (!lastSyncAt) return null;
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const windowFrom = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+  const [first] = await db
+    .select({ at: min(walletJournal.date) })
+    .from(walletJournal)
+    .where(eq(walletJournal.characterId, characterId));
+  const from = first?.at && first.at > windowFrom ? first.at : windowFrom;
+  const to = lastSyncAt < now ? lastSyncAt : now;
+  const span = (to.getTime() - from.getTime()) / DAY_MS;
+  if (span <= 0) return null;
+  const flow = await flowBetween(eq(walletJournal.characterId, characterId), from, to);
+  // Menos de un día de datos: se divide por un día entero para no inflar el ritmo
+  return flow.net / Math.max(1, span);
+}
+
 // characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos siguen
 // sin contar (mover ISK no es ganarlo); la lista de pilotos se devuelve siempre completa.
 // Saldo = el balance del último movimiento sincronizado del personaje

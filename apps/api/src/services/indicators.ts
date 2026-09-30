@@ -3,12 +3,13 @@ import { db } from '../db/client';
 import { assets, characters, marketPrices } from '../db/schema';
 import { env } from '../lib/env';
 import { PLEX_TYPE_ID, getQuote } from './quotes';
-import { getSummary, lastBalance } from './summary';
+import { dailyNetRate, lastBalance } from './summary';
 
 // PLEX: con él se paga el Omega. Precio = venta más baja del mercado (se refresca en cada sync);
-// mientras no haya cotización, la media global de ESI
-// Ritmo con el que se estima cuánto falta: neto medio de los últimos 7 días
+// mientras no haya cotización, la media global de ESI.
+// Ritmo: neto diario de los últimos 7 días, frente al coste diario del Omega (un mes = 30 días)
 const PACE_DAYS = 7;
+const OMEGA_MONTH_DAYS = 30;
 
 export async function omegaIndicator() {
   const accounts = env.omegaAccounts;
@@ -25,7 +26,7 @@ export async function omegaIndicator() {
 
   // Saldo de los wallets de los pilotos vinculados. Del inventario solo cuenta el PLEX que ya tienes:
   // el resto no es dinero hasta que se vende
-  const chars = await db.select({ id: characters.id }).from(characters);
+  const chars = await db.select({ id: characters.id, lastSyncAt: characters.lastSyncAt }).from(characters);
   const balances = await Promise.all(chars.map((c) => lastBalance(c.id)));
   const available = balances.reduce((acc, b) => acc + (b?.balance ?? 0), 0);
   const [owned] = await db.select({ qty: sum(assets.quantity) }).from(assets).where(eq(assets.typeId, PLEX_TYPE_ID));
@@ -39,11 +40,14 @@ export async function omegaIndicator() {
   const surplus = costMissing === null ? null : Math.max(0, available - costMissing);
   const covered = cost === null ? 0 : Math.min(cost, available + Math.min(plexOwned, plexNeeded) * plexPrice!);
   const progress = cost === null || cost === 0 ? null : covered / cost;
-  // Cuántas cuentas cubre hoy el saldo más el PLEX guardado (cada una cuesta lo mismo)
-  const accountsCovered = cost === null || accounts === 0 ? null : Math.min(accounts, Math.floor(covered / (cost / accounts)));
 
-  const pace = chars.length ? (await getSummary(PACE_DAYS)).totals.net / PACE_DAYS : 0;
-  const daysToCover = missing === null ? null : missing === 0 ? 0 : pace > 0 ? Math.ceil(missing / pace) : null;
+  // ¿Tus pilotos se pagan el Omega? El Omega se renueva cada mes, así que «cuánto falta» no basta:
+  // se compara lo que cuesta al día con lo que ganas al día. El ritmo se mide por piloto sobre los
+  // días con datos (uno con el sync atascado cuenta hasta su último sync; uno sin sync no cuenta)
+  const rates = await Promise.all(chars.map((c) => dailyNetRate(c.id, c.lastSyncAt, PACE_DAYS)));
+  const pace = rates.reduce((acc: number, r) => acc + (r ?? 0), 0);
+  const costPerDay = cost === null ? null : cost / OMEGA_MONTH_DAYS;
+  const paceShare = costPerDay ? pace / costPerDay : null;
 
   return {
     accounts,
@@ -62,10 +66,12 @@ export async function omegaIndicator() {
     missing,
     surplus,
     progress,
-    accountsCovered,
     avgDailyNet: pace,
     paceDays: PACE_DAYS,
-    daysToCover,
+    costPerDay,
+    paceShare,
+    // Saldo de cada piloto: la web dice cuánto de «available» viene de pilotos con datos viejos
+    balances: chars.map((c, i) => ({ characterId: c.id, balance: balances[i]?.balance ?? null })),
   };
 }
 
