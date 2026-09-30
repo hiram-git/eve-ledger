@@ -134,6 +134,8 @@ export type Indicators = {
     months: number;
     plexNeeded: number;
     plexPrice: number | null;
+    // market = venta más baja de las órdenes (se refresca en cada sync); average = media global de ESI
+    plexPriceSource: 'market' | 'average' | null;
     plexPriceUpdatedAt: string | null;
     cost: number | null;
     available: number;

@@ -2,11 +2,11 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, marketPrices } from '../db/schema';
 import { env } from '../lib/env';
-import { pricesUpdatedAt } from './prices';
+import { PLEX_TYPE_ID, getQuote } from './quotes';
 import { getSummary, lastBalance } from './summary';
 
-// PLEX (tipo 44992): con él se paga el Omega. Precio = media global de ESI, el mismo del inventario
-const PLEX_TYPE_ID = 44992;
+// PLEX: con él se paga el Omega. Precio = venta más baja del mercado (se refresca en cada sync);
+// mientras no haya cotización, la media global de ESI
 // Ritmo con el que se estima cuánto falta: neto medio de los últimos 7 días
 const PACE_DAYS = 7;
 
@@ -16,7 +16,12 @@ export async function omegaIndicator() {
   const plexNeeded = accounts * plexPerMonth;
 
   const [price] = await db.select().from(marketPrices).where(eq(marketPrices.typeId, PLEX_TYPE_ID));
-  const plexPrice = price?.averagePrice ?? price?.adjustedPrice ?? null;
+  const quote = await getQuote(PLEX_TYPE_ID);
+  const average = price?.averagePrice ?? price?.adjustedPrice ?? null;
+  const market = quote?.sellMin ?? null;
+  const plexPrice = market ?? average;
+  const plexPriceSource = market !== null ? ('market' as const) : average !== null ? ('average' as const) : null;
+  const plexPriceUpdatedAt = market !== null ? quote!.updatedAt : average !== null ? price!.updatedAt : null;
 
   // Saldo de los wallets de los pilotos vinculados; el inventario no cuenta
   const chars = await db.select({ id: characters.id }).from(characters);
@@ -40,7 +45,8 @@ export async function omegaIndicator() {
     months: 1,
     plexNeeded,
     plexPrice,
-    plexPriceUpdatedAt: await pricesUpdatedAt(),
+    plexPriceSource,
+    plexPriceUpdatedAt,
     cost,
     available,
     missing,
