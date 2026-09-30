@@ -17,6 +17,7 @@ import {
   getPilots,
   getSummary,
   getSyncStatus,
+  loginUrl,
   syncLogUrl,
   type GeoMap,
   type Inventory,
@@ -82,30 +83,43 @@ const netWorth = (summary?.balance ?? 0) + inventoryValue;
 const share = (part: number, total: number) => (total > 0 ? Math.max(0, Math.min(1, part / total)) : 0);
 const flowTotal = (summary?.totals.income ?? 0) + (summary?.totals.expenses ?? 0);
 
-// Sync más reciente entre todos los personajes
-const lastSync = summary?.characters
+// Sync más reciente entre todos los personajes: gobierna el aviso global de datos viejos
+const globalLastSync = summary?.characters
   .map((c) => c.lastSyncAt)
   .filter((d): d is string => !!d)
   .sort()
   .at(-1);
+// Frescura de la tarjeta: en la vista de un piloto, la de ese piloto (no la del más reciente de todos)
+const lastSync = selected ? (selected.lastSyncAt ?? undefined) : globalLastSync;
 
 // Antigüedad: datos «viejos» cuando superan dos intervalos de sync (o 2 h si el cron está apagado)
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 const isStale = (iso: string | null | undefined) => !iso || Date.now() - new Date(iso).getTime() > staleAfterMs;
-// Pilotos que necesitan atención: el mismo estado que en /pilotos (error, primer sync en curso o datos viejos),
-// con su causa visible bajo el filtro y un enlace a esa página
-const pilotStates = new Map((pilotList ?? []).map((p) => [p.id, pilotState(p, m, staleAfterMs)]));
+// Pilotos que necesitan atención: el mismo estado que en /pilotos (error, primer sync o datos viejos),
+// con su causa corta y la acción que toca, en una línea bajo el filtro
+const pilotStates = new Map((pilotList ?? []).map((p) => [p.id, pilotState(p, m, staleAfterMs, status?.running)]));
 const needsAttention = (c: { id: number; lastSyncAt: string | null }) => {
   const st = pilotStates.get(c.id);
   return st ? st.kind !== 'ok' : isStale(c.lastSyncAt);
 };
-const staleList =
-  summary?.characters.filter(needsAttention).map((c) => {
+type HealthAction = 'relink' | 'sync' | 'review' | null;
+const healthItems =
+  summary?.characters.filter(needsAttention).map((c): { id: number; name: string; cause: string; action: HealthAction } => {
     const st = pilotStates.get(c.id);
-    if (!st) return `${c.name} (${c.lastSyncAt ? rel(c.lastSyncAt) : m.never})`;
-    if (st.kind === 'stale') return `${c.name} (${rel(c.lastSyncAt)})`;
-    return `${c.name} (${st.text}${st.hint === m.errToken ? ` · ${m.relinkShort}` : ''})`;
+    if (!st) return { id: c.id, name: c.name, cause: m.healthStale(c.lastSyncAt ? rel(c.lastSyncAt) : m.never), action: 'sync' };
+    if (st.kind === 'pending') return { id: c.id, name: c.name, cause: m.healthPending, action: null };
+    if (st.kind === 'error') {
+      const token = st.hint === m.errToken;
+      const kinds: Record<string, string> = { journal: m.kindJournal, transactions: m.kindTransactions, assets: m.kindAssets };
+      const raw = pilotList?.find((p) => p.id === c.id)?.lastError?.kind ?? '';
+      return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kinds[raw] ?? raw), action: token ? 'relink' : 'review' };
+    }
+    return { id: c.id, name: c.name, cause: c.lastSyncAt ? m.healthStale(rel(c.lastSyncAt)) : m.healthNoFirst, action: 'sync' };
   }) ?? [];
+const freshCount = summary ? summary.characters.length - healthItems.length : 0;
+// Estado del piloto filtrado: si está roto o viejo, toda la tarjeta de Neto lo dice
+const selectedState = selected ? pilotStates.get(selected.id) : undefined;
+const selectedBroken = !!selectedState && selectedState.kind !== 'ok';
 // El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
 // si no, baja junto al inventario y Patrimonio queda como una franja compacta
 const showMap = !!geo && geo.nodes.some((n) => n.earnedToday > 0);
@@ -193,11 +207,12 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
         )
       }
       {
-        dashboard && isStale(lastSync) && (
+        /* Aviso global: solo cuando todo el ledger está viejo; un piloto roto lo explica su propia tarjeta */
+        dashboard && isStale(globalLastSync) && (
           <div class="notice warning" role="status">
             <Icon name="alert" />
             <p>
-              <strong>{m.staleTitle}</strong> {m.staleLast(rel(lastSync ?? null))}{' '}
+              <strong>{m.staleTitle}</strong> {m.staleLast(rel(globalLastSync ?? null))}{' '}
               {status && !status.enabled ? m.staleCronOff : m.staleCronFailed} {m.staleAction}{' '}
               <a href={syncLogUrl}>{m.syncLog}</a>.
             </p>
@@ -281,18 +296,46 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             </script>
 
             {
-              staleList.length > 0 && (
-                <p class="pilot-health">
+              healthItems.length > 0 && (
+                <div class="pilot-health" role="status">
                   <Icon name="alert" class="stale-icon" />
-                  <span>{m.pilotsStale(staleList.length, summary.characters.length, staleList.join(', '))}.</span>
-                  <a href="/pilotos">{m.reviewPilots}</a>
-                </p>
+                  <ul class="health-full">
+                    {healthItems.map((h) => (
+                      <li>
+                        <span class="health-name">{h.name}:</span> {h.cause}
+                        {h.action === 'relink' && (
+                          <>
+                            {' → '}
+                            <a href={loginUrl} title={m.relinkTitle}>{m.relink}</a>
+                          </>
+                        )}
+                        {h.action === 'review' && (
+                          <>
+                            {' → '}
+                            <a href="/pilotos">{m.healthReview}</a>
+                          </>
+                        )}
+                        {h.action === 'sync' && (
+                          <form method="post" action="/sync" class="sync-form inline">
+                            <input type="hidden" name="back" value={href(days, pilotId)} />
+                            <input type="hidden" name="character" value={h.id} />
+                            {' → '}
+                            <button type="submit" class="link-button" title={m.syncOneTitle(h.name)}>{m.syncOne}</button>
+                          </form>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <span class="health-short">
+                    {m.healthShort(healthItems.length)} · <a href="/pilotos">{m.pilots}</a>
+                  </span>
+                </div>
               )
             }
 
             <section class:list={['glance', { solo: !showMap }]} aria-labelledby="glance-title">
               <h2 id="glance-title" class="sr-only">{m.net} · {m.netWorth}</h2>
-              <div class="panel stat hero-stat">
+              <div class:list={['panel', 'stat', 'hero-stat', { stale: selectedBroken }]}>
                 <div class="hero-body">
                   <div class="headline">
                     <div class="fig">
@@ -342,11 +385,44 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                           : m.todayNone}
                       </p>
                       {
-                        lastSync && (
-                          <p class:list={['versus', 'asof', { stale: isStale(lastSync) }]}>
-                            {isStale(lastSync) && <Icon name="alert" class="stale-icon" />}
-                            {m.asOfSync('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
+                        selected ? (
+                          /* Un solo piloto: su propia frescura y, si está roto, la causa y la acción */
+                          <p class:list={['versus', 'asof', { stale: selectedBroken || isStale(lastSync) }]}>
+                            {(selectedBroken || isStale(lastSync)) && <Icon name="alert" class="stale-icon" />}
+                            {selectedState?.kind === 'pending' ? (
+                              m.statePending
+                            ) : !lastSync ? (
+                              <>
+                                {m.asOfNoFirst} · <a href="/pilotos">{m.syncOne}</a>
+                              </>
+                            ) : selectedState?.kind === 'error' ? (
+                              <>
+                                {m.asOfBroken('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time> · {selectedState.text} ·{' '}
+                                {selectedState.hint === m.errToken ? <a href={loginUrl}>{m.relink}</a> : <a href="/pilotos">{m.healthReview}</a>}
+                              </>
+                            ) : (
+                              <>
+                                {m.asOfSync('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
+                                {isStale(lastSync) && (
+                                  <>
+                                    {' · '}
+                                    <a href="/pilotos">{m.syncOne}</a>
+                                  </>
+                                )}
+                              </>
+                            )}
                           </p>
+                        ) : (
+                          lastSync && (
+                            /* Consolidado: cuántos pilotos están al día, no solo el sync más reciente */
+                            <p class:list={['versus', 'asof', { stale: isStale(lastSync) || freshCount < summary.characters.length }]}>
+                              {(isStale(lastSync) || freshCount < summary.characters.length) && <Icon name="alert" class="stale-icon" />}
+                              {freshCount < summary.characters.length
+                                ? m.asOfPartial(freshCount, summary.characters.length, '')
+                                : m.asOfSync('')}
+                              <time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
+                            </p>
+                          )
                         )
                       }
                     </div>
@@ -628,11 +704,19 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .fig:not(.today) {
     order: 1;
   }
+  /* Estrecho: «Hoy» como fila compacta justo bajo el neto (el par no se separa en móvil); la composición después */
   .fig.today {
-    order: 3;
-    margin-top: 10px;
-    padding-top: 12px;
+    order: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+    margin-top: 8px;
+    padding-top: 10px;
     border-top: 1px solid var(--line);
+  }
+  .fig.today .asof {
+    flex-basis: 100%;
   }
   .hero-body .sub {
     order: 4;
@@ -644,15 +728,15 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     min-width: 0;
   }
   .fig.today .value {
-    font-size: 28px;
+    font-size: 22px;
   }
   /* «Hoy» sin movimientos: un cero enorme parece un fallo; se apaga y se queda pequeño */
   .fig.today .value.zero {
-    font-size: 28px;
+    font-size: 22px;
     color: var(--text-muted);
   }
   .composition {
-    order: 2;
+    order: 3;
     display: grid;
     gap: 14px;
     margin-top: 8px;
@@ -781,10 +865,16 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       order: 0;
     }
     .fig.today {
+      flex-direction: column;
+      flex-wrap: nowrap;
+      gap: 6px;
       margin-top: 0;
       padding: 0 0 0 24px;
       border-top: 0;
       border-left: 1px solid var(--line);
+    }
+    .fig.today .asof {
+      flex-basis: auto;
     }
     .fig.today .value {
       font-size: 44px;
@@ -886,6 +976,11 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .asof.stale {
     color: var(--warning);
   }
+  .asof a {
+    /* Zona táctil ampliada sin mover el texto */
+    padding-block: 12px;
+    margin-block: -12px;
+  }
   /* Pilotos con datos viejos: la causa y el enlace, en una línea bajo el filtro */
   .pilot-health {
     display: flex;
@@ -896,18 +991,73 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     font-size: 13px;
     color: var(--warning);
   }
-  .pilot-health a {
-    /* Zona táctil ampliada sin mover el texto */
-    padding-block: 11px;
-    margin-block: -11px;
+  .pilot-health a,
+  .pilot-health .link-button {
+    /* Zona táctil ampliada (40 px) sin mover el texto */
+    padding-block: 12px;
+    margin-block: -12px;
     color: var(--cyan);
+  }
+  .health-full {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .health-full li + li::before {
+    content: '·';
+    margin-right: 6px;
+    color: var(--text-muted);
+  }
+  .health-name {
+    color: var(--text-secondary);
+  }
+  .sync-form.inline {
+    display: inline;
+  }
+  .link-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .link-button:disabled {
+    color: var(--text-muted);
+    cursor: progress;
+  }
+  .health-short {
+    display: none;
+  }
+  /* Piloto filtrado roto o viejo: su neto se apaga, como en los chips (un dato viejo no compite con uno real) */
+  .hero-stat.stale .value.signed.pos,
+  .hero-stat.stale .value.signed.neg,
+  .hero-stat.stale .act-net {
+    color: var(--text-secondary);
+  }
+  .hero-stat.stale .act-bar i {
+    background: var(--text-muted);
   }
   /* Patrimonio es secundario: un escalón claro por debajo de Neto y de Hoy */
   .worth .value {
     font-size: 24px;
   }
+  /* La comparación con el período anterior es contexto, no otro veredicto: texto neutro, solo la flecha lleva el signo */
   .delta {
     font: 500 14px var(--mono);
+  }
+  .delta.pos,
+  .delta.neg {
+    color: var(--text-secondary);
+  }
+  .delta.pos :global(.icon) {
+    color: var(--positive);
+  }
+  .delta.neg :global(.icon) {
+    color: var(--critical);
   }
   .worth-head {
     display: flex;
@@ -989,6 +1139,12 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     list-style: none;
   }
   @media (max-width: 600px) {
+    .health-full {
+      display: none;
+    }
+    .health-short {
+      display: inline;
+    }
     .pilots-table {
       display: none;
     }

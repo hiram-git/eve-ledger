@@ -133,11 +133,17 @@ export type Indicators = {
     plexPerMonth: number;
     months: number;
     plexNeeded: number;
+    // PLEX que ya tienes en inventario: se descuentan de los necesarios
+    plexOwned: number;
+    plexMissing: number;
     plexPrice: number | null;
+    plexAveragePrice: number | null;
     // market = venta más baja de las órdenes (se refresca en cada sync); average = media global de ESI
     plexPriceSource: 'market' | 'average' | null;
     plexPriceUpdatedAt: string | null;
     cost: number | null;
+    // Coste de los PLEX que faltan (lo que queda por pagar)
+    costMissing: number | null;
     available: number;
     missing: number | null;
     surplus: number | null;
