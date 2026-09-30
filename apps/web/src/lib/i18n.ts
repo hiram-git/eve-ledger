@@ -54,12 +54,13 @@ const es = {
   omegaBalance: 'Saldo de los wallets',
   omegaPlexNeeded: 'PLEX necesarios',
   omegaPlexPrice: 'Precio del PLEX',
-  omegaPriceMeta: (when: string) => `media de ESI · ${when}`,
+  omegaPriceMeta: (source: 'market' | 'average', when: string) =>
+    `${source === 'market' ? 'venta más baja del mercado' : 'media de ESI'} · ${when}`,
   omegaNoPrice: 'Aún no hay precio del PLEX',
-  omegaNoPriceHint: 'Se descarga con el primer sync que trae el inventario: sincroniza un piloto para calcularlo.',
+  omegaNoPriceHint: 'Se descarga en cada sync: sincroniza para calcularlo.',
   omegaNoPilots: 'Vincula al menos un piloto para comparar con tu saldo.',
   omegaNote: (accounts: number, plex: string) =>
-    `Estimación con el precio medio global de ESI, no el de Jita. Se asumen ${plex} PLEX por cuenta y mes y ${accounts} ${accounts === 1 ? 'cuenta' : 'cuentas'} (OMEGA_ACCOUNTS). Solo cuenta el saldo de los wallets, no el inventario.`,
+    `Precio de venta más bajo del PLEX en el mercado, actualizado en cada sync (mientras no haya, la media global de ESI). Se asumen ${plex} PLEX por cuenta y mes y ${accounts} ${accounts === 1 ? 'cuenta' : 'cuentas'} (OMEGA_ACCOUNTS). Solo cuenta el saldo de los wallets, no el inventario.`,
   now: 'ahora',
   never: 'nunca',
 
@@ -301,12 +302,12 @@ const en: Messages = {
   omegaBalance: 'Wallet balance',
   omegaPlexNeeded: 'PLEX needed',
   omegaPlexPrice: 'PLEX price',
-  omegaPriceMeta: (when) => `ESI average · ${when}`,
+  omegaPriceMeta: (source, when) => `${source === 'market' ? 'lowest market sell price' : 'ESI average'} · ${when}`,
   omegaNoPrice: 'No PLEX price yet',
-  omegaNoPriceHint: 'It is downloaded by the first sync that fetches assets: sync a pilot to work it out.',
+  omegaNoPriceHint: 'It is downloaded on every sync: sync to work it out.',
   omegaNoPilots: 'Link at least one pilot to compare against your balance.',
   omegaNote: (accounts, plex) =>
-    `Estimate using the ESI global average price, not the Jita price. Assumes ${plex} PLEX per account per month and ${accounts} ${accounts === 1 ? 'account' : 'accounts'} (OMEGA_ACCOUNTS). Only wallet balances count, not assets.`,
+    `Uses the lowest PLEX sell price on the market, refreshed on every sync (until there is one, the ESI global average). Assumes ${plex} PLEX per account per month and ${accounts} ${accounts === 1 ? 'account' : 'accounts'} (OMEGA_ACCOUNTS). Only wallet balances count, not assets.`,
   now: 'just now',
   never: 'never',
 
@@ -538,12 +539,12 @@ const de: Messages = {
   omegaBalance: 'Wallet-Guthaben',
   omegaPlexNeeded: 'Benötigte PLEX',
   omegaPlexPrice: 'PLEX-Preis',
-  omegaPriceMeta: (when) => `ESI-Durchschnitt · ${when}`,
+  omegaPriceMeta: (source, when) => `${source === 'market' ? 'niedrigster Verkaufspreis im Markt' : 'ESI-Durchschnitt'} · ${when}`,
   omegaNoPrice: 'Noch kein PLEX-Preis',
-  omegaNoPriceHint: 'Er wird beim ersten Sync geladen, der das Inventar abruft: synchronisiere einen Piloten.',
+  omegaNoPriceHint: 'Er wird bei jedem Sync geladen: synchronisiere, um ihn zu berechnen.',
   omegaNoPilots: 'Verknüpfe mindestens einen Piloten, um dein Guthaben zu vergleichen.',
   omegaNote: (accounts, plex) =>
-    `Schätzung mit dem globalen ESI-Durchschnittspreis, nicht dem Jita-Preis. Angenommen: ${plex} PLEX pro Account und Monat und ${accounts} ${accounts === 1 ? 'Account' : 'Accounts'} (OMEGA_ACCOUNTS). Es zählt nur das Wallet-Guthaben, nicht das Inventar.`,
+    `Verwendet den niedrigsten PLEX-Verkaufspreis im Markt, bei jedem Sync aktualisiert (bis dahin der globale ESI-Durchschnitt). Angenommen: ${plex} PLEX pro Account und Monat und ${accounts} ${accounts === 1 ? 'Account' : 'Accounts'} (OMEGA_ACCOUNTS). Es zählt nur das Wallet-Guthaben, nicht das Inventar.`,
   now: 'gerade eben',
   never: 'nie',
 

@@ -6,6 +6,7 @@ import { ASSETS_SCOPE, fetchAssets } from './assets';
 import { resolvePendingGeo } from './geo';
 import { resolvePendingNames } from './names';
 import { refreshPricesIfStale } from './prices';
+import { refreshPlexQuote } from './quotes';
 
 // GET /characters/{id}/wallet/journal (solo los campos que guardamos)
 type EsiJournalEntry = {
@@ -209,6 +210,9 @@ export async function syncCharacter(characterId: number): Promise<SyncResult> {
     const errors = [result.journal.error, result.transactions?.error, result.assets?.error].filter(Boolean);
     if (errors.length) result.error = errors.join(' | ');
     else await db.update(characters).set({ lastSyncAt: new Date() }).where(eq(characters.id, characterId));
+
+    // Precio del PLEX (Omega): público, se pide en cada sync aunque el token de este piloto haya fallado
+    await bestEffort('quotes', refreshPlexQuote);
 
     if (tokenOk) {
       // Solo llaman a ESI si hace falta: precios de más de 1 h, IDs sin nombre (reintenta fallos anteriores)

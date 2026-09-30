@@ -105,6 +105,15 @@ export const marketPrices = sqliteTable('market_prices', {
   updatedAt: ts('updated_at').notNull(),
 });
 
+// Precio de venta más bajo en el mercado (órdenes reales, no la media global). Se refresca en cada sync;
+// de momento solo el PLEX, que es lo que cuesta el Omega
+export const marketQuotes = sqliteTable('market_quotes', {
+  typeId: integer('type_id').primaryKey(),
+  sellMin: real('sell_min'), // null = sin órdenes de venta
+  sellOrders: integer('sell_orders').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+});
+
 // Caché de geografía de ESI para el mapa: sistemas con coordenadas y estación → sistema.
 // Son datos estáticos del universo, se piden una sola vez por ID
 export const systems = sqliteTable('systems', {

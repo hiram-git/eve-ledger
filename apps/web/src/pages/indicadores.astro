@@ -119,7 +119,7 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
                 <dt>{m.omegaPlexPrice}</dt>
                 <dd title={priced ? full(o.plexPrice!) : undefined}>
                   {o.plexPrice !== null ? `${fmt(o.plexPrice)} ISK` : '—'}
-                  {o.plexPrice !== null && o.plexPriceUpdatedAt && <span class="dd-meta">{m.omegaPriceMeta(ago(o.plexPriceUpdatedAt, lang))}</span>}
+                  {o.plexPriceSource && o.plexPriceUpdatedAt && <span class="dd-meta">{m.omegaPriceMeta(o.plexPriceSource, ago(o.plexPriceUpdatedAt, lang))}</span>}
                 </dd>
               </div>
             </dl>
