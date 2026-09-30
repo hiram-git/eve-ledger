@@ -89,11 +89,6 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
                   <span>{pct.format(percent)}</span>
                   {o.accountsCovered !== null && <span>{m.omegaCovers(o.accountsCovered, o.accounts)}</span>}
                 </p>
-                {!covered && (
-                  <p class="eta">
-                    {o.daysToCover !== null ? m.omegaEta(o.daysToCover, fmt(o.avgDailyNet)) : m.omegaNoEta}
-                  </p>
-                )}
               </>
             ) : (
               <div class="no-price">
@@ -113,7 +108,15 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
               </div>
               <div>
                 <dt>{m.omegaPlexNeeded}</dt>
-                <dd>{qty.format(o.plexNeeded)}</dd>
+                <dd>
+                  {qty.format(o.plexNeeded)}
+                  {o.plexOwned > 0 && (
+                    <span class="dd-meta">
+                      {m.omegaPlexOwned(qty.format(o.plexOwned), Math.floor(o.plexOwned / Math.max(1, o.plexPerMonth)))} ·{' '}
+                      {m.omegaPlexMissing(qty.format(o.plexMissing))}
+                    </span>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>{m.omegaPlexPrice}</dt>
@@ -123,9 +126,14 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
                 </dd>
               </div>
             </dl>
+            {/* Cierre: qué hacer con el dato, no una salvedad */}
+            {priced && !covered && (
+              <p class="eta">{o.daysToCover !== null ? m.omegaEta(o.daysToCover, fmt(o.avgDailyNet)) : m.omegaNoEta}</p>
+            )}
             {pilotCount === 0 && <p class="eta">{m.omegaNoPilots}</p>}
           </div>
-          <p class="panel-note">{m.omegaNote(o.accounts, qty.format(o.plexPerMonth))}</p>
+          <p class="panel-note">{/* El inventario valora el PLEX con la media de ESI: si aquí manda el mercado, la nota explica la diferencia */}
+          {m.omegaNote(o.plexPriceSource === 'market' && o.plexAveragePrice !== null ? `${fmt(o.plexAveragePrice)} ISK` : null)}</p>
         </section>
       </div>
     )
@@ -149,7 +157,8 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
   }
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+    /* auto-fill deja huecos vacíos: una tarjeta sola no se estira a 1200 px */
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
     gap: 20px;
     align-items: start;
   }
@@ -184,7 +193,7 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
   }
   .unit {
     font-size: 16px;
-    color: var(--text-muted);
+    color: #6b9caf; /* el mismo del sufijo ISK del Resumen */
     letter-spacing: 0;
   }
   .answer-sub {

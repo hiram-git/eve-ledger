@@ -67,7 +67,7 @@ const SCOPE_LABELS: Record<string, string> = {
 const REQUIRED = Object.keys(SCOPE_LABELS);
 
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
-const stateOf = (p: Pilot) => pilotState(p, m, staleAfterMs);
+const stateOf = (p: Pilot) => pilotState(p, m, staleAfterMs, status?.running);
 
 const rows = pilots.map((p) => ({ ...p, state: stateOf(p) }));
 const pending = rows.some((r) => r.state.kind === 'pending');
@@ -188,8 +188,8 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
                   m.noDataYet
                 )}
               </span>
-              {p.state.kind === 'error' && p.state.hint && (
-                <span class="error-msg" title={`${m.originalError} ${p.state.title}`}>
+              {p.state.hint && (
+                <span class:list={['error-msg', { soft: p.state.kind !== 'error' }]} title={p.state.title ? `${m.originalError} ${p.state.title}` : undefined}>
                   {p.state.hint}
                 </span>
               )}
@@ -435,6 +435,9 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     line-height: 1.4;
     color: #d9aab1;
   }
+  .error-msg.soft {
+    color: var(--text-muted);
+  }
 
   .scopes {
     display: flex;
@@ -606,6 +609,16 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     .actions form {
       width: 100%;
       justify-content: center;
+    }
+    /* Objetivos táctiles de 40 px también aquí */
+    .actions .secondary-button,
+    .page-head .secondary-button {
+      min-height: 40px;
+    }
+    h2 a {
+      display: inline-block;
+      padding-block: 10px;
+      margin-block: -10px;
     }
   }
 </style>
