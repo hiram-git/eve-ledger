@@ -17,6 +17,7 @@ import {
 } from '../lib/api';
 import { ago, isk, iskFull, longDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
+import { pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -66,28 +67,7 @@ const SCOPE_LABELS: Record<string, string> = {
 const REQUIRED = Object.keys(SCOPE_LABELS);
 
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
-type State = { kind: 'ok' | 'pending' | 'stale' | 'error'; text: string; title?: string; hint?: string };
-
-// Los errores llegan de la API en español/inglés técnico: se explican en el idioma elegido
-function explain(message: string): string {
-  if (/invalid_grant|refresh token/i.test(message)) return m.errToken;
-  if (/descifrar|ENC_KEY/i.test(message)) return m.errDecrypt;
-  if (/cambió de dueño|owner/i.test(message)) return m.errOwner;
-  if (/ESI (401|403)/.test(message)) return m.errForbidden;
-  if (/ESI (420|429)/.test(message)) return m.errRate;
-  if (/ESI 5\d\d/.test(message)) return m.errDown;
-  return message;
-}
-function stateOf(p: Pilot): State {
-  if (p.lastError) {
-    const kinds: Record<string, string> = { journal: m.kindJournal, transactions: m.kindTransactions, assets: m.kindAssets };
-    const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
-    return { kind: 'error', text: m.stateError(kind), title: p.lastError.message, hint: explain(p.lastError.message) };
-  }
-  if (!p.lastSyncAt) return { kind: 'pending', text: m.statePending };
-  if (Date.now() - new Date(p.lastSyncAt).getTime() > staleAfterMs) return { kind: 'stale', text: m.stateStale };
-  return { kind: 'ok', text: m.stateOk };
-}
+const stateOf = (p: Pilot) => pilotState(p, m, staleAfterMs);
 
 const rows = pilots.map((p) => ({ ...p, state: stateOf(p) }));
 const pending = rows.some((r) => r.state.kind === 'pending');

@@ -208,7 +208,11 @@ a {
 .skip-link:focus {
   transform: none;
 }
-main:focus {
+.skip-target {
+  height: 0;
+  scroll-margin-top: 12px;
+}
+.skip-target:focus {
   outline: none;
 }
 
