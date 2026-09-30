@@ -193,6 +193,19 @@ const locationRows: BarRow[] =
 // Lo más valioso: los 6 primeros (8 si el mapa comparte la columna de al lado); el detalle completo está en GET /assets
 const valuableItems = inventory?.topItems.slice(0, mapBelow ? 8 : 6).map((i) => ({ ...i, isk: i.value })) ?? [];
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
+// Fila Total de la tabla de pilotos: la suma de los pilotos, que es el consolidado del resumen (la API excluye
+// las transferencias entre tus pilotos también en cada piloto, así que ingresos, gastos y neto suman exacto).
+// Se suma de `characters`, que viene completo también en la vista de un piloto
+const pilotTotals = (summary?.characters ?? []).reduce(
+  (t, c) => ({
+    balance: t.balance + (c.balance ?? 0),
+    inventory: t.inventory + (inventoryByChar.get(c.id) ?? 0),
+    income: t.income + c.income,
+    expenses: t.expenses + c.expenses,
+    net: t.net + c.net,
+  }),
+  { balance: 0, inventory: 0, income: 0, expenses: 0, net: 0 },
+);
 // Lo que aporta cada piloto a Patrimonio (saldo + inventario): la nota de cobertura dice cuánto es viejo
 const worthByPilot: Record<number, number> = Object.fromEntries(
   (summary?.characters ?? []).map((c) => [c.id, (c.balance ?? 0) + (inventoryByChar.get(c.id) ?? 0)]),
@@ -625,7 +638,7 @@ const worthNote =
 
             <section class="panel">
               <div class="panel-heading">
-                <h2 id="pilotos">{m.pilots}</h2>
+                <h2 id="pilotos">{m.pilotsPeriod(days)}</h2>
                 <a class="meta link" href="/pilotos">
                   <Icon name="users" />
                   {m.managePilots}
@@ -680,6 +693,19 @@ const worthNote =
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">{m.pilotsTotal(summary.characters.length)}</th>
+                      <td title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
+                      <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>
+                      <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
+                      <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
+                      <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={full(pilotTotals.net)}>
+                        {fmt(pilotTotals.net, { sign: true })}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
               {/* Móvil: una tarjeta por piloto con nombre, neto y último sync; la tabla de 7 columnas se oculta */}
@@ -706,31 +732,60 @@ const worthNote =
                       </div>
                       <dl>
                         <div>
-                          <dt>{m.balance}</dt>
-                          <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
+                          <dt>{m.income}</dt>
+                          <dd title={full(c.income)}>{c.lastSyncAt ? fmt(c.income) : '—'}</dd>
                         </div>
                         <div>
-                          <dt>{m.inventory}</dt>
-                          <dd>{inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}</dd>
+                          <dt>{m.expenses}</dt>
+                          <dd title={full(out(c.expenses))}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</dd>
                         </div>
                         <div class:list={['net', { pos: c.net > 0, neg: c.net < 0 }]}>
                           <dt>{m.net}</dt>
-                          <dd title={`${m.income} ${full(c.income)} · ${m.expenses} ${full(-c.expenses)}`}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</dd>
+                          <dd title={full(c.net)}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</dd>
                         </div>
                         <div class="minor">
-                          <dt>{m.income}</dt>
-                          <dd>{c.lastSyncAt ? fmt(c.income) : '—'}</dd>
+                          <dt>{m.balance}</dt>
+                          <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
                         </div>
                         <div class="minor">
-                          <dt>{m.expenses}</dt>
-                          <dd>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</dd>
+                          <dt>{m.inventory}</dt>
+                          <dd>{inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}</dd>
                         </div>
                       </dl>
                     </li>
                   ))
                 }
+                {/* La suma de los pilotos: el consolidado */}
+                <li class="total">
+                  <div class="card-head">
+                    <span class="who">{m.pilotsTotal(summary.characters.length)}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>{m.income}</dt>
+                      <dd title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</dd>
+                    </div>
+                    <div>
+                      <dt>{m.expenses}</dt>
+                      <dd title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</dd>
+                    </div>
+                    <div class:list={['net', { pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }]}>
+                      <dt>{m.net}</dt>
+                      <dd title={full(pilotTotals.net)}>{fmt(pilotTotals.net, { sign: true })}</dd>
+                    </div>
+                    <div class="minor">
+                      <dt>{m.balance}</dt>
+                      <dd>{fmt(pilotTotals.balance)}</dd>
+                    </div>
+                    <div class="minor">
+                      <dt>{m.inventory}</dt>
+                      <dd>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</dd>
+                    </div>
+                  </dl>
+                </li>
               </ul>
               <p class="panel-note">
+                {m.pilotsTotalNote}{' '}
                 {m.noteBalance}
                 {inventory?.pricesUpdatedAt && m.notePrices(rel(inventory.pricesUpdatedAt))}
                 {m.noteBpc}
@@ -1420,6 +1475,36 @@ const worthNote =
       font-size: 13px;
       color: var(--text-secondary);
     }
+    .pilot-cards li.total {
+      border-top: 3px double var(--line-strong);
+      border-bottom: 0;
+    }
+    .pilot-cards li.total .who {
+      font-weight: 600;
+    }
+  }
+  /* Total: cierra la tabla como en un libro de contabilidad (doble línea) */
+  .pilots tfoot th,
+  .pilots tfoot td {
+    border-top: 3px double var(--line-strong);
+    border-bottom: 0;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .pilots tfoot th {
+    font-size: 13px;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: left;
+  }
+  .pilots tfoot td {
+    font-family: var(--mono);
+  }
+  .pilots tfoot td.pos {
+    color: var(--positive);
+  }
+  .pilots tfoot td.neg {
+    color: var(--critical);
   }
   tr.selected td {
     background: #61cce50d;
