@@ -120,6 +120,10 @@ const freshCount = summary ? summary.characters.length - healthItems.length : 0;
 // Estado del piloto filtrado: si está roto o viejo, toda la tarjeta de Neto lo dice
 const selectedState = selected ? pilotStates.get(selected.id) : undefined;
 const selectedBroken = !!selectedState && selectedState.kind !== 'ok';
+// Piloto filtrado sin ningún sync: no hay datos, y un «0 ISK» se leería como un dato. Estado vacío propio
+const pilotEmpty = !!selected && !selected.lastSyncAt;
+// «Todos» al principio de la franja: se queda fijo en móvil mientras la fila se desliza
+const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firstEntryAt) : null;
 // El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
 // si no, baja junto al inventario y Patrimonio queda como una franja compacta
 const showMap = !!geo && geo.nodes.some((n) => n.earnedToday > 0);
@@ -290,8 +294,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               // En móvil la fila se desliza: que el piloto activo quede a la vista
               const strip = document.querySelector<HTMLElement>('.pilot-strip ul');
               const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
-              if (strip && active && strip.scrollWidth > strip.clientWidth) {
-                strip.scrollLeft = active.parentElement!.offsetLeft - strip.offsetLeft - 16;
+              const all = strip?.querySelector<HTMLElement>('li');
+              if (strip && active && all && active.parentElement !== all && strip.scrollWidth > strip.clientWidth) {
+                strip.scrollLeft = active.parentElement!.offsetLeft - strip.offsetLeft - all.offsetWidth - 8;
               }
             </script>
 
@@ -306,13 +311,13 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                         {h.action === 'relink' && (
                           <>
                             {' → '}
-                            <a href={loginUrl} title={m.relinkTitle}>{m.relink}</a>
+                            <a class="inline-action" href={loginUrl} title={m.relinkAs(h.name)} aria-label={m.relinkAs(h.name)}>{m.relink}</a>
                           </>
                         )}
                         {h.action === 'review' && (
                           <>
                             {' → '}
-                            <a href="/pilotos">{m.healthReview}</a>
+                            <a class="inline-action" href="/pilotos">{m.healthReview}</a>
                           </>
                         )}
                         {h.action === 'sync' && (
@@ -320,19 +325,37 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                             <input type="hidden" name="back" value={href(days, pilotId)} />
                             <input type="hidden" name="character" value={h.id} />
                             {' → '}
-                            <button type="submit" class="link-button" title={m.syncOneTitle(h.name)}>{m.syncOne}</button>
+                            <button type="submit" class="inline-action" title={m.syncOneTitle(h.name)}>{m.syncOne}</button>
                           </form>
                         )}
                       </li>
                     ))}
                   </ul>
-                  <span class="health-short">
-                    {m.healthShort(healthItems.length)} · <a href="/pilotos">{m.pilots}</a>
-                  </span>
                 </div>
               )
             }
 
+            {pilotEmpty && selected && (
+              <section class="panel empty-pilot" aria-labelledby="empty-pilot-title">
+                <h2 id="empty-pilot-title">{m.emptyPilotTitle(selected.name)}</h2>
+                <p>{selectedState?.kind === 'pending' ? m.emptyPilotPending : m.emptyPilotLead}</p>
+                <div class="empty-actions">
+                  {selectedState?.kind !== 'pending' && (
+                    <form method="post" action="/sync" class="sync-form">
+                      <input type="hidden" name="back" value={href(days, pilotId)} />
+                      <input type="hidden" name="character" value={selected.id} />
+                      <button type="submit" class="secondary-button" title={m.syncOneTitle(selected.name)}>
+                        <Icon name="refresh" />
+                        <span class="label">{m.syncOne}</span>
+                      </button>
+                    </form>
+                  )}
+                  <a class="inline-action" href={href(days)}>{m.backToAll}</a>
+                </div>
+              </section>
+            )}
+
+            {!pilotEmpty && (
             <section class:list={['glance', { solo: !showMap }]} aria-labelledby="glance-title">
               <h2 id="glance-title" class="sr-only">{m.net} · {m.netWorth}</h2>
               <div class:list={['panel', 'stat', 'hero-stat', { stale: selectedBroken }]}>
@@ -347,7 +370,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                         {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
                         {fmt(summary.totals.net, { sign: true })}
                         <small>ISK</small>
-                        <span class="sr-only">{summary.totals.net >= 0 ? m.gain : m.loss} ({full(summary.totals.net)})</span>
+                        <span class="sr-only">{summary.totals.net > 0 ? m.gain : summary.totals.net < 0 ? m.loss : m.even} ({full(summary.totals.net)})</span>
                       </span>
                       {
                         delta !== undefined ? (
@@ -364,7 +387,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                             )}
                           </p>
                         ) : (
-                          <p class="versus">{m.noPrevious(days)}</p>
+                          <p class="versus">{firstHistory ? m.noPreviousSince(firstHistory, days) : m.noPrevious(days)}</p>
                         )
                       }
                     </div>
@@ -372,12 +395,13 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <span class="label">
                         <Icon name="clock" />
                         {m.today}
+                        <span class="sr-only"> · {m.todayTitle(full(summary.today.net))}</span>
                       </span>
                       <span class:list={['value', 'signed', sign(summary.today.net)]}>
                         {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
                         {fmt(summary.today.net, { sign: true })}
                         <small>ISK</small>
-                        <span class="sr-only">{summary.today.net >= 0 ? m.gain : m.loss} ({full(summary.today.net)})</span>
+                        <span class="sr-only">{summary.today.net > 0 ? m.gain : summary.today.net < 0 ? m.loss : m.even} ({full(summary.today.net)})</span>
                       </span>
                       <p class="versus">
                         {summary.today.income || summary.today.expenses
@@ -397,17 +421,26 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                               </>
                             ) : selectedState?.kind === 'error' ? (
                               <>
-                                {m.asOfBroken('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time> · {selectedState.text} ·{' '}
-                                {selectedState.hint === m.errToken ? <a href={loginUrl}>{m.relink}</a> : <a href="/pilotos">{m.healthReview}</a>}
+                                {m.asOfBroken('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time> ·{' '}
+                                <span class="keep">
+                                  {selectedState.text} ·{' '}
+                                  {selectedState.hint === m.errToken ? (
+                                    <a class="inline-action" href={loginUrl} title={m.relinkAs(selected.name)} aria-label={m.relinkAs(selected.name)}>{m.relink}</a>
+                                  ) : (
+                                    <a class="inline-action" href="/pilotos">{m.healthReview}</a>
+                                  )}
+                                </span>
                               </>
                             ) : (
                               <>
                                 {m.asOfSync('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
                                 {isStale(lastSync) && (
-                                  <>
+                                  <form method="post" action="/sync" class="sync-form inline">
+                                    <input type="hidden" name="back" value={href(days, pilotId)} />
+                                    <input type="hidden" name="character" value={selected.id} />
                                     {' · '}
-                                    <a href="/pilotos">{m.syncOne}</a>
-                                  </>
+                                    <button type="submit" class="inline-action" title={m.syncOneTitle(selected.name)}>{m.syncOne}</button>
+                                  </form>
                                 )}
                               </>
                             )}
@@ -461,7 +494,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                           <ul class="acts" aria-label={m.byActivity}>
                             {summary.byActivity.map((a) => (
                               <li title={`${m.activityHint[a.activity]} · ${m.activityInOut(full(a.income), full(out(a.expenses)))}`}>
-                                <span class="act-name">{m.activityName[a.activity]}</span>
+                                <span class="act-name">{m.activityName[a.activity]}<span class="sr-only"> ({m.activityHint[a.activity]})</span></span>
                                 <span class="act-bar" aria-hidden="true">
                                   <i class:list={[sign(a.net)]} style={actBar(a.net)} />
                                 </span>
@@ -469,6 +502,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                               </li>
                             ))}
                           </ul>
+                          <p class="acts-note">{m.actsNote}</p>
                           <a class="acts-link" href="#por-actividad">
                             {m.activityDetailLink}
                             <i class="chev" aria-hidden="true" />
@@ -478,7 +512,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                     }
                   </div>
                   {summary.internalTransfers > 0 && (
-                    <span class="sub">{m.internal(fmt(summary.internalTransfers))}</span>
+                    <span class="sub">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
                   )}
                 </div>
               </div>
@@ -516,8 +550,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                 {showMap && geo && <NewEdenMap map={geo} />}
               </div>
             </section>
+            )}
 
-
+            {!pilotEmpty && (
             <section class="panel">
               <div class="panel-heading">
                 <h2>{m.dailyFlow}</h2>
@@ -527,8 +562,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                 <DailyChart daily={summary.daily} firstDate={firstDate} />
               </div>
             </section>
+            )}
 
-            <ActivityList activities={summary.byActivity} />
+            {!pilotEmpty && <ActivityList activities={summary.byActivity} />}
 
             <section class="panel">
               <div class="panel-heading">
@@ -553,7 +589,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   </thead>
                   <tbody>
                     {summary.characters.map((c) => (
-                      <tr class:list={{ selected: c.id === pilotId }} aria-current={c.id === pilotId ? 'true' : undefined}>
+                      <tr class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined}>
                         <td>
                           <span class="who">
                             <img
@@ -593,7 +629,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               <ul class="pilot-cards">
                 {
                   summary.characters.map((c) => (
-                    <li class:list={{ selected: c.id === pilotId }} aria-current={c.id === pilotId ? 'true' : undefined}>
+                    <li class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined}>
                       <div class="card-head">
                         <a class="who" href={href(days, c.id)} title={m.viewLedger(c.name)}>
                           <img
@@ -645,7 +681,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               </p>
             </section>
 
-            {inventory && inventory.stacks > 0 && (
+            {!pilotEmpty && inventory && inventory.stacks > 0 && (
               <div class="split">
                 <div class="stack">
                   <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
@@ -672,7 +708,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               </div>
             )}
 
-            {summary.market.items.length > 0 && <MarketReview market={summary.market} />}
+            {!pilotEmpty && summary.market.items.length > 0 && <MarketReview market={summary.market} />}
 
           </>
         )
@@ -991,12 +1027,28 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     font-size: 13px;
     color: var(--warning);
   }
-  .pilot-health a,
-  .pilot-health .link-button {
+  /* Una sola forma para las acciones en línea (Sincronizar, Revincular, Revisar): enlace o botón, se ven igual */
+  .inline-action {
     /* Zona táctil ampliada (40 px) sin mover el texto */
-    padding-block: 12px;
+    padding: 12px 0;
     margin-block: -12px;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-weight: 550;
     color: var(--cyan);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .inline-action:hover {
+    text-decoration: underline;
+  }
+  .inline-action:disabled {
+    color: var(--text-muted);
+    cursor: progress;
+  }
+  .keep {
+    white-space: nowrap;
   }
   .health-full {
     display: flex;
@@ -1017,20 +1069,39 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .sync-form.inline {
     display: inline;
   }
-  .link-button {
-    padding: 0;
-    border: 0;
-    background: none;
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
+  /* Piloto filtrado sin ningún sync: en vez de ceros, qué pasa y qué hacer */
+  .empty-pilot {
+    display: grid;
+    justify-items: start;
+    gap: 12px;
+    padding: 28px 32px;
   }
-  .link-button:disabled {
+  .empty-pilot h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .empty-pilot p {
+    max-width: 60ch;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+  .empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 20px;
+  }
+  .acts-note {
+    margin: 10px 0 0;
+    font-size: 13px;
     color: var(--text-muted);
-    cursor: progress;
   }
-  .health-short {
-    display: none;
+  .hero-stat.stale .value.zero {
+    color: var(--text-muted);
   }
   /* Piloto filtrado roto o viejo: su neto se apaga, como en los chips (un dato viejo no compite con uno real) */
   .hero-stat.stale .value.signed.pos,
@@ -1127,6 +1198,18 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     .pilot-strip li {
       flex-shrink: 0;
     }
+    /* «Todos» se queda a la vista mientras la fila se desliza: siempre hay vuelta al consolidado */
+    .pilot-strip li:first-child {
+      position: sticky;
+      left: -16px;
+      z-index: 1;
+      margin-left: -16px;
+      padding: 0 12px 0 16px;
+      background: linear-gradient(to right, var(--bg) calc(100% - 12px), transparent);
+    }
+    .pilot-strip ul {
+      mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    }
     .pilot-strip a {
       align-items: center;
       min-height: 40px;
@@ -1139,11 +1222,19 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     list-style: none;
   }
   @media (max-width: 600px) {
-    .health-full {
-      display: none;
+    /* Una línea por piloto, con su acción: en móvil es donde más cuesta ir a Pilotos */
+    .pilot-health {
+      align-items: flex-start;
     }
-    .health-short {
-      display: inline;
+    .health-full {
+      flex-direction: column;
+      gap: 12px;
+    }
+    .health-full li + li::before {
+      content: none;
+    }
+    .empty-pilot {
+      padding: 22px 18px;
     }
     .pilots-table {
       display: none;
@@ -1234,7 +1325,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     color: var(--warning);
   }
   .pilot-strip a.stale {
-    border-color: #6b5530;
+    border-color: var(--line);
   }
   /* Neto de un dato viejo: apagado, para que no compita con el neto real */
   .pilot-strip a.stale .pilot-net.pos,
@@ -1243,7 +1334,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   }
   .chip-age {
     font-size: 12px;
-    color: var(--warning);
+    color: var(--text-muted);
   }
   :global(.stale-icon) {
     width: 13px;

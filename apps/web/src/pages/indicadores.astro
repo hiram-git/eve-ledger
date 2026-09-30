@@ -32,6 +32,8 @@ const covered = !!o && o.missing === 0;
 const priced = !!o && o.cost !== null;
 // Un progreso del 0 % o del 100 % exacto no se redondea a otra cosa por el formato
 const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progress);
+// Valor en ISK del PLEX que ya tienes (solo hasta lo necesario): el término que faltaba en la cuenta
+const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded) * o.plexPrice : 0;
 ---
 
 <Base title={m.indicators} section="indicadores" status={status} pilots={pilotCount}>
@@ -74,6 +76,7 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
                   )}
                   {covered && o.surplus! > 0 && <span class="answer-sub">{m.omegaSurplus(fmt(o.surplus!))}</span>}
                 </p>
+                {/* Una sola medida de avance: la parte del coste ya cubierta (saldo + PLEX guardado) */}
                 <div
                   class="bar"
                   role="progressbar"
@@ -81,59 +84,61 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
                   aria-valuemin="0"
                   aria-valuemax="100"
                   aria-valuenow={Math.round(percent * 100)}
-                  aria-valuetext={`${pct.format(percent)} · ${fmt(o.available)} / ${fmt(o.cost!)} ISK`}
+                  aria-valuetext={m.omegaOfCost(pct.format(percent))}
                 >
                   <i class:list={{ done: covered }} style={`width:${(percent * 100).toFixed(1)}%`} />
                 </div>
-                <p class="bar-caption">
-                  <span>{pct.format(percent)}</span>
-                  {o.accountsCovered !== null && <span>{m.omegaCovers(o.accountsCovered, o.accounts)}</span>}
+                <p class="bar-caption">{m.omegaOfCost(pct.format(percent))}</p>
+                {/* Lo accionable antes que el desglose: en móvil queda en la primera pantalla */}
+                {!covered && (
+                  <p class="eta">{o.daysToCover !== null ? m.omegaEta(o.daysToCover, fmt(o.avgDailyNet)) : m.omegaNoEta}</p>
+                )}
+
+                {/* El desglose es la cuenta que lleva a la cifra de arriba: coste − saldo − PLEX guardado */}
+                <table class="equation">
+                  <caption class="sr-only">{m.omegaBreakdown}</caption>
+                  <tbody>
+                    <tr>
+                      <th scope="row">
+                        {m.omegaCost}
+                        <span class="row-meta">{m.omegaCostDetail(qty.format(o.plexNeeded), `${fmt(o.plexPrice!)} ISK`)}</span>
+                      </th>
+                      <td title={full(o.cost!)}>{fmt(o.cost!)}</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{m.omegaBalance}</th>
+                      <td title={full(o.available)}>−{fmt(o.available)}</td>
+                    </tr>
+                    {o.plexOwned > 0 && (
+                      <tr>
+                        <th scope="row">
+                          {m.omegaPlexInv}
+                          <span class="row-meta">{m.omegaPlexCount(qty.format(Math.min(o.plexOwned, o.plexNeeded)))}</span>
+                        </th>
+                        <td title={full(plexValue)}>−{fmt(plexValue)}</td>
+                      </tr>
+                    )}
+                    <tr class="result">
+                      <th scope="row">{covered ? m.omegaLeft : m.omegaMissing}</th>
+                      <td title={full(covered ? o.surplus! : o.missing!)}>{fmt(covered ? o.surplus! : o.missing!)} ISK</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p class="price-meta">
+                  {m.omegaPlexPrice}: {fmt(o.plexPrice!)} ISK
+                  {o.plexPriceSource && o.plexPriceUpdatedAt && <> · {m.omegaPriceMeta(o.plexPriceSource, ago(o.plexPriceUpdatedAt, lang))}</>}
+                  {o.plexPriceSource === 'market' && o.plexAveragePrice !== null && <> · {m.omegaNote(`${fmt(o.plexAveragePrice)} ISK`)}</>}
                 </p>
               </>
             ) : (
               <div class="no-price">
                 <p class="answer-label">{m.omegaNoPrice}</p>
                 <p class="eta">{m.omegaNoPriceHint}</p>
+                <p class="eta">{m.omegaBalance}: {fmt(o.available)} ISK · {m.omegaPlexNeeded}: {qty.format(o.plexNeeded)}</p>
               </div>
-            )}
-
-            <dl class="breakdown">
-              <div>
-                <dt>{m.omegaCost}</dt>
-                <dd title={priced ? full(o.cost!) : undefined}>{priced ? `${fmt(o.cost!)} ISK` : '—'}</dd>
-              </div>
-              <div>
-                <dt>{m.omegaBalance}</dt>
-                <dd title={full(o.available)}>{fmt(o.available)} ISK</dd>
-              </div>
-              <div>
-                <dt>{m.omegaPlexNeeded}</dt>
-                <dd>
-                  {qty.format(o.plexNeeded)}
-                  {o.plexOwned > 0 && (
-                    <span class="dd-meta">
-                      {m.omegaPlexOwned(qty.format(o.plexOwned), Math.floor(o.plexOwned / Math.max(1, o.plexPerMonth)))} ·{' '}
-                      {m.omegaPlexMissing(qty.format(o.plexMissing))}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>{m.omegaPlexPrice}</dt>
-                <dd title={priced ? full(o.plexPrice!) : undefined}>
-                  {o.plexPrice !== null ? `${fmt(o.plexPrice)} ISK` : '—'}
-                  {o.plexPriceSource && o.plexPriceUpdatedAt && <span class="dd-meta">{m.omegaPriceMeta(o.plexPriceSource, ago(o.plexPriceUpdatedAt, lang))}</span>}
-                </dd>
-              </div>
-            </dl>
-            {/* Cierre: qué hacer con el dato, no una salvedad */}
-            {priced && !covered && (
-              <p class="eta">{o.daysToCover !== null ? m.omegaEta(o.daysToCover, fmt(o.avgDailyNet)) : m.omegaNoEta}</p>
             )}
             {pilotCount === 0 && <p class="eta">{m.omegaNoPilots}</p>}
           </div>
-          <p class="panel-note">{/* El inventario valora el PLEX con la media de ESI: si aquí manda el mercado, la nota explica la diferencia */}
-          {m.omegaNote(o.plexPriceSource === 'market' && o.plexAveragePrice !== null ? `${fmt(o.plexAveragePrice)} ISK` : null)}</p>
         </section>
       </div>
     )
@@ -217,15 +222,57 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
     background: var(--positive);
   }
   .bar-caption {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    margin: -4px 0 0;
+    margin: -6px 0 0;
     font-size: 13px;
     color: var(--text-muted);
   }
-  .bar-caption span:first-child {
-    font-family: var(--mono);
+  .equation {
+    width: 100%;
+    margin: 6px 0 0;
+    border-collapse: collapse;
+  }
+  .equation th,
+  .equation td {
+    padding: 9px 0;
+    border-top: 1px solid var(--line);
+    /* Las tablas del tema llevan línea inferior en th: aquí solo separa la de arriba */
+    border-bottom: 0;
+    vertical-align: baseline;
+  }
+  .equation th {
+    /* El tema pone nowrap en th: aquí las etiquetas largas (alemán) se parten */
+    white-space: normal;
+    padding-right: 16px;
+    font: 400 13px var(--font);
+    color: var(--text-secondary);
+    text-align: left;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .equation td {
+    font: 15px var(--mono);
+    color: var(--text);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .row-meta {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  /* El resultado cierra la cuenta: doble línea como en un libro de contabilidad */
+  .equation tr.result th,
+  .equation tr.result td {
+    border-top: 3px double var(--line-strong);
+    font-weight: 600;
+    color: var(--text);
+  }
+  .price-meta {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
   }
   .eta {
     margin: 0;
@@ -237,42 +284,12 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
     display: grid;
     gap: 6px;
   }
-  .breakdown {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0 24px;
-    margin: 4px 0 0;
-  }
-  .breakdown div {
-    display: grid;
-    align-content: start;
-    gap: 2px;
-    padding: 10px 0;
-    border-top: 1px solid var(--line);
-  }
-  dt {
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-  dd {
-    margin: 0;
-    font: 15px var(--mono);
-    color: var(--text);
-  }
-  .dd-meta {
-    display: block;
-    font: 13px var(--font);
-    color: var(--text-muted);
-  }
   @media (max-width: 600px) {
     .panel-body {
       padding: 18px 16px 14px;
     }
     .answer-value {
       font-size: 36px;
-    }
-    .breakdown {
-      grid-template-columns: 1fr;
     }
   }
 </style>

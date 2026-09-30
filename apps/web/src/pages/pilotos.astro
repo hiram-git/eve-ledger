@@ -191,6 +191,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
               {p.state.hint && (
                 <span class:list={['error-msg', { soft: p.state.kind !== 'error' }]} title={p.state.title ? `${m.originalError} ${p.state.title}` : undefined}>
                   {p.state.hint}
+                  {(p.state.kind === 'error' || p.missingScopes.length > 0) && <> {m.relinkPick(p.name)}</>}
                 </span>
               )}
             </div>
@@ -231,7 +232,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
 
             <div class="actions">
               {p.missingScopes.length > 0 || p.state.kind === 'error' ? (
-                <a class="secondary-button" href={loginUrl} title={m.relinkTitle}>
+                <a class="secondary-button" href={loginUrl} title={m.relinkAs(p.name)} aria-label={m.relinkAs(p.name)}>
                   <Icon name="refresh" />
                   {m.relink}
                 </a>

@@ -110,6 +110,8 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
             {d.expenses > 0 && <div class="bar expenses" style={`top:${100 - zero}%;height:${pct(d.expenses)}%`} />}
             {/* Neto del día: un punto neutro sobre el eje; la barra sola no dice si el día cerró en positivo o en negativo */}
             {hasActivity(d) && <i class="net-mark" aria-hidden="true" style={`bottom:${pct(d.net + bottom)}%`} />}
+            {/* Día sin movimientos: una marca corta en el eje; los días anteriores al historial van rayados */}
+            {!hasActivity(d) && <i class="zero-mark" aria-hidden="true" style={`bottom:${zero}%`} />}
           </div>
           )
         ))
@@ -316,6 +318,15 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
     outline-offset: -1px;
   }
   /* Días anteriores al primer sync: textura diagonal, sin barras ni tooltip */
+  .zero-mark {
+    position: absolute;
+    left: 25%;
+    right: 25%;
+    height: 2px;
+    margin-bottom: -1px;
+    border-radius: 1px;
+    background: var(--text-muted);
+  }
   .nodata-band {
     position: absolute;
     inset: 0 auto 0 0;

@@ -15,7 +15,7 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 
 
-// El viewBox mide casi lo mismo que la tarjeta en escritorio (~430 px): las etiquetas de 11,5 px salen a ~11 px
+// El viewBox mide casi lo mismo que la tarjeta en escritorio (~430 px): las etiquetas de 12 px salen a ~11,5 px
 const W = 440;
 const H = 160;
 const PAD = 40; // margen para que las etiquetas no se corten
@@ -213,7 +213,7 @@ const summary = m.mapSummary(invCount, earnCount);
     }
   }
   text {
-    font: 11.5px var(--font);
+    font: 12px var(--font);
     fill: var(--text-secondary);
   }
   .name {
@@ -221,7 +221,7 @@ const summary = m.mapSummary(invCount, earnCount);
     fill: var(--text);
   }
   .val {
-    font: 11.5px var(--mono);
+    font: 12px var(--mono);
     fill: var(--text-secondary);
   }
   .val.gain {
