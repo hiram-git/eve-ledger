@@ -124,3 +124,26 @@ export type Pilot = {
 export const getPilots = () => call<Pilot[]>('/characters', { headers: { Accept: 'application/json' } });
 export const loginUrl = `${API_URL}/auth/login`;
 export const syncLogUrl = `${API_URL}/sync/log`;
+
+// Omega de todas las cuentas: cuánto cuesta renovarlas (1 mes) frente al saldo de los wallets.
+// Los campos que dependen del precio del PLEX son null mientras no haya precio guardado.
+export type Indicators = {
+  omega: {
+    accounts: number;
+    plexPerMonth: number;
+    months: number;
+    plexNeeded: number;
+    plexPrice: number | null;
+    plexPriceUpdatedAt: string | null;
+    cost: number | null;
+    available: number;
+    missing: number | null;
+    surplus: number | null;
+    progress: number | null;
+    accountsCovered: number | null;
+    avgDailyNet: number;
+    paceDays: number;
+    daysToCover: number | null;
+  };
+};
+export const getIndicators = () => call<Indicators>('/indicators');

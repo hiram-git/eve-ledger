@@ -14,16 +14,19 @@ import {
   ApiError,
   getInventory,
   getMap,
+  getPilots,
   getSummary,
   getSyncStatus,
   syncLogUrl,
   type GeoMap,
   type Inventory,
+  type Pilot,
   type Summary,
   type SyncStatus,
 } from '../lib/api';
 import { ago, isk, iskFull, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
+import { pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -44,15 +47,17 @@ let summary: Summary | undefined;
 let status: SyncStatus | undefined;
 let inventory: Inventory | undefined;
 let geo: GeoMap | undefined;
+let pilotList: Pilot[] | undefined;
 let apiError: string | undefined;
 try {
   // Inventario y mapa son opcionales: si fallan, el resto del dashboard se muestra igual
   const optional = <T,>(p: Promise<T>) => p.catch((err) => (console.error(err), undefined));
-  [summary, status, inventory, geo] = await Promise.all([
+  [summary, status, inventory, geo, pilotList] = await Promise.all([
     getSummary(days, pilotId),
     getSyncStatus(),
     optional(getInventory(pilotId)),
     optional(getMap(pilotId)),
+    optional(getPilots()),
   ]);
 } catch (err) {
   // Un piloto que ya no está vinculado (enlace viejo): volver al consolidado
@@ -87,6 +92,24 @@ const lastSync = summary?.characters
 // Antigüedad: datos «viejos» cuando superan dos intervalos de sync (o 2 h si el cron está apagado)
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 const isStale = (iso: string | null | undefined) => !iso || Date.now() - new Date(iso).getTime() > staleAfterMs;
+// Pilotos que necesitan atención: el mismo estado que en /pilotos (error, primer sync en curso o datos viejos),
+// con su causa visible bajo el filtro y un enlace a esa página
+const pilotStates = new Map((pilotList ?? []).map((p) => [p.id, pilotState(p, m, staleAfterMs)]));
+const needsAttention = (c: { id: number; lastSyncAt: string | null }) => {
+  const st = pilotStates.get(c.id);
+  return st ? st.kind !== 'ok' : isStale(c.lastSyncAt);
+};
+const staleList =
+  summary?.characters.filter(needsAttention).map((c) => {
+    const st = pilotStates.get(c.id);
+    if (!st) return `${c.name} (${c.lastSyncAt ? rel(c.lastSyncAt) : m.never})`;
+    if (st.kind === 'stale') return `${c.name} (${rel(c.lastSyncAt)})`;
+    return `${c.name} (${st.text}${st.hint === m.errToken ? ` · ${m.relinkShort}` : ''})`;
+  }) ?? [];
+// El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
+// si no, baja junto al inventario y Patrimonio queda como una franja compacta
+const showMap = !!geo && geo.nodes.some((n) => n.earnedToday > 0);
+const mapBelow = !!geo && !showMap && geo.nodes.length > 0;
 const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
 const partialHistory = summary && summary.coverage.firstEntryAt && summary.coverage.coveredDays < days;
 
@@ -109,13 +132,18 @@ const locationLabel = (id: number, name: string | null) =>
   name ?? (id > 1_000_000_000_000 ? m.structure(id) : `#${id}`);
 // "Jita IV - Moon 4 - Caldari Navy Assembly Plant" → "Jita IV - Moon 4" (el nombre completo va en el tooltip)
 const shortStation = (name: string) => name.split(' - ').slice(0, 2).join(' - ');
+// Ubicaciones en el espacio (raíz = un sistema, no una estación): «Amarr» a secas se confundía con la estación
+const inSpaceRange = (id: number) => id >= 30_000_000 && id <= 32_999_999;
 const locationRows: BarRow[] =
   inventory?.byLocation.map((l) => {
     const full = locationLabel(l.locationId, l.name);
-    return { label: shortStation(full), value: l.value, detail: `${full} · ${m.stacks(l.stacks)}` };
+    const label = inSpaceRange(l.locationId) ? `${shortStation(full)} (${m.inSpace})` : shortStation(full);
+    // Las estructuras sin nombre muestran un ID acortado: el completo va en el detalle
+    const id = l.name ? '' : ` (#${l.locationId})`;
+    return { label, value: l.value, detail: `${full}${id} · ${m.stacks(l.stacks)}` };
   }) ?? [];
-// Lo más valioso: los 6 primeros; el detalle completo está en GET /assets
-const valuableItems = inventory?.topItems.slice(0, 6).map((i) => ({ ...i, isk: i.value })) ?? [];
+// Lo más valioso: los 6 primeros (8 si el mapa comparte la columna de al lado); el detalle completo está en GET /assets
+const valuableItems = inventory?.topItems.slice(0, mapBelow ? 8 : 6).map((i) => ({ ...i, isk: i.value })) ?? [];
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 ---
 
@@ -139,14 +167,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             <span class="coverage" title={m.coverageTitle}>
               <Icon name="info" />
               {m.coverage(date(summary!.coverage.firstEntryAt!), summary!.coverage.coveredDays, days)}
-            </span>
-          )
-        }
-        {
-          lastSync && (
-            <span class:list={['fresh', { stale: isStale(lastSync) }]}>
-              <Icon name={isStale(lastSync) ? 'alert' : 'activity'} />
-              {m.updated} <time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
             </span>
           )
         }
@@ -243,6 +263,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
                         {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
                       </span>
+                      {isStale(c.lastSyncAt) && c.lastSyncAt && <span class="chip-age" aria-hidden="true">{rel(c.lastSyncAt)}</span>}
                       {isStale(c.lastSyncAt) && <span class="sr-only">{m.noSyncSince(rel(c.lastSyncAt))}</span>}
                     </a>
                   </li>
@@ -259,105 +280,133 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               }
             </script>
 
-            <section class="glance" aria-label={m.summary}>
+            {
+              staleList.length > 0 && (
+                <p class="pilot-health">
+                  <Icon name="alert" class="stale-icon" />
+                  <span>{m.pilotsStale(staleList.length, summary.characters.length, staleList.join(', '))}.</span>
+                  <a href="/pilotos">{m.reviewPilots}</a>
+                </p>
+              )
+            }
+
+            <section class:list={['glance', { solo: !showMap }]} aria-labelledby="glance-title">
+              <h2 id="glance-title" class="sr-only">{m.net} · {m.netWorth}</h2>
               <div class="panel stat hero-stat">
-                <div class="headline">
-                  <div class="fig">
-                    <span class="label">
-                      <Icon name="activity" />
-                      {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}{coverageNote}
-                    </span>
-                    <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
-                      {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
-                      {fmt(summary.totals.net, { sign: true })}
-                      <small>ISK</small>
-                      <span class="sr-only">{summary.totals.net >= 0 ? m.gain : m.loss}</span>
-                    </span>
+                <div class="hero-body">
+                  <div class="headline">
+                    <div class="fig">
+                      <span class="label">
+                        <Icon name="activity" />
+                        {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}{coverageNote}
+                      </span>
+                      <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
+                        {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
+                        {fmt(summary.totals.net, { sign: true })}
+                        <small>ISK</small>
+                        <span class="sr-only">{summary.totals.net >= 0 ? m.gain : m.loss} ({full(summary.totals.net)})</span>
+                      </span>
+                      {
+                        delta !== undefined ? (
+                          <p class="versus compare">
+                            {delta === 0 ? (
+                              m.versusSame(days)
+                            ) : (
+                              <span class:list={['delta', sign(delta)]}>
+                                <Icon name={delta > 0 ? 'up' : 'down'} />
+                                {delta > 0
+                                  ? m.versusMore(fmt(delta), days, fmt(summary.previous.net, { sign: true }))
+                                  : m.versusLess(fmt(-delta), days, fmt(summary.previous.net, { sign: true }))}
+                              </span>
+                            )}
+                          </p>
+                        ) : (
+                          <p class="versus">{m.noPrevious(days)}</p>
+                        )
+                      }
+                    </div>
+                    <div class="fig today" title={m.todayTitle(full(summary.today.net))}>
+                      <span class="label">
+                        <Icon name="clock" />
+                        {m.today}
+                      </span>
+                      <span class:list={['value', 'signed', sign(summary.today.net)]}>
+                        {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
+                        {fmt(summary.today.net, { sign: true })}
+                        <small>ISK</small>
+                        <span class="sr-only">{summary.today.net >= 0 ? m.gain : m.loss} ({full(summary.today.net)})</span>
+                      </span>
+                      <p class="versus">
+                        {summary.today.income || summary.today.expenses
+                          ? m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))
+                          : m.todayNone}
+                      </p>
+                      {
+                        lastSync && (
+                          <p class:list={['versus', 'asof', { stale: isStale(lastSync) }]}>
+                            {isStale(lastSync) && <Icon name="alert" class="stale-icon" />}
+                            {m.asOfSync('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>
+                          </p>
+                        )
+                      }
+                    </div>
+                  </div>
+                  <div class="composition">
+                    <div class="flow">
+                      <div class="ratio" aria-hidden="true">
+                        {summary.totals.income > 0 && (
+                          <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />
+                        )}
+                        {summary.totals.expenses > 0 && (
+                          <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />
+                        )}
+                      </div>
+                      <dl class="breakdown">
+                        <div>
+                          <dt>
+                            <i class="key income" />
+                            {m.income}
+                          </dt>
+                          <dd title={full(summary.totals.income)}>{fmt(summary.totals.income)}</dd>
+                        </div>
+                        <div>
+                          <dt>
+                            <i class="key expenses" />
+                            {m.expenses}
+                          </dt>
+                          <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
+                        </div>
+                      </dl>
+                    </div>
                     {
-                      delta !== undefined ? (
-                        <p class="versus compare">
-                          {delta === 0 ? (
-                            m.versusSame(days)
-                          ) : (
-                            <span class:list={['delta', sign(delta)]}>
-                              <Icon name={delta > 0 ? 'up' : 'down'} />
-                              {delta > 0
-                                ? m.versusMore(fmt(delta), days, fmt(summary.previous.net, { sign: true }))
-                                : m.versusLess(fmt(-delta), days, fmt(summary.previous.net, { sign: true }))}
-                            </span>
-                          )}
-                        </p>
-                      ) : (
-                        <p class="versus">{m.noPrevious(days)}</p>
+                      summary.byActivity.length > 0 && (
+                        <div class="acts-block">
+                          <p class="acts-title">{m.byActivityPeriod(days)}</p>
+                          <ul class="acts" aria-label={m.byActivity}>
+                            {summary.byActivity.map((a) => (
+                              <li title={`${m.activityHint[a.activity]} · ${m.activityInOut(full(a.income), full(out(a.expenses)))}`}>
+                                <span class="act-name">{m.activityName[a.activity]}</span>
+                                <span class="act-bar" aria-hidden="true">
+                                  <i class:list={[sign(a.net)]} style={actBar(a.net)} />
+                                </span>
+                                <span class:list={['act-net', sign(a.net)]}>{fmt(a.net, { sign: true })}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <a class="acts-link" href="#por-actividad">
+                            {m.activityDetailLink}
+                            <i class="chev" aria-hidden="true" />
+                          </a>
+                        </div>
                       )
                     }
                   </div>
-                  <div class="fig today" title={m.todayTitle(full(summary.today.net))}>
-                    <span class="label">
-                      <Icon name="clock" />
-                      {m.today}
-                    </span>
-                    <span class:list={['value', 'signed', sign(summary.today.net)]}>
-                      {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
-                      {fmt(summary.today.net, { sign: true })}
-                      <small>ISK</small>
-                      <span class="sr-only">{summary.today.net >= 0 ? m.gain : m.loss}</span>
-                    </span>
-                    <p class="versus">
-                      {summary.today.income || summary.today.expenses
-                        ? m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))
-                        : m.todayNone}
-                    </p>
-                  </div>
+                  {summary.internalTransfers > 0 && (
+                    <span class="sub">{m.internal(fmt(summary.internalTransfers))}</span>
+                  )}
                 </div>
-                <div class="composition">
-                  <div class="flow">
-                    <div class="ratio" aria-hidden="true">
-                      {summary.totals.income > 0 && (
-                        <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />
-                      )}
-                      {summary.totals.expenses > 0 && (
-                        <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />
-                      )}
-                    </div>
-                    <dl class="breakdown">
-                      <div>
-                        <dt>
-                          <i class="key income" />
-                          {m.income}
-                        </dt>
-                        <dd title={full(summary.totals.income)}>{fmt(summary.totals.income)}</dd>
-                      </div>
-                      <div>
-                        <dt>
-                          <i class="key expenses" />
-                          {m.expenses}
-                        </dt>
-                        <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                  {
-                    summary.byActivity.length > 0 && (
-                      <ul class="acts" aria-label={m.byActivity}>
-                        {summary.byActivity.map((a) => (
-                          <li title={`${m.activityHint[a.activity]} · ${m.activityInOut(full(a.income), full(out(a.expenses)))}`}>
-                            <span class="act-name">{m.activityName[a.activity]}</span>
-                            <span class="act-bar" aria-hidden="true">
-                              <i class:list={[sign(a.net)]} style={actBar(a.net)} />
-                            </span>
-                            <span class:list={['act-net', sign(a.net)]}>{fmt(a.net, { sign: true })}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )
-                  }
-                </div>
-                {summary.internalTransfers > 0 && (
-                  <span class="sub">{m.internal(fmt(summary.internalTransfers))}</span>
-                )}
               </div>
-              <div class="panel stat worth">
+              <div class:list={['panel', 'stat', 'worth', { compact: !showMap }]}>
                 <div class="worth-head">
                   <div>
                     <span class="label">
@@ -388,7 +437,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                     </div>
                   </dl>
                 </div>
-                {geo && <NewEdenMap map={geo} />}
+                {showMap && geo && <NewEdenMap map={geo} />}
               </div>
             </section>
 
@@ -522,7 +571,21 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
 
             {inventory && inventory.stacks > 0 && (
               <div class="split">
-                <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
+                <div class="stack">
+                  <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
+                  {
+                    mapBelow && geo && (
+                      <section class="panel" id="mapa">
+                        <div class="panel-heading">
+                          <h2>{m.mapTitle}</h2>
+                        </div>
+                        <div class="panel-body">
+                          <NewEdenMap map={geo} />
+                        </div>
+                      </section>
+                    )
+                  }
+                </div>
                 <MarketItems
                   title={m.mostValuable}
                   items={valuableItems}
@@ -551,9 +614,28 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   .hero-stat {
     container-type: inline-size;
   }
+  /* .hero-body es el cuerpo de la tarjeta (los container queries no pueden estilar al propio contenedor).
+     Estrecho: Neto → composición del período → Hoy; «Hoy» ya no se interpone entre el neto y su desglose */
+  .hero-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+  }
   .headline {
-    display: grid;
-    gap: 14px;
+    display: contents;
+  }
+  .fig:not(.today) {
+    order: 1;
+  }
+  .fig.today {
+    order: 3;
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .hero-body .sub {
+    order: 4;
   }
   .fig {
     display: flex;
@@ -570,11 +652,24 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     color: var(--text-muted);
   }
   .composition {
+    order: 2;
     display: grid;
     gap: 14px;
+    margin-top: 8px;
   }
   .flow {
     min-width: 0;
+  }
+  .acts-block {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    min-width: 0;
+  }
+  .acts-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
   }
   .acts {
     display: grid;
@@ -614,12 +709,36 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     position: absolute;
     top: 0;
     bottom: 0;
-    background: var(--income);
+    /* Un neto pequeño frente al mayor no debe quedarse en un píxel */
+    min-width: 3px;
+    background: var(--positive);
     border-radius: 0 3px 3px 0;
   }
   .act-bar i.neg {
-    background: var(--expenses);
+    background: var(--critical);
     border-radius: 3px 0 0 3px;
+  }
+  .acts-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-self: start;
+    min-height: 40px;
+    font-size: 13px;
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  .acts-link:hover {
+    text-decoration: underline;
+  }
+  /* Chevrón hacia abajo (una flecha de tendencia se leería como un dato negativo) */
+  .acts-link .chev {
+    width: 7px;
+    height: 7px;
+    margin-top: -3px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
   }
   .act-net {
     min-width: 4.5rem;
@@ -652,11 +771,19 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   }
   @container (min-width: 520px) {
     .headline {
+      display: grid;
       grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-      gap: 0;
+    }
+    .fig:not(.today),
+    .fig.today,
+    .composition,
+    .hero-body .sub {
+      order: 0;
     }
     .fig.today {
-      padding-left: 24px;
+      margin-top: 0;
+      padding: 0 0 0 24px;
+      border-top: 0;
       border-left: 1px solid var(--line);
     }
     .fig.today .value {
@@ -669,16 +796,57 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     .fig.today .value.zero {
       font-size: 28px;
     }
+    /* Una línea separa el par del período/hoy de la composición del período: así las actividades no se leen como las de hoy */
     .composition {
       grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
       gap: 0;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
     }
     .flow {
       padding-right: 24px;
     }
-    .acts {
+    .acts-block {
       padding-left: 24px;
       border-left: 1px solid var(--line);
+    }
+  }
+  /* Ancho completo (sin mapa al lado): Neto | Hoy | Por actividad en tres columnas, Ingresos/Gastos bajo el par */
+  @container (min-width: 880px) {
+    .hero-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.2fr);
+      grid-template-rows: auto 1fr auto;
+      column-gap: 0;
+      row-gap: 14px;
+    }
+    .headline,
+    .composition {
+      display: contents;
+    }
+    .fig:not(.today) {
+      grid-column: 1;
+      grid-row: 1;
+      padding-right: 24px;
+    }
+    .fig.today {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .flow {
+      grid-column: 1 / 3;
+      grid-row: 2;
+      padding: 14px 24px 0 0;
+      border-top: 1px solid var(--line);
+    }
+    .acts-block {
+      grid-column: 3;
+      grid-row: 1 / 3;
+    }
+    .hero-body .sub {
+      grid-column: 1 / -1;
+      grid-row: 3;
     }
   }
   .signed {
@@ -705,8 +873,38 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     color: var(--text);
   }
   .versus {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
+  }
+  .asof {
+    display: block;
+  }
+  .asof :global(.stale-icon) {
+    margin-right: 6px;
+    vertical-align: -2px;
+  }
+  .asof.stale {
+    color: var(--warning);
+  }
+  /* Pilotos con datos viejos: la causa y el enlace, en una línea bajo el filtro */
+  .pilot-health {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin: -4px 0 0;
+    font-size: 13px;
+    color: var(--warning);
+  }
+  .pilot-health a {
+    /* Zona táctil ampliada sin mover el texto */
+    padding-block: 11px;
+    margin-block: -11px;
+    color: var(--cyan);
+  }
+  /* Patrimonio es secundario: un escalón claro por debajo de Neto y de Hoy */
+  .worth .value {
+    font-size: 24px;
   }
   .delta {
     font: 500 14px var(--mono);
@@ -826,7 +1024,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       border: 1px solid var(--line-strong);
     }
     .pilot-cards .last-sync {
-      font-size: 12px;
+      font-size: 13px;
       white-space: nowrap;
     }
     .pilot-cards .last-sync:not(.stale) {
@@ -839,7 +1037,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
       margin: 0;
     }
     .pilot-cards dt {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-muted);
     }
     .pilot-cards dd {
@@ -876,12 +1074,20 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     color: var(--cyan);
     text-decoration: underline;
   }
-  .stale,
-  .period-meta .fresh.stale {
+  .stale {
     color: var(--warning);
   }
   .pilot-strip a.stale {
     border-color: #6b5530;
+  }
+  /* Neto de un dato viejo: apagado, para que no compita con el neto real */
+  .pilot-strip a.stale .pilot-net.pos,
+  .pilot-strip a.stale .pilot-net.neg {
+    color: var(--text-secondary);
+  }
+  .chip-age {
+    font-size: 12px;
+    color: var(--warning);
   }
   :global(.stale-icon) {
     width: 13px;
@@ -955,7 +1161,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
   }
   .breakdown dd {
@@ -970,7 +1176,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     border-radius: 2px;
   }
   /* La nota de transferencias internas cierra la tarjeta: queda alineada con la de «sin ubicar» de Patrimonio */
-  .hero-stat .sub {
+  .hero-body .sub {
     margin-top: auto;
     padding-top: 10px;
   }
@@ -986,10 +1192,23 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     width: 14px;
     height: 14px;
   }
-  @media (max-width: 1040px) {
+  @media (max-width: 900px) {
     .glance {
       grid-template-columns: 1fr;
     }
+  }
+  /* Sin ganancias hoy el mapa baja al inventario: Neto a todo el ancho y Patrimonio como franja compacta */
+  .glance.solo {
+    grid-template-columns: 1fr;
+  }
+  .worth.compact .worth-head {
+    align-items: center;
+  }
+  .stack {
+    display: grid;
+    align-content: start;
+    gap: 20px;
+    min-width: 0;
   }
   .pilots th:first-child,
   .pilots td:first-child {

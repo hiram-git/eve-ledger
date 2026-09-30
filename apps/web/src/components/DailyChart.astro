@@ -30,7 +30,7 @@ function niceStep(range: number, count = 4) {
 
 const maxIn = Math.max(0, ...daily.map((d) => d.income));
 const maxOut = Math.max(0, ...daily.map((d) => d.expenses));
-const step = niceStep(maxIn + maxOut);
+const step = niceStep(maxIn + maxOut, 8);
 const top = Math.max(step, Math.ceil(maxIn / step) * step);
 const bottom = Math.ceil(maxOut / step) * step;
 const span = top + bottom;
@@ -38,7 +38,14 @@ const pct = (v: number) => (v / span) * 100;
 const zero = pct(bottom); // altura de la línea base desde abajo, en %
 
 const ticks: number[] = [];
-for (let v = -bottom; v <= top + step / 2; v += step) ticks.push(v);
+for (let v = -bottom; v <= top + step / 2; v += step) ticks.push(Math.round(v));
+
+// Etiquetas del eje en una sola unidad y con los mismos decimales (antes se mezclaban «50,0 M», «150 M» y «0»)
+const axisMax = Math.max(top, bottom);
+const [unit, suffix] = axisMax >= 1e9 ? [1e9, ' B'] : axisMax >= 1e6 ? [1e6, ' M'] : axisMax >= 1e3 ? [1e3, ' k'] : [1, ''];
+const axisDigits = Number.isInteger(step / unit) ? 0 : 1;
+const axisNum = new Intl.NumberFormat(lang, { minimumFractionDigits: axisDigits, maximumFractionDigits: axisDigits });
+const axisLabel = (v: number) => (v === 0 ? '0' : `${v < 0 ? '−' : ''}${axisNum.format(Math.abs(v) / unit)}${suffix}`);
 
 // Etiquetas del eje X: primera, última y una por semana
 const labelEvery = daily.length > 14 ? 7 : daily.length > 7 ? 2 : 1;
@@ -52,7 +59,8 @@ const entry = lastActive >= 0 ? lastActive : daily.length - 1;
 // Cifras abreviadas (k/M/B) en el tooltip y para el lector de pantalla; las completas están en la tabla
 const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
 // Tabla: cifra completa sin repetir «ISK» en cada celda (la unidad va en el encabezado)
-const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
+const wholeIsk = new Intl.NumberFormat(lang, { maximumFractionDigits: 0 });
+const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
 ---
 
 <div class="legend" aria-hidden="true">
@@ -71,7 +79,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
   data-l-net={m.net}
 >
   <div class="y-axis" aria-hidden="true">
-    {ticks.map((t) => <span style={`bottom:${pct(t + bottom)}%`}>{fmt(t)}</span>)}
+    {ticks.map((t) => <span style={`bottom:${pct(t + bottom)}%`}>{axisLabel(t)}</span>)}
   </div>
   <div class="plot">
     {ticks.map((t) => <div class:list={['grid', { base: t === 0 }]} style={`bottom:${pct(t + bottom)}%`} />)}
@@ -219,7 +227,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
   .legend {
     display: flex;
     gap: 18px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
     margin-bottom: 14px;
   }
@@ -265,13 +273,13 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
   }
   .y-axis {
     position: relative;
-    min-width: 44px;
+    min-width: 52px;
   }
   .y-axis span {
     position: absolute;
     right: 0;
     transform: translateY(50%);
-    font: 11px var(--mono);
+    font: 12px var(--mono);
     color: var(--text-muted);
     white-space: nowrap;
   }
@@ -322,7 +330,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
     padding: 2px 8px;
     border-radius: 4px;
     background: var(--panel);
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
   }
   .net-mark {
@@ -360,7 +368,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
   }
   .x-axis span {
     flex: 1;
-    font: 11px var(--mono);
+    font: 12px var(--mono);
     color: var(--text-muted);
     text-align: center;
     white-space: nowrap;
@@ -381,7 +389,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
     grid-template-columns: auto auto;
     gap: 4px 16px;
     padding: 10px 12px;
-    font-size: 12px;
+    font-size: 13px;
     background: #0d1a25f2;
     color: var(--text-primary);
     border: 1px solid #345469;
@@ -405,7 +413,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
   }
   .tooltip :global(b) {
     text-align: right;
-    font: 500 12px var(--mono);
+    font: 500 13px var(--mono);
   }
   .tooltip[hidden] {
     display: none;
@@ -414,7 +422,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
   .hint {
     grid-column: 2;
     margin: 8px 0 0;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
     visibility: hidden;
   }
@@ -428,7 +436,7 @@ const plain = (v: number) => full(v).replace(/\s*ISK$/, '');
   .table-view summary {
     cursor: pointer;
     padding: 12px 0;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
   }
   .table-view summary:hover {

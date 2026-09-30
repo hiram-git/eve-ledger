@@ -1,0 +1,269 @@
+---
+// Indicadores: metas concretas medidas contra el saldo de los wallets. Hoy, Omega de todas las cuentas;
+// la rejilla admite más tarjetas.
+import Base from '../layouts/Base.astro';
+import { getIndicators, getPilots, getSyncStatus, type Indicators, type SyncStatus } from '../lib/api';
+import { ago, isk, iskFull } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number) => isk(v, { lang });
+const full = (v: number) => iskFull(v, lang);
+const pct = new Intl.NumberFormat(lang, { style: 'percent', maximumFractionDigits: 0 });
+const qty = new Intl.NumberFormat(lang, { useGrouping: 'always' });
+
+let indicators: Indicators | undefined;
+let status: SyncStatus | undefined;
+let pilotCount: number | undefined;
+let apiError: string | undefined;
+try {
+  [indicators, status, pilotCount] = await Promise.all([
+    getIndicators(),
+    getSyncStatus(),
+    getPilots().then((p) => p.length),
+  ]);
+} catch (err) {
+  apiError = err instanceof Error ? err.message : String(err);
+}
+
+const o = indicators?.omega;
+const covered = !!o && o.missing === 0;
+const priced = !!o && o.cost !== null;
+// Un progreso del 0 % o del 100 % exacto no se redondea a otra cosa por el formato
+const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progress);
+---
+
+<Base title={m.indicators} section="indicadores" status={status} pilots={pilotCount}>
+  <div class="page-head">
+    <h1>{m.indicators}</h1>
+    <p class="subtitle">{m.indicatorsLead}</p>
+  </div>
+
+  {
+    apiError && (
+      <div class="notice error" role="alert">
+        <div>
+          <strong>{m.apiDown}</strong>
+          <p class="muted">{apiError}</p>
+          <p>
+            {m.apiRunning} <code>apps/api</code>: <code>bun run dev</code>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  {
+    o && (
+      <div class="cards">
+        <section class="panel omega" aria-labelledby="omega-title">
+          <div class="panel-heading">
+            <h2 id="omega-title">{m.omegaTitle}</h2>
+            <span class="meta">{m.omegaLead(o.accounts, qty.format(o.plexPerMonth))}</span>
+          </div>
+          <div class="panel-body">
+            {priced ? (
+              <>
+                <p class:list={['answer', { done: covered }]}>
+                  <span class="answer-label">{covered ? m.omegaCovered : m.omegaMissing}</span>
+                  {!covered && (
+                    <span class="answer-value" title={full(o.missing!)}>
+                      {fmt(o.missing!)}<span class="unit"> ISK</span>
+                    </span>
+                  )}
+                  {covered && o.surplus! > 0 && <span class="answer-sub">{m.omegaSurplus(fmt(o.surplus!))}</span>}
+                </p>
+                <div
+                  class="bar"
+                  role="progressbar"
+                  aria-label={m.omegaProgress}
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow={Math.round(percent * 100)}
+                  aria-valuetext={`${pct.format(percent)} · ${fmt(o.available)} / ${fmt(o.cost!)} ISK`}
+                >
+                  <i class:list={{ done: covered }} style={`width:${(percent * 100).toFixed(1)}%`} />
+                </div>
+                <p class="bar-caption">
+                  <span>{pct.format(percent)}</span>
+                  {o.accountsCovered !== null && <span>{m.omegaCovers(o.accountsCovered, o.accounts)}</span>}
+                </p>
+                {!covered && (
+                  <p class="eta">
+                    {o.daysToCover !== null ? m.omegaEta(o.daysToCover, fmt(o.avgDailyNet)) : m.omegaNoEta}
+                  </p>
+                )}
+              </>
+            ) : (
+              <div class="no-price">
+                <p class="answer-label">{m.omegaNoPrice}</p>
+                <p class="eta">{m.omegaNoPriceHint}</p>
+              </div>
+            )}
+
+            <dl class="breakdown">
+              <div>
+                <dt>{m.omegaCost}</dt>
+                <dd title={priced ? full(o.cost!) : undefined}>{priced ? `${fmt(o.cost!)} ISK` : '—'}</dd>
+              </div>
+              <div>
+                <dt>{m.omegaBalance}</dt>
+                <dd title={full(o.available)}>{fmt(o.available)} ISK</dd>
+              </div>
+              <div>
+                <dt>{m.omegaPlexNeeded}</dt>
+                <dd>{qty.format(o.plexNeeded)}</dd>
+              </div>
+              <div>
+                <dt>{m.omegaPlexPrice}</dt>
+                <dd title={priced ? full(o.plexPrice!) : undefined}>
+                  {o.plexPrice !== null ? `${fmt(o.plexPrice)} ISK` : '—'}
+                  {o.plexPrice !== null && o.plexPriceUpdatedAt && <span class="dd-meta">{m.omegaPriceMeta(ago(o.plexPriceUpdatedAt, lang))}</span>}
+                </dd>
+              </div>
+            </dl>
+            {pilotCount === 0 && <p class="eta">{m.omegaNoPilots}</p>}
+          </div>
+          <p class="panel-note">{m.omegaNote(o.accounts, qty.format(o.plexPerMonth))}</p>
+        </section>
+      </div>
+    )
+  }
+</Base>
+
+<style>
+  .page-head {
+    display: grid;
+    gap: 6px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+    gap: 20px;
+    align-items: start;
+  }
+  .meta {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .panel-body {
+    display: grid;
+    gap: 14px;
+    padding: 20px 22px 18px;
+  }
+  .answer {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+  }
+  .answer-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .answer.done .answer-label {
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    color: var(--positive);
+  }
+  .answer-value {
+    font: 500 44px/1.1 var(--mono);
+    letter-spacing: -0.03em;
+    color: var(--text);
+  }
+  .unit {
+    font-size: 16px;
+    color: var(--text-muted);
+    letter-spacing: 0;
+  }
+  .answer-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .bar {
+    height: 10px;
+    border-radius: 5px;
+    background: #16232f;
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .bar i {
+    display: block;
+    height: 100%;
+    min-width: 3px;
+    background: var(--balance);
+  }
+  .bar i.done {
+    background: var(--positive);
+  }
+  .bar-caption {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -4px 0 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .bar-caption span:first-child {
+    font-family: var(--mono);
+  }
+  .eta {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .no-price {
+    display: grid;
+    gap: 6px;
+  }
+  .breakdown {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+    margin: 4px 0 0;
+  }
+  .breakdown div {
+    display: grid;
+    align-content: start;
+    gap: 2px;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+  }
+  dt {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  dd {
+    margin: 0;
+    font: 15px var(--mono);
+    color: var(--text);
+  }
+  .dd-meta {
+    display: block;
+    font: 13px var(--font);
+    color: var(--text-muted);
+  }
+  @media (max-width: 600px) {
+    .panel-body {
+      padding: 18px 16px 14px;
+    }
+    .answer-value {
+      font-size: 36px;
+    }
+    .breakdown {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

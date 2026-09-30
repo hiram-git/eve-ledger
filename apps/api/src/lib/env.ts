@@ -24,4 +24,7 @@ export const env = {
   webUrl: (Bun.env.WEB_URL ?? 'http://localhost:4321').replace(/\/$/, ''),
   // Minutos entre syncs automáticos de todos los personajes (0 = desactivado)
   syncIntervalMin: intOrDefault('SYNC_INTERVAL_MIN', 60),
+  // Indicador «Omega de todas las cuentas»: cuántas cuentas y PLEX por mes de Omega de cada una
+  omegaAccounts: intOrDefault('OMEGA_ACCOUNTS', 5),
+  omegaPlexPerMonth: intOrDefault('OMEGA_PLEX_PER_MONTH', 500),
 };

@@ -38,6 +38,17 @@ async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date) {
 
 // characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos siguen
 // sin contar (mover ISK no es ganarlo); la lista de pilotos se devuelve siempre completa.
+// Saldo = el balance del último movimiento sincronizado del personaje
+export async function lastBalance(characterId: number) {
+  const [last] = await db
+    .select({ balance: walletJournal.balance, date: walletJournal.date })
+    .from(walletJournal)
+    .where(eq(walletJournal.characterId, characterId))
+    .orderBy(desc(walletJournal.date), desc(walletJournal.journalId))
+    .limit(1);
+  return last;
+}
+
 export async function getSummary(days: number, characterId?: number) {
   const now = new Date();
   // Desde el inicio del día UTC, para que el primer día de la serie esté completo
@@ -106,12 +117,7 @@ export async function getSummary(days: number, characterId?: number) {
   const charMap = new Map(byCharacter.map((r) => [r.characterId, r]));
   const perCharacter = await Promise.all(
     chars.map(async (c) => {
-      const [last] = await db
-        .select({ balance: walletJournal.balance, date: walletJournal.date })
-        .from(walletJournal)
-        .where(eq(walletJournal.characterId, c.id))
-        .orderBy(desc(walletJournal.date), desc(walletJournal.journalId))
-        .limit(1);
+      const last = await lastBalance(c.id);
       const agg = charMap.get(c.id);
       return withNet({
         id: c.id,
