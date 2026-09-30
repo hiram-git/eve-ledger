@@ -226,6 +226,45 @@ a {
 }
 
 /* ───── Botones ───── */
+/* Acciones en línea (Sincronizar, Revincular, Revisar): enlace o botón, se ven igual en todas las páginas */
+.inline-action {
+  /* Zona táctil ampliada (40 px) sin mover el texto */
+  padding: 12px 0;
+  margin-block: -12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 550;
+  color: var(--cyan);
+  text-decoration: none;
+  cursor: pointer;
+}
+.inline-action:hover {
+  text-decoration: underline;
+}
+.inline-action:disabled {
+  color: var(--text-muted);
+  cursor: progress;
+}
+.sync-form.inline {
+  display: inline;
+}
+/* Botón principal en contorno: la acción está a mano, pero lo más luminoso de la pantalla es el dato */
+.primary-button.outline {
+  background: #61cce514;
+  border-color: var(--cyan-dim);
+  color: #8addee;
+}
+.primary-button.outline:hover {
+  background: #61cce526;
+  border-color: var(--cyan);
+  box-shadow: none;
+}
+.primary-button.outline:disabled {
+  background: #61cce514;
+  border-color: var(--cyan-dim);
+  color: var(--text-muted);
+}
 .primary-button {
   display: inline-flex;
   align-items: center;

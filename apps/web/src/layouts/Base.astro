@@ -17,8 +17,10 @@ interface Props {
   section: 'resumen' | 'indicadores' | 'pilotos';
   status?: SyncStatus;
   pilots?: number;
+  // Pilotos con el sync roto, viejo o sin primer sync: un punto ámbar junto a «Pilotos»
+  pilotIssues?: number;
 }
-const { title, section, status, pilots } = Astro.props;
+const { title, section, status, pilots, pilotIssues } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 
@@ -66,6 +68,12 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
         <a href="/indicadores" aria-current={section === 'indicadores' ? 'page' : undefined}>{m.indicators}</a>
         <a href="/pilotos" aria-current={section === 'pilotos' ? 'page' : undefined}>
           {m.pilots}{pilots !== undefined && <span class="count">{pilots}</span>}
+          {!!pilotIssues && (
+            <>
+              <i class="issue-dot" aria-hidden="true" title={m.pilotIssues(pilotIssues)} />
+              <span class="sr-only">{m.pilotIssues(pilotIssues)}</span>
+            </>
+          )}
         </a>
       </nav>
       <div class="utility-right">
@@ -92,7 +100,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
           pilots !== 0 && (
             <form method="post" action="/sync" class="sync-form">
               <input type="hidden" name="back" value={backPath} />
-              <button type="submit" class="primary-button" title={m.syncAllTitle}>
+              <button type="submit" class="primary-button outline" title={m.syncAllTitle}>
                 <Icon name="refresh" />
                 <span class="label">{m.syncAll}</span>
               </button>
@@ -272,6 +280,13 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   }
   .update-notice button:hover {
     background: #1c3a4c;
+  }
+  .issue-dot {
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    border-radius: 50%;
+    background: var(--warning);
   }
   .count {
     min-width: 18px;
