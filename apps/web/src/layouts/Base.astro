@@ -66,14 +66,18 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       <nav class="sections" aria-label={m.sections}>
         <a href="/" aria-current={section === 'resumen' ? 'page' : undefined}>{m.summary}</a>
         <a href="/indicadores" aria-current={section === 'indicadores' ? 'page' : undefined}>{m.indicators}</a>
-        <a href="/pilotos" aria-current={section === 'pilotos' ? 'page' : undefined}>
-          {m.pilots}{pilots !== undefined && <span class="count">{pilots}</span>}
-          {!!pilotIssues && (
-            <>
-              <i class="issue-dot" aria-hidden="true" title={m.pilotIssues(pilotIssues)} />
-              <span class="sr-only">{m.pilotIssues(pilotIssues)}</span>
-            </>
-          )}
+        <a
+          href="/pilotos"
+          aria-current={section === 'pilotos' ? 'page' : undefined}
+          aria-label={pilots !== undefined ? m.pilotsNav(pilots, pilotIssues ?? 0) : undefined}
+          title={pilotIssues ? m.pilotIssues(pilotIssues) : undefined}
+        >
+          {/* El punto ámbar va pegado a la palabra, como marca de aviso: junto al contador se leía «4 problemas» */}
+          <span class="nav-label">
+            {m.pilots}
+            {!!pilotIssues && <i class="issue-dot" aria-hidden="true" />}
+          </span>
+          {pilots !== undefined && <span class="count">{pilots}</span>}
         </a>
       </nav>
       <div class="utility-right">
@@ -281,10 +285,15 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   .update-notice button:hover {
     background: #1c3a4c;
   }
+  .nav-label {
+    position: relative;
+  }
   .issue-dot {
+    position: absolute;
+    top: -3px;
+    right: -8px;
     width: 6px;
     height: 6px;
-    margin-left: -3px;
     border-radius: 50%;
     background: var(--warning);
   }

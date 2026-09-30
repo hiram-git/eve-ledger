@@ -4,7 +4,7 @@
 import Base from '../layouts/Base.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
-import { pilotState } from '../lib/pilot-state';
+import { hasIssue, pilotState } from '../lib/pilot-state';
 import { ago, isk, iskFull } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
@@ -33,7 +33,20 @@ const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progres
 // Valor en ISK del PLEX que ya tienes (solo hasta lo necesario): el término que faltaba en la cuenta
 // Mismo criterio de frescura que el Resumen: el saldo que suma Omega dice de quién es viejo o falta
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
-const pilotIssues = pilots.filter((p) => pilotState(p, m, staleAfterMs, status?.running).kind !== 'ok').length;
+const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
+// Lo que aporta cada piloto al saldo: la nota de cobertura dice cuánto de él es viejo
+const balanceByPilot: Record<number, number> = Object.fromEntries(
+  (o?.balances ?? []).map((b) => [b.characterId, b.balance ?? 0]),
+);
+// ¿Tus pilotos se pagan el Omega? Coste diario (un mes = 30 días) frente al neto diario de los últimos 7 días
+const paceLine =
+  o && o.costPerDay !== null
+    ? o.avgDailyNet <= 0
+      ? m.omegaPaceNone(`${fmt(o.costPerDay)} ISK`)
+      : (o.paceShare ?? 0) >= 1
+        ? m.omegaPaceCovers(`${fmt(o.costPerDay)} ISK`, `${fmt(o.avgDailyNet)} ISK`)
+        : m.omegaPace(`${fmt(o.costPerDay)} ISK`, `${fmt(o.avgDailyNet)} ISK`, pct.format(o.paceShare ?? 0))
+    : '';
 const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded) * o.plexPrice : 0;
 ---
 
@@ -90,10 +103,9 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
                   <i class:list={{ done: covered }} style={`width:${(percent * 100).toFixed(1)}%`} />
                 </div>
                 <p class="bar-caption">{m.omegaOfCost(pct.format(percent))}</p>
-                {/* Lo accionable antes que el desglose: en móvil queda en la primera pantalla */}
-                {!covered && (
-                  <p class="eta">{o.daysToCover !== null ? m.omegaEta(o.daysToCover, fmt(o.avgDailyNet)) : m.omegaNoEta}</p>
-                )}
+                {/* ¿Se paga solo? Antes que el desglose: en móvil queda en la primera pantalla. También con el mes
+                    cubierto, porque el Omega se renueva cada mes */}
+                {paceLine && <p class="eta" title={m.omegaPaceTitle}>{paceLine}</p>}
 
                 {/* El desglose es la cuenta que lleva a la cifra de arriba: coste − saldo − PLEX guardado */}
                 <table class="equation">
@@ -129,7 +141,7 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
                     </tr>
                   </tbody>
                 </table>
-                <CoverageNote pilots={pilots} staleAfterMs={staleAfterMs} syncRunning={status?.running} back="/indicadores" walletOnly />
+                <CoverageNote pilots={pilots} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={balanceByPilot} walletOnly />
                 <p class="price-meta">
                   {m.omegaPlexPrice}: {fmt(o.plexPrice!)} ISK
                   {o.plexPriceSource && o.plexPriceUpdatedAt && <> · {m.omegaPriceMeta(o.plexPriceSource, ago(o.plexPriceUpdatedAt, lang))}</>}
