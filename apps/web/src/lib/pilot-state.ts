@@ -23,7 +23,10 @@ export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunn
   if (p.lastError) {
     const kinds: Record<string, string> = { journal: m.kindJournal, transactions: m.kindTransactions, assets: m.kindAssets };
     const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
-    return { kind: 'error', text: m.stateError(kind), title: p.lastError.message, hint: explainError(p.lastError.message, m) };
+    const hint = explainError(p.lastError.message, m);
+    // Un token caducado se llama igual en todas partes (tarjeta, línea de salud y Pilotos)
+    const text = hint === m.errToken ? m.stateToken : m.stateError(kind);
+    return { kind: 'error', text, title: p.lastError.message, hint };
   }
   if (!p.lastSyncAt) {
     const recent = Date.now() - new Date(p.createdAt).getTime() < FIRST_SYNC_GRACE_MS;

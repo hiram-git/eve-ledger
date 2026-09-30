@@ -7,8 +7,10 @@ import { getLang, t } from '../lib/i18n';
 
 interface Props {
   market: Summary['market'];
+  // Lo que dice el wallet (market_transaction del journal) en el mismo período: concilia la tabla
+  wallet?: { sold: number; bought: number };
 }
-const { market } = Astro.props;
+const { market, wallet } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
@@ -63,7 +65,10 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
         </tbody>
       </table>
     </div>
-    <p class="panel-note">{m.marketNote}.</p>
+    <p class="panel-note">
+      {m.marketNote}.
+      {wallet && <> {m.marketReconcile(fmt(wallet.sold), fmt(wallet.bought))}</>}
+    </p>
   </details>
 </section>
 

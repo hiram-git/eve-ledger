@@ -10,6 +10,7 @@ import MarketItems from '../components/MarketItems.astro';
 import MarketReview from '../components/MarketReview.astro';
 import ActivityList from '../components/ActivityList.astro';
 import BarList, { type BarRow } from '../components/BarList.astro';
+import CoverageNote from '../components/CoverageNote.astro';
 import {
   ApiError,
   getInventory,
@@ -122,6 +123,17 @@ const selectedState = selected ? pilotStates.get(selected.id) : undefined;
 const selectedBroken = !!selectedState && selectedState.kind !== 'ok';
 // Piloto filtrado sin ningún sync: no hay datos, y un «0 ISK» se leería como un dato. Estado vacío propio
 const pilotEmpty = !!selected && !selected.lastSyncAt;
+// Su acción ya está en el estado vacío: la línea de salud no la repite
+const healthShown = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id) : healthItems;
+// Consolidado: parte del neto que viene de pilotos con datos viejos o rotos (el neto no cambia, se dice)
+const staleShares = !selected
+  ? (summary?.characters ?? []).filter((c) => c.lastSyncAt && c.net !== 0 && pilotStates.get(c.id) && pilotStates.get(c.id)!.kind !== 'ok')
+  : [];
+const walletsBehind = !selected && (pilotList ?? []).some((p) => pilotStates.get(p.id)?.kind !== 'ok');
+// Conciliación de la revisión de mercado: lo que dice el wallet (market_transaction del journal)
+const walletMarket = summary?.byActivity
+  .find((a) => a.activity === 'trading')
+  ?.refTypes.find((r) => r.refType === 'market_transaction');
 // «Todos» al principio de la franja: se queda fijo en móvil mientras la fila se desliza
 const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firstEntryAt) : null;
 // El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
@@ -165,7 +177,12 @@ const valuableItems = inventory?.topItems.slice(0, mapBelow ? 8 : 6).map((i) => 
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 ---
 
-<Base section="resumen" status={status} pilots={summary?.characters.length}>
+<Base
+  section="resumen"
+  status={status}
+  pilots={summary?.characters.length}
+  pilotIssues={[...pilotStates.values()].filter((st) => st.kind !== 'ok').length}
+>
     {dashboard && (
     <nav class="main-nav shell" aria-label={m.period} slot="nav">
       <div class="nav-tabs">
@@ -277,7 +294,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       class:list={{ stale: isStale(c.lastSyncAt) }}
                       title={m.pilotNetTitle(c.name, full(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
                     >
-                      {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
+                      {isStale(c.lastSyncAt) && <i class="stale-dot" aria-hidden="true" />}
                       <span class="pilot-name">{c.name}</span>
                       <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
                         {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
@@ -301,11 +318,11 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
             </script>
 
             {
-              healthItems.length > 0 && (
+              healthShown.length > 0 && (
                 <div class="pilot-health" role="status">
                   <Icon name="alert" class="stale-icon" />
                   <ul class="health-full">
-                    {healthItems.map((h) => (
+                    {healthShown.map((h) => (
                       <li>
                         <span class="health-name">{h.name}:</span> {h.cause}
                         {h.action === 'relink' && (
@@ -390,6 +407,12 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                           <p class="versus">{firstHistory ? m.noPreviousSince(firstHistory, days) : m.noPrevious(days)}</p>
                         )
                       }
+                      {staleShares.map((c) => (
+                        <p class="versus stale-share">
+                          <Icon name="alert" class="stale-icon" />
+                          {m.netIncludesStale(fmt(c.net, { sign: true }), c.name, rel(c.lastSyncAt))}
+                        </p>
+                      ))}
                     </div>
                     <div class="fig today" title={m.todayTitle(full(summary.today.net))}>
                       <span class="label">
@@ -411,7 +434,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       {
                         selected ? (
                           /* Un solo piloto: su propia frescura y, si está roto, la causa y la acción */
-                          <p class:list={['versus', 'asof', { stale: selectedBroken || isStale(lastSync) }]}>
+                          <div class:list={['versus', 'asof', { stale: selectedBroken || isStale(lastSync) }]}>
                             {(selectedBroken || isStale(lastSync)) && <Icon name="alert" class="stale-icon" />}
                             {selectedState?.kind === 'pending' ? (
                               m.statePending
@@ -421,9 +444,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                               </>
                             ) : selectedState?.kind === 'error' ? (
                               <>
-                                {m.asOfBroken('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time> ·{' '}
+                                {m.asOfBroken('')}<time datetime={lastSync} data-ago={lastSync}>{rel(lastSync)}</time>{' '}
                                 <span class="keep">
-                                  {selectedState.text} ·{' '}
+                                  · {selectedState.text} ·{' '}
                                   {selectedState.hint === m.errToken ? (
                                     <a class="inline-action" href={loginUrl} title={m.relinkAs(selected.name)} aria-label={m.relinkAs(selected.name)}>{m.relink}</a>
                                   ) : (
@@ -444,7 +467,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                                 )}
                               </>
                             )}
-                          </p>
+                          </div>
                         ) : (
                           lastSync && (
                             /* Consolidado: cuántos pilotos están al día, no solo el sync más reciente */
@@ -533,6 +556,7 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                       <dt>
                         <i class="key balance" />
                         {m.wallets}
+                        {walletsBehind && <Icon name="alert" class="stale-icon" />}
                       </dt>
                       <dd title={full(summary.balance)}>{fmt(summary.balance)}</dd>
                     </div>
@@ -547,6 +571,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                     </div>
                   </dl>
                 </div>
+                {!selected && pilotList && (
+                  <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} back={href(days)} />
+                )}
                 {showMap && geo && <NewEdenMap map={geo} />}
               </div>
             </section>
@@ -687,14 +714,16 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
                   <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
                   {
                     mapBelow && geo && (
-                      <section class="panel" id="mapa">
-                        <div class="panel-heading">
+                      /* Sin ganancias hoy, el mapa solo repite la lista de arriba: queda plegado */
+                      <details class="panel map-fold" id="mapa">
+                        <summary class="panel-heading">
                           <h2>{m.mapTitle}</h2>
-                        </div>
+                          <span class="meta">{m.seeOnMap}</span>
+                        </summary>
                         <div class="panel-body">
                           <NewEdenMap map={geo} />
                         </div>
-                      </section>
+                      </details>
                     )
                   }
                 </div>
@@ -708,7 +737,9 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
               </div>
             )}
 
-            {!pilotEmpty && summary.market.items.length > 0 && <MarketReview market={summary.market} />}
+            {!pilotEmpty && summary.market.items.length > 0 && (
+              <MarketReview market={summary.market} wallet={walletMarket ? { sold: walletMarket.income, bought: walletMarket.expenses } : undefined} />
+            )}
 
           </>
         )
@@ -1027,26 +1058,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
     font-size: 13px;
     color: var(--warning);
   }
-  /* Una sola forma para las acciones en línea (Sincronizar, Revincular, Revisar): enlace o botón, se ven igual */
-  .inline-action {
-    /* Zona táctil ampliada (40 px) sin mover el texto */
-    padding: 12px 0;
-    margin-block: -12px;
-    border: 0;
-    background: none;
-    font: inherit;
-    font-weight: 550;
-    color: var(--cyan);
-    text-decoration: none;
-    cursor: pointer;
-  }
-  .inline-action:hover {
-    text-decoration: underline;
-  }
-  .inline-action:disabled {
-    color: var(--text-muted);
-    cursor: progress;
-  }
   .keep {
     white-space: nowrap;
   }
@@ -1065,9 +1076,6 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   }
   .health-name {
     color: var(--text-secondary);
-  }
-  .sync-form.inline {
-    display: inline;
   }
   /* Piloto filtrado sin ningún sync: en vez de ceros, qué pasa y qué hacer */
   .empty-pilot {
@@ -1102,6 +1110,67 @@ const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId
   }
   .hero-stat.stale .value.zero {
     color: var(--text-muted);
+  }
+  /* Piloto roto: también la barra de ingresos/gastos se apaga, como el neto */
+  .hero-stat.stale .ratio i,
+  .hero-stat.stale .key {
+    background: var(--text-muted);
+  }
+  .stale-share :global(.stale-icon) {
+    margin-right: 6px;
+    vertical-align: -2px;
+  }
+  .stale-share {
+    color: var(--warning);
+  }
+  .worth dt :global(.stale-icon) {
+    margin-left: 4px;
+    vertical-align: -2px;
+  }
+  .worth :global(.coverage-note) {
+    flex-basis: 100%;
+    margin-top: 10px;
+  }
+  .empty-pilot .secondary-button {
+    min-height: 40px;
+  }
+  /* Punto ámbar en el chip: la causa está en la línea de salud */
+  .stale-dot {
+    align-self: center;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warning);
+  }
+  .map-fold > summary {
+    cursor: pointer;
+    list-style: none;
+    position: relative;
+    padding-left: 40px;
+  }
+  .map-fold > summary::-webkit-details-marker {
+    display: none;
+  }
+  .map-fold > summary::before {
+    content: '';
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid var(--text-muted);
+    border-bottom: 1.5px solid var(--text-muted);
+    transform: translateY(-70%) rotate(-45deg);
+    transition: transform 0.18s;
+  }
+  .map-fold[open] > summary::before {
+    transform: translateY(-70%) rotate(45deg);
+  }
+  .map-fold:not([open]) > summary {
+    border-bottom: 0;
+  }
+  .map-fold > summary:hover::before {
+    border-color: var(--cyan);
   }
   /* Piloto filtrado roto o viejo: su neto se apaga, como en los chips (un dato viejo no compite con uno real) */
   .hero-stat.stale .value.signed.pos,

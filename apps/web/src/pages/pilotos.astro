@@ -75,7 +75,13 @@ const freeSlots = Math.max(0, PILOT_SLOTS - pilots.length);
 const portrait = (id: number, size = 128) => `https://images.evetech.net/characters/${id}/portrait?size=${size}`;
 ---
 
-<Base title={m.pilots} section="pilotos" status={status} pilots={pilots.length}>
+<Base
+  title={m.pilots}
+  section="pilotos"
+  status={status}
+  pilots={pilots.length}
+  pilotIssues={rows.filter((r) => r.state.kind !== 'ok').length}
+>
   <div class="page-head" data-pending={pending ? '1' : undefined}>
     <div>
       <h1>{m.pilots}</h1>
@@ -201,7 +207,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
                 <li class:list={{ missing: p.missingScopes.includes(s) }}>
                   <Icon name={p.missingScopes.includes(s) ? 'alert' : 'wallet'} />
                   {SCOPE_LABELS[s]}
-                  {p.missingScopes.includes(s) && <span class="sr-only">{m.scopeMissing}</span>}
+                  {p.missingScopes.includes(s) && <span class="scope-missing">· {m.scopeMissingShort}</span>}
                 </li>
               ))}
             </ul>
@@ -422,9 +428,11 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     border-color: #6b5530;
     color: var(--warning);
   }
+  /* Aviso de estado en ámbar: el rojo queda para el neto negativo */
   .chip.error {
-    border-color: #663b44;
-    color: var(--critical);
+    border-color: #6b5530;
+    background: #2a2216;
+    color: var(--warning);
   }
   .when {
     font-size: 12px;

@@ -2,7 +2,9 @@
 // Indicadores: metas concretas medidas contra el saldo de los wallets. Hoy, Omega de todas las cuentas;
 // la rejilla admite más tarjetas.
 import Base from '../layouts/Base.astro';
-import { getIndicators, getPilots, getSyncStatus, type Indicators, type SyncStatus } from '../lib/api';
+import CoverageNote from '../components/CoverageNote.astro';
+import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
+import { pilotState } from '../lib/pilot-state';
 import { ago, isk, iskFull } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
@@ -15,14 +17,10 @@ const qty = new Intl.NumberFormat(lang, { useGrouping: 'always' });
 
 let indicators: Indicators | undefined;
 let status: SyncStatus | undefined;
-let pilotCount: number | undefined;
+let pilots: Pilot[] = [];
 let apiError: string | undefined;
 try {
-  [indicators, status, pilotCount] = await Promise.all([
-    getIndicators(),
-    getSyncStatus(),
-    getPilots().then((p) => p.length),
-  ]);
+  [indicators, status, pilots] = await Promise.all([getIndicators(), getSyncStatus(), getPilots()]);
 } catch (err) {
   apiError = err instanceof Error ? err.message : String(err);
 }
@@ -33,10 +31,13 @@ const priced = !!o && o.cost !== null;
 // Un progreso del 0 % o del 100 % exacto no se redondea a otra cosa por el formato
 const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progress);
 // Valor en ISK del PLEX que ya tienes (solo hasta lo necesario): el término que faltaba en la cuenta
+// Mismo criterio de frescura que el Resumen: el saldo que suma Omega dice de quién es viejo o falta
+const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const pilotIssues = pilots.filter((p) => pilotState(p, m, staleAfterMs, status?.running).kind !== 'ok').length;
 const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded) * o.plexPrice : 0;
 ---
 
-<Base title={m.indicators} section="indicadores" status={status} pilots={pilotCount}>
+<Base title={m.indicators} section="indicadores" status={status} pilots={pilots.length} pilotIssues={pilotIssues}>
   <div class="page-head">
     <h1>{m.indicators}</h1>
     <p class="subtitle">{m.indicatorsLead}</p>
@@ -103,11 +104,13 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
                         {m.omegaCost}
                         <span class="row-meta">{m.omegaCostDetail(qty.format(o.plexNeeded), `${fmt(o.plexPrice!)} ISK`)}</span>
                       </th>
+                      <td class="op" aria-hidden="true"></td>
                       <td title={full(o.cost!)}>{fmt(o.cost!)}</td>
                     </tr>
                     <tr>
                       <th scope="row">{m.omegaBalance}</th>
-                      <td title={full(o.available)}>−{fmt(o.available)}</td>
+                      <td class="op">−</td>
+                      <td title={full(o.available)}>{fmt(o.available)}</td>
                     </tr>
                     {o.plexOwned > 0 && (
                       <tr>
@@ -115,15 +118,18 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
                           {m.omegaPlexInv}
                           <span class="row-meta">{m.omegaPlexCount(qty.format(Math.min(o.plexOwned, o.plexNeeded)))}</span>
                         </th>
-                        <td title={full(plexValue)}>−{fmt(plexValue)}</td>
+                        <td class="op">−</td>
+                        <td title={full(plexValue)}>{fmt(plexValue)}</td>
                       </tr>
                     )}
                     <tr class="result">
                       <th scope="row">{covered ? m.omegaLeft : m.omegaMissing}</th>
-                      <td title={full(covered ? o.surplus! : o.missing!)}>{fmt(covered ? o.surplus! : o.missing!)} ISK</td>
+                      <td class="op">=</td>
+                      <td title={full(covered ? o.surplus! : o.missing!)}>{fmt(covered ? o.surplus! : o.missing!)}</td>
                     </tr>
                   </tbody>
                 </table>
+                <CoverageNote pilots={pilots} staleAfterMs={staleAfterMs} syncRunning={status?.running} back="/indicadores" walletOnly />
                 <p class="price-meta">
                   {m.omegaPlexPrice}: {fmt(o.plexPrice!)} ISK
                   {o.plexPriceSource && o.plexPriceUpdatedAt && <> · {m.omegaPriceMeta(o.plexPriceSource, ago(o.plexPriceUpdatedAt, lang))}</>}
@@ -137,7 +143,7 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
                 <p class="eta">{m.omegaBalance}: {fmt(o.available)} ISK · {m.omegaPlexNeeded}: {qty.format(o.plexNeeded)}</p>
               </div>
             )}
-            {pilotCount === 0 && <p class="eta">{m.omegaNoPilots}</p>}
+            {pilots.length === 0 && <p class="eta">{m.omegaNoPilots}</p>}
           </div>
         </section>
       </div>
@@ -240,6 +246,8 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
     vertical-align: baseline;
   }
   .equation th {
+    /* La etiqueta se queda el ancho sobrante: operador y cifra van juntos a la derecha */
+    width: 100%;
     /* El tema pone nowrap en th: aquí las etiquetas largas (alemán) se parten */
     white-space: normal;
     padding-right: 16px;
@@ -254,6 +262,15 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
     color: var(--text);
     text-align: right;
     white-space: nowrap;
+  }
+  .equation td:last-child {
+    padding-left: 10px;
+  }
+  .equation td.op {
+    width: 2ch;
+    padding-left: 12px;
+    color: var(--text-muted);
+    text-align: center;
   }
   .row-meta {
     display: block;
@@ -285,6 +302,11 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
     gap: 6px;
   }
   @media (max-width: 600px) {
+    .omega .panel-heading {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
     .panel-body {
       padding: 18px 16px 14px;
     }
