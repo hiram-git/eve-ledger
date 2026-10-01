@@ -200,7 +200,7 @@ const pricesOld =
 const PLEX_TYPE_ID = 44992;
 // Naves perdidas hoy (día de EVE): «Hoy» lo dice, es cuando más importa la factura
 const todayIso = new Date().toISOString().slice(0, 10);
-const lostToday = losses?.losses.filter((l) => l.time.slice(0, 10) === todayIso).length ?? 0;
+const lostTodayList = losses?.losses.filter((l) => l.time.slice(0, 10) === todayIso) ?? [];
 // Omega de todas las cuentas, con el mismo cálculo que Indicadores (saldo de los wallets + PLEX guardado)
 const omega = !pilotId && pilotList?.length ? indicators?.omega : undefined;
 const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
@@ -558,9 +558,14 @@ const worthNote =
                             ? m.todayNoData
                             : m.todayNone}
                       </p>
-                      {/* Perder una nave no mueve el wallet hoy, pero es cuando más importa la factura */}
-                      {lostToday > 0 && (
-                        <a class="inline-action today-lost" href="#perdidas">{m.todayLost(lostToday)}</a>
+                      {/* Perder una nave no mueve el wallet hoy, pero es cuando más importa: qué nave y cuánto valía
+                          (sin enlace: el de «De este neto, naves perdidas» ya lleva al panel) */}
+                      {lostTodayList.length > 0 && (
+                        <p class="versus today-lost">
+                          {lostTodayList.length === 1
+                            ? m.todayLostOne(lostTodayList[0].ship ?? '?', fmt(lostTodayList[0].value), lostTodayList[0].insurance > 0)
+                            : m.todayLostMany(lostTodayList.length, fmt(lostTodayList.reduce((n, l) => n + l.value, 0)))}
+                        </p>
                       )}
                       {
                         selected ? (
@@ -633,7 +638,10 @@ const worthNote =
                             /* Lo que el PvP no muestra: las naves perdidas se reponen en Trading y se llevan en Logística */
                             <p class="acts-losses">
                               <span class="acts-losses-label">{m.actsLosses}</span>
-                              <span class:list={['act-net', sign(losses.totals.walletEffect)]}>{fmt(losses.totals.walletEffect, { sign: true })}</span>
+                              <span class="acts-losses-value">
+                                {fmt(losses.totals.walletEffect, { sign: true })}
+                                {losses.totals.open > 0 && ` (${m.lossesSoFar})`}
+                              </span>
                               <a class="inline-action" href="#perdidas">{m.actsLossesLink}</a>
                             </p>
                           )}
@@ -1085,22 +1093,15 @@ const worthNote =
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 4px 12px;
+    gap: 4px 8px;
     margin-top: 6px;
-    padding-top: 8px;
-    border-top: 1px dashed var(--line);
     font-size: 13px;
     color: var(--text-secondary);
   }
-  .acts-losses .act-net {
-    min-width: 0;
-    margin-left: auto;
-  }
-  .acts-losses .inline-action {
-    flex-basis: 100%;
-  }
-  .today-lost {
-    font-size: 13px;
+  /* Parte del neto, no otra actividad: cifra neutra (sin el rojo de las barras), una sola línea con su enlace */
+  .acts-losses-value {
+    font: 500 13px var(--mono);
+    color: var(--text);
   }
   .acts-link {
     display: inline-flex;

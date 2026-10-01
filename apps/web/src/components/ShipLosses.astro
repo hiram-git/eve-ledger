@@ -1,8 +1,9 @@
 ---
 // Naves perdidas del período y cómo tocan el wallet. La nave se pagó al comprarla: perderla no mueve el wallet.
 // Lo que lo mueve, por pérdida: el seguro (+), reponer casco y equipo (−, lo compre el piloto que sea) y el courier
-// que lo lleva (−). El efecto en el wallet es la cifra titular y la suma exacta de las filas; el valor perdido es
-// contexto, y las primas del período van aparte (también aseguran naves que sigues volando)
+// que lo lleva (−). En el consolidado la cifra titular es la suma de las filas; en la vista de un piloto, lo que pasó
+// por SU wallet (y aparte, lo que otros pilotos pagaron por sus naves). Mientras falte algo por reponer con la
+// ventana abierta, la cifra es «hasta ahora» y va en gris: el verde/rojo solo cuando ya no puede cambiar
 import type { Losses } from '../lib/api';
 import { isk, iskFull, remaining, shortDate, shortDateTime } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
@@ -19,49 +20,65 @@ const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const fullNet = (v: number) => iskFull(v, lang, true);
-// «25 sept, 09:47» no se parte entre líneas
+// «25 sept, 09:47» y «sin seguro» no se parten entre líneas
 const nbsp = (text: string) => text.replace(/ /g, ' ');
 const when = (iso: string) => nbsp(shortDateTime(iso, lang));
 const day = (iso: string) => nbsp(shortDate(iso, lang));
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 const tot = losses.totals;
-const d = losses.replacementDays;
+type Loss = Losses['losses'][number];
 
 // Sin permiso de killmails en ningún piloto de la vista: no se sabe nada de sus pérdidas (no es «cero pérdidas»)
 const noScope = losses.pilots > 0 && losses.missingScope.length === losses.pilots;
 const missingNames = losses.missingScope.map((p) => p.name).join(', ');
 const noContracts = losses.missingContracts.map((p) => p.name).join(', ');
+// «hasta ahora»: alguna pérdida aún tiene algo por reponer y su ventana sigue abierta
+const soFar = tot.open > 0;
+const pendingShips = losses.losses
+  .filter((l) => l.state === 'pending')
+  .map((l) => `${l.ship ?? `#${l.shipTypeId}`} (${day(l.time)})`)
+  .join(', ');
 // «Amamake 0.4»: la seguridad del sistema, como en el juego
-const where = (l: Losses['losses'][number]) =>
-  [l.system ?? `#${l.systemId}`, l.security === null ? null : l.security.toFixed(1)].filter(Boolean).join(' ');
-// El porqué de cada fila, visible: quién la repuso y dónde, si la ventana sigue abierta, el courier, el seguro
-const status = (l: Losses['losses'][number]) => {
+const where = (l: Loss) => [l.system ?? `#${l.systemId}`, l.security === null ? null : l.security.toFixed(1)].filter(Boolean).join(' ');
+// El porqué de cada fila, visible: quién la repuso y dónde, qué falta, el courier, el seguro
+const status = (l: Loss) => {
   const who = l.replacedBy?.name ?? '?';
   const parts = [
-    l.shipReplacedAt
-      ? m.lossReplaced(who, l.replacedIn, day(l.shipReplacedAt))
-      : l.replacement
-        ? m.lossFitOnly(who)
-        : l.open
-          ? null
-          : m.lossNotReplaced(d),
+    l.shipReplacedAt ? m.lossReplaced(who, l.replacedIn, day(l.shipReplacedAt)) : l.replacement ? m.lossFitOnly(who) : null,
+    l.state === 'pending' ? m.lossPending(fmt(l.toReplace), remaining(l.windowEndsAt, lang)) : null,
+    l.state === 'unreplaced' ? m.lossUnreplaced(fmt(l.toReplace)) : null,
     l.courier?.by ? m.lossCourier(l.courier.by) : null,
-    l.open ? m.lossOpen(nbsp(remaining(l.windowEndsAt, lang))) : null,
     l.insurance ? null : m.lossNoInsurance,
   ];
-  return parts.filter(Boolean).join(' · ');
+  // Los fragmentos cortos no se parten («sin seguro», «faltan 27 h»)
+  return parts
+    .filter((p): p is string => !!p)
+    .map((p) => (p.length <= 28 ? nbsp(p) : p))
+    .join(' · ');
 };
-// Los componentes de la cuenta, en positivo con su operador (el lector de pantalla oye «más»/«menos»)
+// De dónde sale la cifra titular: valores en positivo, el operador en su columna (el lector oye «más»/«menos»)
 const parts = [
   { label: m.lossesInsurance, op: '+', word: m.opPlus, value: tot.insurance },
   { label: m.lossesReplacement, op: '−', word: m.opMinus, value: tot.replacement },
   { label: m.lossesTransport, op: '−', word: m.opMinus, value: tot.transport },
+  ...(tot.forOthers ? [{ label: m.lossesForOthers, op: '−', word: m.opMinus, value: tot.forOthers }] : []),
 ];
-// Notas que cuantifican: de quién faltan pérdidas y las primas del período (aparte de la cuenta)
+const forOthersDetail = losses.forOthers
+  .map((f) => m.lossesForOthersDetail(f.ship ?? '?', f.pilot ?? '?', fmt(f.amount)))
+  .join(' · ');
+const paidByOthers = losses.paidByOthers.map((p) => `${p.name ?? '?'} −${fmt(p.amount)}`).join(', ');
+// Notas que cuantifican: lo que aún cambia, lo que no volvió, de quién faltan pérdidas y las primas (aparte)
+const headNotes = [
+  soFar ? m.lossesPending(fmt(tot.toReplace), pendingShips) : null,
+  tot.unreplaced > 0 ? m.lossesUnreplaced(fmt(tot.unreplaced)) : null,
+  paidByOthers ? m.lossesPaidByOthers(paidByOthers) : null,
+].filter(Boolean);
 const notes = [
   !noScope && losses.missingScope.length > 0 ? m.lossesMissing(missingNames) : null,
   tot.premiums > 0 ? m.lossesPremiums(fmt(tot.premiums)) : null,
 ].filter(Boolean);
+// Vista de un piloto que no perdió nada pero pagó la reposición de otro (el alter de Jita): también hay cuenta
+const hasAccount = tot.count > 0 || tot.forOthers > 0;
 ---
 
 {
@@ -73,7 +90,7 @@ const notes = [
         <span class="meta">{pilotName ? m.lossesNoScopePilot(pilotName) : m.lossesNoScopeAll}</span>
       </div>
     </section>
-  ) : tot.count === 0 ? (
+  ) : !hasAccount ? (
     <section class="panel losses compact" id="perdidas" aria-labelledby="losses-title">
       <div class="panel-heading">
         <h2 id="losses-title">{m.lossesPeriod(days)}</h2>
@@ -94,77 +111,84 @@ const notes = [
       </div>
       <div class="panel-body losses-head">
         <div class="effect">
-          <span class="label">{m.lossesWallet}</span>
-          <span class:list={['value', sign(tot.walletEffect)]} title={fullNet(tot.walletEffect)}>
+          <span class="label" id="losses-effect">{pilotName ? m.lossesWalletPilot(pilotName) : m.lossesWallet}</span>
+          <span class:list={['value', soFar ? 'so-far' : sign(tot.walletEffect)]} title={fullNet(tot.walletEffect)}>
             {fmt(tot.walletEffect, { sign: true })}
-            <small>ISK</small>
+            <small> ISK</small>
+            {soFar && <small class="so-far-tag"> · {m.lossesSoFar}</small>}
           </span>
-          <p class="bridge">{m.lossesBridge(fmt(tot.value), fmt(tot.shipValue), fmt(tot.fitValue))}</p>
-          {tot.open > 0 && <p class="provisional">{m.lossesProvisional(tot.open, d)}</p>}
+          {tot.count > 0 && <p class="bridge">{m.lossesBridge(fmt(tot.value), fmt(tot.shipValue), fmt(tot.fitValue))}</p>}
+          {headNotes.map((n) => (
+            <p class="head-note">{n}</p>
+          ))}
         </div>
-        {/* De dónde sale la cifra: valores en positivo, el operador en su columna */}
-        <table class="breakdown">
-          <caption class="sr-only">{m.lossesWallet}</caption>
+        <div>
+          <table class="breakdown" aria-labelledby="losses-effect">
+            <tbody>
+              {parts.map((p) => (
+                <tr>
+                  <th scope="row">{p.label}</th>
+                  <td class="op">
+                    <span aria-hidden="true">{p.op}</span>
+                    <span class="sr-only">{p.word}</span>
+                  </td>
+                  <td title={full(p.value)}>{p.value ? fmt(p.value) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {forOthersDetail && <p class="others">{forOthersDetail}</p>}
+        </div>
+      </div>
+      {tot.count > 0 && (
+        <table class="loss-table" aria-labelledby="losses-title">
+          <thead>
+            <tr>
+              <th>{m.lossShip}</th>
+              <th>{m.lossValue}</th>
+              <th>{m.lossInsurance}</th>
+              <th>{m.lossReplacement}</th>
+              <th>{m.lossTransport}</th>
+              <th title={m.lossTotalTitle}>{m.lossWallet}</th>
+            </tr>
+          </thead>
           <tbody>
-            {parts.map((p) => (
+            {losses.losses.map((l) => (
               <tr>
-                <th scope="row">{p.label}</th>
-                <td class="op">
-                  <span aria-hidden="true">{p.op}</span>
-                  <span class="sr-only">{p.word}</span>
+                <th scope="row">
+                  <span class="ship">{l.ship ?? `#${l.shipTypeId}`}</span>
+                  <span class="meta">
+                    {[pilotName ? null : l.pilot, where(l), m.lossAttackers(l.attackers)].filter(Boolean).join(' · ')}
+                    {' · '}
+                    <time datetime={l.time}>{when(l.time)}</time>
+                  </span>
+                  <span class="status">{status(l)}</span>
+                </th>
+                <td data-label={m.lossValue} title={m.lossSplit(full(l.shipValue), full(l.fitValue))}>
+                  {fmt(l.value)}
                 </td>
-                <td title={full(p.value)}>{p.value ? fmt(p.value) : '—'}</td>
+                <td data-label={m.lossInsurance} title={l.insurance ? full(l.insurance) : undefined}>
+                  {l.insurance ? fmt(l.insurance, { sign: true }) : '—'}
+                </td>
+                <td data-label={m.lossReplacement} title={l.replacement ? full(-l.replacement) : undefined}>
+                  {l.replacement ? fmt(-l.replacement) : '—'}
+                </td>
+                <td data-label={m.lossTransport} title={l.transport ? full(-l.transport) : undefined}>
+                  {l.transport ? fmt(-l.transport) : '—'}
+                </td>
+                {/* El total de la nave: en gris mientras falte algo por reponer (aún puede cambiar) */}
+                <td
+                  data-label={m.lossWallet}
+                  class:list={['total', l.state === 'pending' ? 'so-far' : sign(l.walletEffect)]}
+                  title={`${m.lossTotalTitle}: ${fullNet(l.walletEffect)}${l.state === 'pending' ? ` (${m.lossesSoFar})` : ''}`}
+                >
+                  {fmt(l.walletEffect, { sign: true })}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-      <table class="loss-table" aria-labelledby="losses-title">
-        <thead>
-          <tr>
-            <th>{m.lossShip}</th>
-            <th>{m.lossValue}</th>
-            <th>{m.lossInsurance}</th>
-            <th>{m.lossReplacement}</th>
-            <th>{m.lossTransport}</th>
-            <th>{m.lossWallet}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {losses.losses.map((l) => (
-            <tr class:list={{ open: l.open }}>
-              <th scope="row">
-                <span class="ship">{l.ship ?? `#${l.shipTypeId}`}</span>
-                <span class="meta">
-                  {[pilotName ? null : l.pilot, where(l), m.lossAttackers(l.attackers)].filter(Boolean).join(' · ')}
-                  {' · '}
-                  <time datetime={l.time}>{when(l.time)}</time>
-                </span>
-                <span class="status">{status(l)}</span>
-              </th>
-              <td data-label={m.lossValue} title={m.lossSplit(full(l.shipValue), full(l.fitValue))}>
-                {fmt(l.value)}
-              </td>
-              <td data-label={m.lossInsurance} title={l.insurance ? full(l.insurance) : undefined}>
-                {l.insurance ? fmt(l.insurance, { sign: true }) : '—'}
-              </td>
-              <td data-label={m.lossReplacement} title={l.replacement ? full(-l.replacement) : undefined}>
-                {l.replacement ? fmt(-l.replacement) : '—'}
-              </td>
-              <td data-label={m.lossTransport} title={l.transport ? full(-l.transport) : undefined}>
-                {l.transport ? fmt(-l.transport) : '—'}
-              </td>
-              <td
-                data-label={m.lossWallet}
-                class:list={['signed', sign(l.walletEffect)]}
-                title={l.walletEffect ? fullNet(l.walletEffect) : m.lossZero}
-              >
-                {fmt(l.walletEffect, { sign: true })}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      )}
       <div class="panel-note losses-note">
         {notes.map((n) => (
           <p>{n}</p>
@@ -180,6 +204,10 @@ const notes = [
 }
 
 <style>
+  /* Los enlaces «Ver» del vistazo saltan aquí: que el título no quede pegado al borde */
+  .losses {
+    scroll-margin-top: 16px;
+  }
   /* Sin permiso o sin pérdidas: el panel es una franja con su frase */
   .compact .panel-heading {
     flex-wrap: wrap;
@@ -223,19 +251,31 @@ const notes = [
   .effect .value.neg {
     color: var(--critical);
   }
+  /* Aún puede cambiar: sin veredicto de color */
+  .effect .value.so-far {
+    color: var(--text-secondary);
+  }
   .effect .value small {
-    margin-left: 4px;
     font-size: 13px;
+    letter-spacing: 0;
     color: var(--text-muted);
   }
+  .effect .value .so-far-tag {
+    font-family: var(--font);
+  }
   .bridge,
-  .provisional {
+  .head-note {
     max-width: 58ch;
     font-size: 13px;
     color: var(--text-secondary);
     text-wrap: pretty;
   }
-  .provisional {
+  .head-note {
+    color: var(--text-muted);
+  }
+  .others {
+    margin-top: 6px;
+    font-size: 13px;
     color: var(--text-muted);
   }
   .breakdown {
@@ -295,8 +335,15 @@ const notes = [
   .loss-table td:last-child {
     padding-right: 22px;
   }
+  .loss-table tbody th,
+  .loss-table td {
+    border-bottom: 1px solid var(--line);
+  }
+  /* La última fila cierra en la nota de abajo: sin línea propia (antes solo la llevaba la celda de la nave) */
+  .loss-table tbody tr:last-child > * {
+    border-bottom: 0;
+  }
   .loss-table tbody th {
-    border-bottom-color: var(--line);
     font: inherit;
     text-align: left;
     text-transform: none;
@@ -308,14 +355,15 @@ const notes = [
     color: var(--text);
     white-space: nowrap;
   }
-  /* El signo del efecto en el wallet, como el del neto (más específico que la regla de la tabla) */
-  .loss-table td.signed.pos {
+  /* El signo del total de cada nave, como el del neto (más específico que la regla de la tabla) */
+  .loss-table td.total.pos {
     color: var(--positive);
   }
-  .loss-table td.signed.neg {
+  .loss-table td.total.neg {
     color: var(--critical);
   }
-  .loss-table td.signed.zero {
+  .loss-table td.total.zero,
+  .loss-table td.total.so-far {
     color: var(--text-muted);
   }
   .ship {
@@ -345,17 +393,20 @@ const notes = [
       grid-template-columns: 1fr;
     }
   }
-  /* Móvil: cada pérdida es una tarjeta (nave y su porqué arriba, cinco cifras con su etiqueta debajo) */
+  /* Móvil: cada pérdida es una tarjeta con la nave y su total arriba (la respuesta), el desglose debajo */
   @media (max-width: 600px) {
     .loss-table thead {
       display: none;
     }
     .loss-table tr {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 8px 12px;
       padding: 12px 16px 14px;
       border-bottom: 1px solid var(--line);
+    }
+    .loss-table tbody tr:last-child {
+      border-bottom: 0;
     }
     .loss-table tbody th,
     .loss-table td {
@@ -364,7 +415,17 @@ const notes = [
       text-align: left;
     }
     .loss-table tbody th {
-      grid-column: 1 / -1;
+      grid-column: 1 / 4;
+      grid-row: 1;
+    }
+    .loss-table td.total {
+      grid-column: 4;
+      grid-row: 1;
+      font-size: 16px;
+      text-align: right;
+    }
+    .loss-table td.total::before {
+      text-align: right;
     }
     .loss-table td::before {
       content: attr(data-label);

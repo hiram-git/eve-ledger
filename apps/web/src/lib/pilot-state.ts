@@ -46,7 +46,8 @@ export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunn
   if (!p.lastSyncAt) {
     const recent = Date.now() - new Date(p.createdAt).getTime() < FIRST_SYNC_GRACE_MS;
     if (syncRunning || recent) return { kind: 'pending', text: m.statePending };
-    return { kind: 'stale', text: m.stateNoFirstSync, hint: m.noFirstSyncHint };
+    // Si además le falta algún permiso, la acción es revincular (da los permisos y lanza el primer sync)
+    return { kind: 'stale', text: m.stateNoFirstSync, hint: p.missingScopes.length ? m.noFirstSyncRelinkHint : m.noFirstSyncHint };
   }
   if (Date.now() - new Date(p.lastSyncAt).getTime() > staleAfterMs) return { kind: 'stale', text: m.stateStale };
   return { kind: 'ok', text: m.stateOk };

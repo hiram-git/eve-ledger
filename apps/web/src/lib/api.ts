@@ -119,9 +119,14 @@ export type Loss = {
   replacement: number;
   transport: number;
   walletEffect: number;
-  // Ventana de reposición: mientras siga abierta, la fila puede cambiar
   windowEndsAt: string;
+  // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (cifra «hasta ahora»);
+  // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
+  state: 'replaced' | 'pending' | 'unreplaced';
   open: boolean;
+  toReplace: number;
+  replacementBy: Record<string, number>;
+  transportBy: number | null;
   replacedBy: { id: number; name: string | null } | null;
   shipReplacedAt: string | null;
   replacedIn: string | null;
@@ -142,11 +147,17 @@ export type Losses = {
     premiums: number;
     replacement: number;
     transport: number;
-    // Suma de las filas (seguro − reposición − transporte); las primas van aparte
+    // Vista de un piloto: lo que pagó por naves de sus otros pilotos
+    forOthers: number;
+    // Consolidado: suma de las filas; vista de un piloto: lo que pasó por su wallet. Las primas van aparte
     walletEffect: number;
     open: number;
+    toReplace: number;
+    unreplaced: number;
     unpricedTypes: number;
   };
+  forOthers: { killmailId: number; ship: string | null; pilot: string | null; amount: number }[];
+  paidByOthers: { id: number; name: string | null; amount: number }[];
   losses: Loss[];
 };
 export const getLosses = (days: number, characterId?: number) =>

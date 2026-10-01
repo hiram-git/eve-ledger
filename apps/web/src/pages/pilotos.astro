@@ -396,7 +396,9 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     margin-top: 2px;
     font-size: 13px;
     color: var(--text-muted);
-    /* «Vinculado 16 sept 2026» en una línea */
+  }
+  /* La fecha no se parte, pero la línea sí puede bajar: en una columna estrecha se metía bajo «Último sync» */
+  .since time {
     white-space: nowrap;
   }
 

@@ -126,7 +126,9 @@ export async function shipLosses(days: number, characterId?: number) {
   const missingContracts = pilots.filter(lacks(CONTRACTS_SCOPE)).map(({ id, name }) => ({ id, name }));
   const nameOf = new Map(pilots.map((p) => [p.id, p.name]));
 
-  const rows = inView.length
+  // Todas las pérdidas de tus pilotos (no solo las de la vista): las compras y los couriers se reparten entre
+  // pérdidas en orden, y la vista de un piloto necesita saber qué pagó para las naves de los demás
+  const rows = pilots.length
     ? await db
         .select({
           killmailId: killmails.killmailId,
@@ -142,10 +144,7 @@ export async function shipLosses(days: number, characterId?: number) {
         .leftJoin(names, eq(names.id, killmails.shipTypeId))
         .where(
           and(
-            inArray(
-              killmails.victimCharacterId,
-              inView.map((p) => p.id),
-            ),
+            inArray(killmails.victimCharacterId, linkedIds),
             gte(killmails.time, from),
           ),
         )
@@ -230,7 +229,7 @@ export async function shipLosses(days: number, characterId?: number) {
           .orderBy(asc(walletTransactions.date))
       ).filter((t) => !t.clientId || !linked.has(t.clientId))
     : [];
-  const left = new Map(purchases.map((t) => [t.id, t.quantity]));
+  const qtyLeft0 = new Map(purchases.map((t) => [t.id, t.quantity]));
 
   // Couriers de tus pilotos tras las pérdidas (los cancelados o borrados devuelven la recompensa) y sus comisiones
   const couriers = rows.length
@@ -281,11 +280,11 @@ export async function shipLosses(days: number, characterId?: number) {
     let hull: (typeof purchases)[number] | undefined;
     const buyers = new Map<number, number>(); // piloto → ISK gastado en reponer
     for (const t of purchases) {
-      const qtyLeft = left.get(t.id) ?? 0;
+      const qtyLeft = qtyLeft0.get(t.id) ?? 0;
       const want = need.get(t.typeId) ?? 0;
       if (!qtyLeft || !want || !inWindow(t.date)) continue;
       const qty = Math.min(qtyLeft, want);
-      left.set(t.id, qtyLeft - qty);
+      qtyLeft0.set(t.id, qtyLeft - qty);
       need.set(t.typeId, want - qty);
       replacement += qty * t.unitPrice;
       buyers.set(t.characterId, (buyers.get(t.characterId) ?? 0) + qty * t.unitPrice);
@@ -304,6 +303,13 @@ export async function shipLosses(days: number, characterId?: number) {
 
     const system = systemById.get(r.systemId);
     const insurance = payout?.amount ?? 0;
+    // Lo que falta por reponer, al precio medio de ESI. Se da por repuesta si falta menos del 2 % de lo perdido
+    // (munición, drones sueltos…): «por reponer» no debe quedarse abierto por una carga de munición
+    const left = [...need.entries()].reduce((v, [typeId, qty]) => v + (qty > 0 ? (price.get(typeId) ?? 0) * qty : 0), 0);
+    const toReplace = left > 0.02 * (shipValue + fitValue) ? left : 0;
+    const state: 'replaced' | 'pending' | 'unreplaced' = !toReplace ? 'replaced' : now < windowEndsAt ? 'pending' : 'unreplaced';
+    // Quién pagó qué: la víctima cobra el seguro; cada comprador paga su reposición; quien emite el courier, el transporte
+    const replacementBy: Record<number, number> = Object.fromEntries(buyers);
     return {
       killmailId: r.killmailId,
       time: r.time,
@@ -321,10 +327,16 @@ export async function shipLosses(days: number, characterId?: number) {
       insurance,
       replacement,
       transport,
+      // Seguro − reposición − transporte, lo pague el piloto que sea (la historia de la nave)
       walletEffect: insurance - replacement - transport,
-      // La reposición aún puede cambiar mientras dure la ventana
       windowEndsAt,
-      open: now < windowEndsAt,
+      // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (la cifra es «hasta ahora»);
+      // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
+      state,
+      open: state === 'pending',
+      toReplace,
+      replacementBy,
+      transportBy: courier?.issuerId ?? null,
       replacedBy: buyerId ? { id: buyerId, name: nameOf.get(buyerId) ?? null } : null,
       shipReplacedAt: hull?.date ?? null,
       // «Jita» de «Jita IV - Moon 4 - Caldari Navy Assembly Plant»
@@ -346,8 +358,31 @@ export async function shipLosses(days: number, characterId?: number) {
       ),
     );
 
-  const sum = (k: 'value' | 'shipValue' | 'fitValue' | 'insurance' | 'replacement' | 'transport' | 'walletEffect') =>
-    losses.reduce((n, l) => n + l[k], 0);
+  // La vista: las pérdidas de sus pilotos. En la de un piloto, la cuenta es la de SU wallet: el seguro de sus
+  // naves y lo que él pagó (reposición y courier, también para las naves de sus otros pilotos); lo que otros
+  // pilotos pagaron por las suyas (p. ej. el alter de Jita que repuso su nave) va aparte
+  type Row = (typeof losses)[number];
+  const view = losses.filter((l) => !characterId || l.characterId === characterId);
+  const sum = (rows: Row[], f: (l: Row) => number) => rows.reduce((n, l) => n + f(l), 0);
+  // Lo que pagó un piloto por una pérdida (reposición + courier)
+  const paidBy = (l: Row, id: number) => (l.replacementBy[id] ?? 0) + (l.transportBy === id ? l.transport : 0);
+  const mineRep = (l: Row) => (characterId ? (l.replacementBy[characterId] ?? 0) : l.replacement);
+  const mineTr = (l: Row) => (characterId ? (l.transportBy === characterId ? l.transport : 0) : l.transport);
+  const forOthers = characterId
+    ? losses
+        .filter((l) => l.characterId !== characterId && paidBy(l, characterId) > 0)
+        .map((l) => ({ killmailId: l.killmailId, ship: l.ship, pilot: l.pilot, amount: paidBy(l, characterId) }))
+    : [];
+  const byOthers = new Map<number, number>();
+  if (characterId)
+    for (const l of view)
+      for (const id of new Set([...Object.keys(l.replacementBy).map(Number), ...(l.transportBy ? [l.transportBy] : [])]))
+        if (id !== characterId) byOthers.set(id, (byOthers.get(id) ?? 0) + paidBy(l, id));
+
+  const insurance = sum(view, (l) => l.insurance);
+  const replacement = sum(view, mineRep);
+  const transport = sum(view, mineTr);
+  const forOthersTotal = forOthers.reduce((n, f) => n + f.amount, 0);
   return {
     period: { days, from },
     replacementDays: REPLACEMENT_DAYS,
@@ -356,21 +391,28 @@ export async function shipLosses(days: number, characterId?: number) {
     missingScope,
     missingContracts,
     totals: {
-      count: losses.length,
-      value: sum('value'),
-      shipValue: sum('shipValue'),
-      fitValue: sum('fitValue'),
-      insurance: sum('insurance'),
-      replacement: sum('replacement'),
-      transport: sum('transport'),
-      // Suma de las filas: seguro − reposición − transporte
-      walletEffect: sum('walletEffect'),
-      // Pérdidas cuya reposición aún puede cambiar: el total es provisional
-      open: losses.filter((l) => l.open).length,
+      count: view.length,
+      value: sum(view, (l) => l.value),
+      shipValue: sum(view, (l) => l.shipValue),
+      fitValue: sum(view, (l) => l.fitValue),
+      // En el consolidado, la suma de las filas; en la de un piloto, solo lo que pasó por su wallet
+      insurance,
+      replacement,
+      transport,
+      forOthers: forOthersTotal,
+      walletEffect: insurance - replacement - transport - forOthersTotal,
+      // Pérdidas con algo por reponer y la ventana abierta: el efecto es «hasta ahora»
+      open: view.filter((l) => l.state === 'pending').length,
+      toReplace: sum(view, (l) => (l.state === 'pending' ? l.toReplace : 0)),
+      // Lo que no se repuso de las pérdidas ya cerradas (patrimonio que no volvió)
+      unreplaced: sum(view, (l) => (l.state === 'unreplaced' ? l.toReplace : 0)),
       premiums: prem?.total ?? 0,
       unpricedTypes: unpriced.size,
     },
+    // Vista de un piloto: lo que pagó por las naves de sus otros pilotos, y quién pagó por las suyas
+    forOthers,
+    paidByOthers: [...byOthers.entries()].map(([id, amount]) => ({ id, name: nameOf.get(id) ?? null, amount })),
     // La más reciente primero
-    losses: losses.reverse(),
+    losses: view.reverse(),
   };
 }
