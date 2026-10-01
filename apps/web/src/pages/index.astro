@@ -43,7 +43,11 @@ const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 3
 // ?pilot=ID: el ledger de un solo piloto
 const pilotParam = Number(q.get('pilot'));
 const pilotId = Number.isSafeInteger(pilotParam) && pilotParam > 0 ? pilotParam : undefined;
-const href = (d: number, pilot?: number) => `/?days=${d}${pilot ? `&pilot=${pilot}` : ''}`;
+// ?inv=0: el ledger sin inventario (solo wallets). Por defecto, con inventario
+const withInv = q.get('inv') !== '0';
+// Todos los enlaces del resumen conservan período, piloto y filtro de inventario
+const href = (d: number, pilot?: number, inv = withInv) =>
+  `/?days=${d}${pilot ? `&pilot=${pilot}` : ''}${inv ? '' : '&inv=0'}`;
 
 let summary: Summary | undefined;
 let status: SyncStatus | undefined;
@@ -57,8 +61,9 @@ try {
   [summary, status, inventory, geo, pilotList] = await Promise.all([
     getSummary(days, pilotId),
     getSyncStatus(),
-    optional(getInventory(pilotId)),
-    optional(getMap(pilotId)),
+    // Sin inventario no se piden ni el inventario ni el mapa (que lo dibuja)
+    withInv ? optional(getInventory(pilotId)) : undefined,
+    withInv ? optional(getMap(pilotId)) : undefined,
     optional(getPilots()),
   ]);
 } catch (err) {
@@ -80,7 +85,8 @@ const syncFailed = q.get('syncFailed');
 
 // Patrimonio consolidado y proporciones para las barras de desglose
 const inventoryValue = inventory && inventory.stacks > 0 ? inventory.value : 0;
-const netWorth = (summary?.balance ?? 0) + inventoryValue;
+// Sin inventario, la cifra es solo el saldo de los wallets
+const netWorth = (summary?.balance ?? 0) + (withInv ? inventoryValue : 0);
 const share = (part: number, total: number) => (total > 0 ? Math.max(0, Math.min(1, part / total)) : 0);
 const flowTotal = (summary?.totals.income ?? 0) + (summary?.totals.expenses ?? 0);
 
@@ -156,8 +162,8 @@ const walletMarket = summary?.byActivity
 const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firstEntryAt) : null;
 // El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
 // si no, baja junto al inventario y Patrimonio queda como una franja compacta
-const showMap = !!geo && geo.nodes.some((n) => n.earnedToday > 0);
-const mapBelow = !!geo && !showMap && geo.nodes.length > 0;
+const showMap = withInv && !!geo && geo.nodes.some((n) => n.earnedToday > 0);
+const mapBelow = withInv && !!geo && !showMap && geo.nodes.length > 0;
 const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
 const partialHistory = summary && summary.coverage.firstEntryAt && summary.coverage.coveredDays < days;
 
@@ -220,7 +226,9 @@ const worthNote =
     ? capitalize(
         [
           selectedBroken ? m.worthStaleBalance(rel(selected.lastSyncAt)) : null,
-          selectedInvAt
+          !withInv
+            ? null
+            : selectedInvAt
             ? m.worthStaleInventory(rel(selectedInvAt)) + (selectedNoAssets ? ` (${m.scopeMissingShort})` : '')
             : selectedNoAssets
               ? m.coverNoInventory(selected.name)
@@ -249,6 +257,11 @@ const worthNote =
             </a>
           ))
         }
+      </div>
+      {/* Filtro de inventario: con (patrimonio = saldo + inventario) o sin (solo wallets) */}
+      <div class="inv-toggle" role="group" aria-label={m.inventoryFilter}>
+        <a href={href(days, pilotId, true)} aria-current={withInv ? 'page' : undefined}>{m.withInventory}</a>
+        <a href={href(days, pilotId, false)} aria-current={!withInv ? 'page' : undefined}>{m.withoutInventory}</a>
       </div>
       <p class="period-meta">
         {range && <span>{range} · {m.eveTime}</span>}
@@ -434,7 +447,7 @@ const worthNote =
 
             {!pilotEmpty && (
             <section class:list={['glance', { solo: !showMap }]} aria-labelledby="glance-title">
-              <h2 id="glance-title" class="sr-only">{m.net} · {m.netWorth}</h2>
+              <h2 id="glance-title" class="sr-only">{m.net} · {withInv ? m.netWorth : m.walletsOnly}</h2>
               <div class:list={['panel', 'stat', 'hero-stat', { stale: selectedBroken }]}>
                 <div class="hero-body">
                   <div class="headline">
@@ -582,13 +595,14 @@ const worthNote =
                   <div>
                     <span class="label">
                       <Icon name="wallet" />
-                      {m.netWorth}
+                      {withInv ? m.netWorth : m.walletsOnly}
                     </span>
                     <span class="value" title={full(netWorth)}>
                       {fmt(netWorth)}
                       <small>ISK</small>
                     </span>
                   </div>
+                  {withInv && (
                   <dl class="breakdown">
                     <div>
                       <dt>
@@ -607,9 +621,16 @@ const worthNote =
                       </dd>
                     </div>
                   </dl>
+                  )}
                 </div>
                 {!selected && pilotList && (
-                  <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} />
+                  <CoverageNote
+                    pilots={pilotList}
+                    staleAfterMs={staleAfterMs}
+                    syncRunning={status?.running}
+                    amounts={worthByPilot}
+                    walletOnly={!withInv}
+                  />
                 )}
                 {worthNote && (
                   <p class="worth-note">
@@ -650,7 +671,7 @@ const worthNote =
                     <tr>
                       <th>{m.pilot}</th>
                       <th>{m.balance}</th>
-                      <th>{m.inventory}</th>
+                      {withInv && <th>{m.inventory}</th>}
                       <th>{m.income}</th>
                       <th>{m.expenses}</th>
                       <th>{m.net}</th>
@@ -676,13 +697,11 @@ const worthNote =
                         <td title={c.balance === null ? m.noEntries : full(c.balance)}>
                           {c.balance === null ? '—' : fmt(c.balance)}
                         </td>
-                        <td
-                          title={
-                            inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory
-                          }
-                        >
-                          {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
-                        </td>
+                        {withInv && (
+                          <td title={inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory}>
+                            {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
+                          </td>
+                        )}
                         <td>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
                         <td>{c.lastSyncAt ? fmt(-c.expenses) : '—'}</td>
                         <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</td>
@@ -697,7 +716,7 @@ const worthNote =
                     <tr>
                       <th scope="row">{m.pilotsTotal(summary.characters.length)}</th>
                       <td title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
-                      <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>
+                      {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
                       <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
                       <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
                       <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={full(pilotTotals.net)}>
@@ -747,10 +766,12 @@ const worthNote =
                           <dt>{m.balance}</dt>
                           <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
                         </div>
-                        <div class="minor">
-                          <dt>{m.inventory}</dt>
-                          <dd>{inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}</dd>
-                        </div>
+                        {withInv && (
+                          <div class="minor">
+                            <dt>{m.inventory}</dt>
+                            <dd>{inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}</dd>
+                          </div>
+                        )}
                       </dl>
                     </li>
                   ))
@@ -777,23 +798,31 @@ const worthNote =
                       <dt>{m.balance}</dt>
                       <dd>{fmt(pilotTotals.balance)}</dd>
                     </div>
-                    <div class="minor">
-                      <dt>{m.inventory}</dt>
-                      <dd>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</dd>
-                    </div>
+                    {withInv && (
+                      <div class="minor">
+                        <dt>{m.inventory}</dt>
+                        <dd>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</dd>
+                      </div>
+                    )}
                   </dl>
                 </li>
               </ul>
               <p class="panel-note">
                 {m.pilotsTotalNote}{' '}
-                {m.noteBalance}
-                {inventory?.pricesUpdatedAt && m.notePrices(rel(inventory.pricesUpdatedAt))}
-                {m.noteBpc}
-                {inventory && inventory.unpricedTypes > 0 && m.noteUnpriced(inventory.unpricedTypes)}.
+                {withInv ? (
+                  <>
+                    {m.noteBalance}
+                    {inventory?.pricesUpdatedAt && m.notePrices(rel(inventory.pricesUpdatedAt))}
+                    {m.noteBpc}
+                    {inventory && inventory.unpricedTypes > 0 && m.noteUnpriced(inventory.unpricedTypes)}.
+                  </>
+                ) : (
+                  <>{m.noteBalanceOnly}.</>
+                )}
               </p>
             </section>
 
-            {!pilotEmpty && inventory && inventory.stacks > 0 && (
+            {withInv && !pilotEmpty && inventory && inventory.stacks > 0 && (
               <div class="split">
                 <div class="stack">
                   <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
@@ -1552,6 +1581,42 @@ const worthNote =
   .last-sync :global(.stale-icon) {
     margin-right: 6px;
     vertical-align: -2px;
+  }
+  /* Conmutador de inventario: control segmentado discreto, estado en cian como el filtro activo */
+  .inv-toggle {
+    display: inline-flex;
+    margin-right: auto;
+    margin-left: 12px;
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .inv-toggle a {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 11px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 550;
+    color: #93a6b7;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .inv-toggle a:hover {
+    color: var(--text);
+  }
+  .inv-toggle a[aria-current='page'] {
+    background: #16304070;
+    color: #8addee;
+  }
+  @media (max-width: 750px) {
+    .inv-toggle {
+      margin-left: 0;
+    }
+    .inv-toggle a {
+      min-height: 40px;
+      padding: 0 12px;
+    }
   }
   .period-meta .coverage {
     display: inline-flex;
