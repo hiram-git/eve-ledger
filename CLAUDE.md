@@ -95,4 +95,5 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 
 ## Comandos
 - API (`apps/api`): `bun install` · `bun run db:generate` · `bun run db:migrate` · `bun run dev` (puerto 3000)
+- Depuración con datos reales (`apps/api/scripts/`): `bun run export:debug [--days=90] [--names]` escribe `data/export-debug-AAAA-MM-DD.json` **sin tokens, owner_hash, descripciones del journal, hash de killmails ni nombres de personajes/corporaciones**; por defecto anonimiza (tus pilotos → «Piloto 1…N» con IDs ficticios; otros jugadores, corporaciones y alianzas → seudónimos estables; las corporaciones NPC, sistemas y estaciones quedan tal cual) y solo exporta los precios de los tipos que aparecen. `bun run import:debug <export.json> <dir>` lo carga en `<dir>/data/ledger.db` nueva (migraciones al día, enlace a `drizzle/`, pilotos con un token marcador que no sincroniza); luego `cd <dir> && SYNC_INTERVAL_MIN=0 bun <apps/api>/src/index.ts`. Verificado: la copia importada da las mismas cifras que la original (resumen, actividades, pérdidas, indicadores).
 - Web (`apps/web`): `bun install` · `bun run dev` (puerto 4321)
