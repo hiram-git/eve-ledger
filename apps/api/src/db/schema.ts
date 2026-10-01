@@ -67,7 +67,7 @@ export const names = sqliteTable('names', {
 export const syncLog = sqliteTable('sync_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   characterId: integer('character_id').notNull(),
-  kind: text('kind').notNull().default('journal'), // journal | transactions | assets | killmails
+  kind: text('kind').notNull().default('journal'), // journal | transactions | assets | killmails | contracts
   startedAt: ts('started_at').notNull(),
   finishedAt: ts('finished_at'),
   rowsInserted: integer('rows_inserted').default(0),
@@ -151,4 +151,31 @@ export const killmails = sqliteTable(
     attackers: integer('attackers').notNull(),
   },
   (t) => [index('killmails_victim_time_idx').on(t.victimCharacterId, t.time)],
+);
+
+// Contratos de tus pilotos (GET /characters/{id}/contracts): cambian de estado, se actualizan en cada sync.
+// Los ítems de los courier que emiten tus pilotos (GET .../contracts/{id}/items) se piden una vez: dicen qué
+// llevan, y así el transporte se liga a la nave perdida que repone
+export type ContractItem = { typeId: number; quantity: number };
+export const contracts = sqliteTable(
+  'contracts',
+  {
+    contractId: integer('contract_id').primaryKey(),
+    characterId: integer('character_id').notNull(), // piloto en cuya lista apareció
+    issuerId: integer('issuer_id').notNull(),
+    acceptorId: integer('acceptor_id'),
+    assigneeId: integer('assignee_id'),
+    type: text('type').notNull(), // item_exchange | courier | auction | loan | unknown
+    status: text('status').notNull(),
+    dateIssued: ts('date_issued').notNull(),
+    dateCompleted: ts('date_completed'),
+    price: real('price'),
+    reward: real('reward'),
+    collateral: real('collateral'),
+    startLocationId: integer('start_location_id'),
+    endLocationId: integer('end_location_id'),
+    items: text('items', { mode: 'json' }).$type<ContractItem[]>(), // null = aún sin pedir
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [index('contracts_issuer_date_idx').on(t.issuerId, t.dateIssued)],
 );

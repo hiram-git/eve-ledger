@@ -2,7 +2,7 @@ import { API_URL } from 'astro:env/server';
 
 export type Flow = { income: number; expenses: number; net: number };
 
-export type Activity = 'pve' | 'pvp' | 'trading' | 'other';
+export type Activity = 'pve' | 'pvp' | 'trading' | 'logistics' | 'other';
 
 // Revisión de mercado: por ítem, vendido y comprado en el período
 export type MarketItem = {
@@ -117,14 +117,22 @@ export type Loss = {
   value: number;
   insurance: number;
   replacement: number;
-  shipReplacedAt: string | null;
+  transport: number;
   walletEffect: number;
+  // Ventana de reposición: mientras siga abierta, la fila puede cambiar
+  windowEndsAt: string;
+  open: boolean;
+  replacedBy: { id: number; name: string | null } | null;
+  shipReplacedAt: string | null;
+  replacedIn: string | null;
+  courier: { contractId: number; by: string | null; at: string } | null;
 };
 export type Losses = {
   period: { days: number; from: string };
   replacementDays: number;
   pilots: number;
   missingScope: { id: number; name: string }[];
+  missingContracts: { id: number; name: string }[];
   totals: {
     count: number;
     value: number;
@@ -133,7 +141,10 @@ export type Losses = {
     insurance: number;
     premiums: number;
     replacement: number;
+    transport: number;
+    // Suma de las filas (seguro − reposición − transporte); las primas van aparte
     walletEffect: number;
+    open: number;
     unpricedTypes: number;
   };
   losses: Loss[];

@@ -16,7 +16,7 @@ const expenses = sql<number>`coalesce(sum(case when ${walletJournal.amount} < 0 
 
 export type Totals = { income: number; expenses: number; net: number };
 
-const activity = activityOf(walletJournal.refType);
+const activity = activityOf(walletJournal.refType, walletJournal.contextId);
 
 const withNet = <T extends { income: number; expenses: number }>(r: T): T & { net: number } => ({
   ...r,
@@ -121,7 +121,8 @@ export async function getSummary(days: number, characterId?: number) {
     .select({ refType, activity, income, expenses, count: sql<number>`count(*)` })
     .from(walletJournal)
     .where(inPeriod)
-    .groupBy(refType);
+    // La misma comisión de contrato puede ser logística (courier) o trading (compraventa)
+    .groupBy(refType, activity);
 
   const day = sql<string>`date(${walletJournal.date}, 'unixepoch')`;
   const dailyRows = await db.select({ day, income, expenses }).from(walletJournal).where(inPeriod).groupBy(day);

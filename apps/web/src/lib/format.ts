@@ -46,6 +46,13 @@ function relative(minutes: number, lang: Lang): string {
   return rtf.format(Math.round(hours / 24), 'day');
 }
 
+// Duración hasta un instante futuro («18 h», «3 d»): lo que falta, sin «dentro de»
+export function remaining(iso: string, lang: Lang = DEFAULT_LANG): string {
+  const hours = Math.max(1, (new Date(iso).getTime() - Date.now()) / 3_600_000);
+  const [n, unit] = hours < 48 ? [Math.round(hours), 'hour'] : [Math.round(hours / 24), 'day'];
+  return new Intl.NumberFormat(LOCALE[lang], { style: 'unit', unit, unitDisplay: 'short' }).format(n);
+}
+
 export function ago(iso: string | null, lang: Lang = DEFAULT_LANG): string {
   if (!iso) return t(lang).never;
   const min = (Date.now() - new Date(iso).getTime()) / 60_000;
@@ -72,6 +79,10 @@ const REF_TYPES: Record<string, Record<Lang, string>> = {
   corporation_account_withdrawal: { es: 'Retiro de corporación', en: 'Corp withdrawal', de: 'Corp-Abhebung' },
   contract_price: { es: 'Contratos', en: 'Contracts', de: 'Verträge' },
   contract_reward: { es: 'Contratos (recompensa)', en: 'Contracts (reward)', de: 'Verträge (Belohnung)' },
+  contract_reward_deposited: { es: 'Courier (recompensa)', en: 'Courier (reward)', de: 'Kurier (Belohnung)' },
+  contract_reward_refund: { es: 'Courier (recompensa devuelta)', en: 'Courier (reward refund)', de: 'Kurier (Belohnung zurück)' },
+  contract_collateral_payout: { es: 'Courier (garantía cobrada)', en: 'Courier (collateral payout)', de: 'Kurier (Sicherheit ausgezahlt)' },
+  contract_collateral_refund: { es: 'Courier (garantía devuelta)', en: 'Courier (collateral refund)', de: 'Kurier (Sicherheit zurück)' },
   contract_collateral: { es: 'Contratos (garantía)', en: 'Contracts (collateral)', de: 'Verträge (Sicherheit)' },
   contract_brokers_fee: { es: 'Contratos (comisión)', en: 'Contracts (broker fee)', de: 'Verträge (Maklergebühr)' },
   contract_sales_tax: { es: 'Contratos (impuesto)', en: 'Contracts (sales tax)', de: 'Verträge (Steuer)' },
