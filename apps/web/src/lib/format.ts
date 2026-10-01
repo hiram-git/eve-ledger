@@ -18,8 +18,9 @@ export function isk(value: number, { sign = false, lang = DEFAULT_LANG }: { sign
 }
 
 // Signo menos tipográfico (U+2212), igual que en las cifras abreviadas
-export const iskFull = (value: number, lang: Lang = DEFAULT_LANG) =>
-  `${num(2, lang).format(value).replace('-', '−')} ISK`;
+// sign: «+» en los positivos (netos), como en la cifra abreviada
+export const iskFull = (value: number, lang: Lang = DEFAULT_LANG, sign = false) =>
+  `${sign && value > 0 ? '+' : ''}${num(2, lang).format(value).replace('-', '−')} ISK`;
 
 export const shortDate = (iso: string, lang: Lang = DEFAULT_LANG) =>
   new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(iso));
