@@ -11,12 +11,14 @@ interface Props {
   iskLabel?: string;
   priceLabel?: string;
   empty?: string;
+  // Nota bajo la tabla (cómo se valora, p. ej.)
+  note?: string;
 }
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
-const { title, items, iskLabel = m.isk, priceLabel = m.avgPrice, empty = m.noTransactions } = Astro.props;
+const { title, items, iskLabel = m.isk, priceLabel = m.avgPrice, empty = m.noTransactions, note } = Astro.props;
 const qty = new Intl.NumberFormat(lang);
 ---
 
@@ -76,6 +78,7 @@ const qty = new Intl.NumberFormat(lang);
       </div>
     )
   }
+  {items.length > 0 && note && <p class="panel-note">{note}</p>}
 </section>
 
 <style>

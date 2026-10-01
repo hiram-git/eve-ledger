@@ -401,12 +401,12 @@ a {
   background: #ffffff05;
   text-decoration: none;
 }
-.nav-tab[aria-current='page'] {
+.nav-tab[aria-current] {
   background: #16304070;
   color: #8addee;
   border-color: #30506480;
 }
-.nav-tab[aria-current='page']::after {
+.nav-tab[aria-current]::after {
   content: '';
   position: absolute;
   bottom: -11px;
@@ -691,7 +691,7 @@ footer .footer-brand {
     padding: 7px 12px;
     font-size: 12px;
   }
-  .nav-tab[aria-current='page']::after {
+  .nav-tab[aria-current]::after {
     display: none;
   }
   .utility {

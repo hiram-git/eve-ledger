@@ -13,6 +13,7 @@ import BarList, { type BarRow } from '../components/BarList.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import {
   ApiError,
+  getIndicators,
   getInventory,
   getMap,
   getPilots,
@@ -21,6 +22,7 @@ import {
   loginUrl,
   syncLogUrl,
   type GeoMap,
+  type Indicators,
   type Inventory,
   type Pilot,
   type Summary,
@@ -28,12 +30,15 @@ import {
 } from '../lib/api';
 import { ago, isk, iskFull, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
+import { withInventory } from '../lib/inventory-pref';
 import { hasIssue, pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
+// Netos completos con su signo (+), como la cifra abreviada
+const fullNet = (v: number) => iskFull(v, lang, true);
 const date = (iso: string) => shortDate(iso, lang);
 const rel = (iso: string | null) => ago(iso, lang);
 
@@ -43,23 +48,34 @@ const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 3
 // ?pilot=ID: el ledger de un solo piloto
 const pilotParam = Number(q.get('pilot'));
 const pilotId = Number.isSafeInteger(pilotParam) && pilotParam > 0 ? pilotParam : undefined;
-const href = (d: number, pilot?: number) => `/?days=${d}${pilot ? `&pilot=${pilot}` : ''}`;
+// Patrimonio solo con los wallets (por defecto) o + inventario: la elección vive en una cookie (/inv);
+// ?inv=1 / ?inv=0 en la URL manda para esa vista y los enlaces lo conservan
+const invPref = withInventory(Astro);
+const withInv = invPref.on;
+const href = (d: number, pilot?: number, keepInv = true) =>
+  `/?days=${d}${pilot ? `&pilot=${pilot}` : ''}${keepInv && invPref.override ? `&inv=${invPref.override}` : ''}`;
+// El conmutador vuelve a esta misma vista, sin el ?inv= que fijaría la elección anterior
+const invBack = href(days, pilotId, false);
 
 let summary: Summary | undefined;
 let status: SyncStatus | undefined;
 let inventory: Inventory | undefined;
 let geo: GeoMap | undefined;
 let pilotList: Pilot[] | undefined;
+let indicators: Indicators | undefined;
 let apiError: string | undefined;
 try {
   // Inventario y mapa son opcionales: si fallan, el resto del dashboard se muestra igual
   const optional = <T,>(p: Promise<T>) => p.catch((err) => (console.error(err), undefined));
-  [summary, status, inventory, geo, pilotList] = await Promise.all([
+  [summary, status, inventory, geo, pilotList, indicators] = await Promise.all([
     getSummary(days, pilotId),
     getSyncStatus(),
-    optional(getInventory(pilotId)),
-    optional(getMap(pilotId)),
+    // Sin inventario no se piden ni el inventario ni el mapa (que lo dibuja)
+    withInv ? optional(getInventory(pilotId)) : undefined,
+    withInv ? optional(getMap(pilotId)) : undefined,
     optional(getPilots()),
+    // La línea del Omega bajo el saldo: solo en el consolidado (es una meta de todas las cuentas)
+    pilotId ? undefined : optional(getIndicators()),
   ]);
 } catch (err) {
   // Un piloto que ya no está vinculado (enlace viejo): volver al consolidado
@@ -80,7 +96,8 @@ const syncFailed = q.get('syncFailed');
 
 // Patrimonio consolidado y proporciones para las barras de desglose
 const inventoryValue = inventory && inventory.stacks > 0 ? inventory.value : 0;
-const netWorth = (summary?.balance ?? 0) + inventoryValue;
+// Sin inventario, la cifra es solo el saldo de los wallets
+const netWorth = (summary?.balance ?? 0) + (withInv ? inventoryValue : 0);
 const share = (part: number, total: number) => (total > 0 ? Math.max(0, Math.min(1, part / total)) : 0);
 const flowTotal = (summary?.totals.income ?? 0) + (summary?.totals.expenses ?? 0);
 
@@ -156,8 +173,15 @@ const walletMarket = summary?.byActivity
 const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firstEntryAt) : null;
 // El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
 // si no, baja junto al inventario y Patrimonio queda como una franja compacta
-const showMap = !!geo && geo.nodes.some((n) => n.earnedToday > 0);
-const mapBelow = !!geo && !showMap && geo.nodes.length > 0;
+const showMap = withInv && !!geo && geo.nodes.some((n) => n.earnedToday > 0);
+const mapBelow = withInv && !!geo && !showMap && geo.nodes.length > 0;
+// Antigüedad de los precios del inventario, como frescura: se refrescan en un sync si tienen más de 1 h
+const pricesOld =
+  !!inventory?.pricesUpdatedAt && Date.now() - new Date(inventory.pricesUpdatedAt).getTime() > staleAfterMs + 3_600_000;
+// Lo más valioso valora el PLEX con la media de ESI; Indicadores, con su venta más baja: si aparece, se dice
+const PLEX_TYPE_ID = 44992;
+// Omega de todas las cuentas, con el mismo cálculo que Indicadores (saldo de los wallets + PLEX guardado)
+const omega = !pilotId && pilotList?.length ? indicators?.omega : undefined;
 const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
 const partialHistory = summary && summary.coverage.firstEntryAt && summary.coverage.coveredDays < days;
 
@@ -193,6 +217,22 @@ const locationRows: BarRow[] =
 // Lo más valioso: los 6 primeros (8 si el mapa comparte la columna de al lado); el detalle completo está en GET /assets
 const valuableItems = inventory?.topItems.slice(0, mapBelow ? 8 : 6).map((i) => ({ ...i, isk: i.value })) ?? [];
 const inventoryByChar = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
+// Fila Total de la tabla de pilotos: la suma de los pilotos, que es el consolidado del resumen (la API excluye
+// las transferencias entre tus pilotos también en cada piloto, así que ingresos, gastos y neto suman exacto).
+// Se suma de `characters`, que viene completo también en la vista de un piloto
+const pilotTotals = (summary?.characters ?? []).reduce(
+  (t, c) => ({
+    balance: t.balance + (c.balance ?? 0),
+    inventory: t.inventory + (inventoryByChar.get(c.id) ?? 0),
+    income: t.income + c.income,
+    expenses: t.expenses + c.expenses,
+    net: t.net + c.net,
+  }),
+  { balance: 0, inventory: 0, income: 0, expenses: 0, net: 0 },
+);
+// En la vista de un piloto la fila Total sigue siendo el consolidado: la etiqueta lo dice
+const withData = (summary?.characters ?? []).filter((c) => c.lastSyncAt).length;
+const totalLabel = selected ? m.pilotsTotalAll : m.pilotsTotal(summary?.characters.length ?? 0, withData);
 // Lo que aporta cada piloto a Patrimonio (saldo + inventario): la nota de cobertura dice cuánto es viejo
 const worthByPilot: Record<number, number> = Object.fromEntries(
   (summary?.characters ?? []).map((c) => [c.id, (c.balance ?? 0) + (inventoryByChar.get(c.id) ?? 0)]),
@@ -207,7 +247,9 @@ const worthNote =
     ? capitalize(
         [
           selectedBroken ? m.worthStaleBalance(rel(selected.lastSyncAt)) : null,
-          selectedInvAt
+          !withInv
+            ? null
+            : selectedInvAt
             ? m.worthStaleInventory(rel(selectedInvAt)) + (selectedNoAssets ? ` (${m.scopeMissingShort})` : '')
             : selectedNoAssets
               ? m.coverNoInventory(selected.name)
@@ -230,7 +272,7 @@ const worthNote =
       <div class="nav-tabs">
         {
           PERIODS.map((p) => (
-            <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'page' : undefined}>
+            <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'true' : undefined}>
               <Icon name="clock" />
               {m.days(p)}
             </a>
@@ -321,8 +363,9 @@ const worthNote =
                 <li>
                   <a
                     href={href(days)}
-                    aria-current={!pilotId ? 'page' : undefined}
-                    title={m.allPilotsTitle(full(allNet), days)}
+                    aria-current={!pilotId ? 'true' : undefined}
+                    title={m.allPilotsTitle(fullNet(allNet), days)}
+                    aria-label={m.chipLabel(m.allPilots, fmt(allNet, { sign: true }), null)}
                   >
                     <span class="pilot-name">{m.allPilots}</span>
                     <span class:list={['pilot-net', { pos: allNet > 0, neg: allNet < 0 }]}>{fmt(allNet, { sign: true })}</span>
@@ -332,9 +375,14 @@ const worthNote =
                   <li>
                     <a
                       href={href(days, c.id)}
-                      aria-current={c.id === pilotId ? 'page' : undefined}
+                      aria-current={c.id === pilotId ? 'true' : undefined}
                       class:list={{ stale: isStale(c.lastSyncAt) }}
-                      title={m.pilotNetTitle(c.name, full(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
+                      title={m.pilotNetTitle(c.name, fullNet(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
+                      aria-label={m.chipLabel(
+                        c.name,
+                        c.lastSyncAt ? fmt(c.net, { sign: true }) : null,
+                        isStale(c.lastSyncAt) ? rel(c.lastSyncAt) : null,
+                      )}
                     >
                       {isStale(c.lastSyncAt) && <i class="stale-dot" aria-hidden="true" />}
                       <span class="pilot-name">{c.name}</span>
@@ -342,7 +390,6 @@ const worthNote =
                         {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
                       </span>
                       {isStale(c.lastSyncAt) && c.lastSyncAt && <span class="chip-age" aria-hidden="true">{rel(c.lastSyncAt)}</span>}
-                      {isStale(c.lastSyncAt) && <span class="sr-only">{m.noSyncSince(rel(c.lastSyncAt))}</span>}
                     </a>
                   </li>
                 ))}
@@ -352,7 +399,7 @@ const worthNote =
             <script>
               // En móvil la fila se desliza: que el piloto activo quede a la vista
               const strip = document.querySelector<HTMLElement>('.pilot-strip ul');
-              const active = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+              const active = strip?.querySelector<HTMLElement>('[aria-current="true"]');
               const all = strip?.querySelector<HTMLElement>('li');
               if (strip && active && all && active.parentElement !== all && strip.scrollWidth > strip.clientWidth) {
                 const want = active.parentElement!.offsetLeft - strip.offsetLeft - all.offsetWidth;
@@ -421,7 +468,7 @@ const worthNote =
 
             {!pilotEmpty && (
             <section class:list={['glance', { solo: !showMap }]} aria-labelledby="glance-title">
-              <h2 id="glance-title" class="sr-only">{m.net} · {m.netWorth}</h2>
+              <h2 id="glance-title" class="sr-only">{m.net} · {withInv ? m.netWorth : m.walletsOnly}</h2>
               <div class:list={['panel', 'stat', 'hero-stat', { stale: selectedBroken }]}>
                 <div class="hero-body">
                   <div class="headline">
@@ -430,11 +477,11 @@ const worthNote =
                         <Icon name="activity" />
                         {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}{coverageNote}
                       </span>
-                      <span class:list={['value', 'signed', sign(summary.totals.net)]} title={full(summary.totals.net)}>
+                      <span class:list={['value', 'signed', sign(summary.totals.net)]} title={fullNet(summary.totals.net)}>
                         {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
                         {fmt(summary.totals.net, { sign: true })}
                         <small>ISK</small>
-                        <span class="sr-only">{summary.totals.net > 0 ? m.gain : summary.totals.net < 0 ? m.loss : m.even} ({full(summary.totals.net)})</span>
+                        <span class="sr-only">{summary.totals.net > 0 ? m.gain : summary.totals.net < 0 ? m.loss : m.even} ({fullNet(summary.totals.net)})</span>
                       </span>
                       {
                         delta !== undefined ? (
@@ -464,17 +511,17 @@ const worthNote =
                         </p>
                       )}
                     </div>
-                    <div class="fig today" title={m.todayTitle(full(summary.today.net))}>
+                    <div class="fig today" title={m.todayTitle(fullNet(summary.today.net))}>
                       <span class="label">
                         <Icon name="clock" />
                         {m.today}
-                        <span class="sr-only"> · {m.todayTitle(full(summary.today.net))}</span>
+                        <span class="sr-only"> · {m.todayTitle(fullNet(summary.today.net))}</span>
                       </span>
                       <span class:list={['value', 'signed', sign(summary.today.net)]}>
                         {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
                         {fmt(summary.today.net, { sign: true })}
                         <small>ISK</small>
-                        <span class="sr-only">{summary.today.net > 0 ? m.gain : summary.today.net < 0 ? m.loss : m.even} ({full(summary.today.net)})</span>
+                        <span class="sr-only">{summary.today.net > 0 ? m.gain : summary.today.net < 0 ? m.loss : m.even} ({fullNet(summary.today.net)})</span>
                       </span>
                       <p class="versus">
                         {summary.today.income || summary.today.expenses
@@ -569,13 +616,14 @@ const worthNote =
                   <div>
                     <span class="label">
                       <Icon name="wallet" />
-                      {m.netWorth}
+                      {withInv ? m.netWorth : m.walletsOnly}
                     </span>
                     <span class="value" title={full(netWorth)}>
                       {fmt(netWorth)}
                       <small>ISK</small>
                     </span>
                   </div>
+                  {withInv && (
                   <dl class="breakdown">
                     <div>
                       <dt>
@@ -594,9 +642,29 @@ const worthNote =
                       </dd>
                     </div>
                   </dl>
+                  )}
+                  {/* Qué cuenta en el patrimonio: solo wallets (lo que paga el Omega) o + inventario. Se recuerda (cookie) */}
+                  <form class="inv-toggle" method="get" action="/inv" role="group" aria-label={m.invToggle}>
+                    <input type="hidden" name="back" value={invBack} />
+                    <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
+                    <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                  </form>
                 </div>
+                {omega && omega.missing !== null && (
+                  <p class="omega-line">
+                    {omega.missing > 0 ? m.omegaLine(fmt(omega.missing)) : m.omegaLineCovered}
+                    {' · '}
+                    <a class="inline-action" href="/indicadores">{m.indicators}</a>
+                  </p>
+                )}
                 {!selected && pilotList && (
-                  <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} />
+                  <CoverageNote
+                    pilots={pilotList}
+                    staleAfterMs={staleAfterMs}
+                    syncRunning={status?.running}
+                    amounts={worthByPilot}
+                    walletOnly={!withInv}
+                  />
                 )}
                 {worthNote && (
                   <p class="worth-note">
@@ -625,7 +693,7 @@ const worthNote =
 
             <section class="panel">
               <div class="panel-heading">
-                <h2 id="pilotos">{m.pilots}</h2>
+                <h2 id="pilotos">{m.pilotsPeriod(days)}</h2>
                 <a class="meta link" href="/pilotos">
                   <Icon name="users" />
                   {m.managePilots}
@@ -636,11 +704,12 @@ const worthNote =
                   <thead>
                     <tr>
                       <th>{m.pilot}</th>
-                      <th>{m.balance}</th>
-                      <th>{m.inventory}</th>
                       <th>{m.income}</th>
                       <th>{m.expenses}</th>
                       <th>{m.net}</th>
+                      {/* Del período (arriba) a «ahora»: saldo, inventario y último sync, tras una línea */}
+                      <th class="now-start">{m.balance}</th>
+                      {withInv && <th>{m.inventory}</th>}
                       <th>{m.lastSync}</th>
                     </tr>
                   </thead>
@@ -660,19 +729,19 @@ const worthNote =
                             {c.name}
                           </span>
                         </td>
-                        <td title={c.balance === null ? m.noEntries : full(c.balance)}>
+                        <td title={c.lastSyncAt ? full(c.income) : undefined}>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
+                        <td title={c.lastSyncAt ? full(out(c.expenses)) : undefined}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</td>
+                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
+                          {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
+                        </td>
+                        <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
                           {c.balance === null ? '—' : fmt(c.balance)}
                         </td>
-                        <td
-                          title={
-                            inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory
-                          }
-                        >
-                          {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
-                        </td>
-                        <td>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
-                        <td>{c.lastSyncAt ? fmt(-c.expenses) : '—'}</td>
-                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</td>
+                        {withInv && (
+                          <td title={inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory}>
+                            {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
+                          </td>
+                        )}
                         <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
                           {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
                           {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
@@ -680,6 +749,19 @@ const worthNote =
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">{totalLabel}</th>
+                      <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
+                      <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
+                      <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
+                        {fmt(pilotTotals.net, { sign: true })}
+                      </td>
+                      <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
+                      {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
+                      <td />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
               {/* Móvil: una tarjeta por piloto con nombre, neto y último sync; la tabla de 7 columnas se oculta */}
@@ -706,39 +788,95 @@ const worthNote =
                       </div>
                       <dl>
                         <div>
-                          <dt>{m.balance}</dt>
-                          <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
+                          <dt>{m.income}</dt>
+                          <dd title={full(c.income)}>{c.lastSyncAt ? fmt(c.income) : '—'}</dd>
                         </div>
                         <div>
-                          <dt>{m.inventory}</dt>
-                          <dd>{inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}</dd>
+                          <dt>{m.expenses}</dt>
+                          <dd title={full(out(c.expenses))}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</dd>
                         </div>
                         <div class:list={['net', { pos: c.net > 0, neg: c.net < 0 }]}>
                           <dt>{m.net}</dt>
-                          <dd title={`${m.income} ${full(c.income)} · ${m.expenses} ${full(-c.expenses)}`}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</dd>
+                          <dd title={fullNet(c.net)}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</dd>
                         </div>
                         <div class="minor">
-                          <dt>{m.income}</dt>
-                          <dd>{c.lastSyncAt ? fmt(c.income) : '—'}</dd>
+                          <dt>{m.balance}</dt>
+                          <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
                         </div>
-                        <div class="minor">
-                          <dt>{m.expenses}</dt>
-                          <dd>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</dd>
-                        </div>
+                        {withInv && (
+                          <div class="minor">
+                            <dt>{m.inventory}</dt>
+                            <dd>{inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}</dd>
+                          </div>
+                        )}
                       </dl>
                     </li>
                   ))
                 }
+                {/* La suma de los pilotos: el consolidado */}
+                <li class="total">
+                  <div class="card-head">
+                    <span class="who">{totalLabel}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>{m.income}</dt>
+                      <dd title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</dd>
+                    </div>
+                    <div>
+                      <dt>{m.expenses}</dt>
+                      <dd title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</dd>
+                    </div>
+                    <div class:list={['net', { pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }]}>
+                      <dt>{m.net}</dt>
+                      <dd title={fullNet(pilotTotals.net)}>{fmt(pilotTotals.net, { sign: true })}</dd>
+                    </div>
+                    <div class="minor">
+                      <dt>{m.balance}</dt>
+                      <dd>{fmt(pilotTotals.balance)}</dd>
+                    </div>
+                    {withInv && (
+                      <div class="minor">
+                        <dt>{m.inventory}</dt>
+                        <dd>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </li>
               </ul>
-              <p class="panel-note">
-                {m.noteBalance}
-                {inventory?.pricesUpdatedAt && m.notePrices(rel(inventory.pricesUpdatedAt))}
-                {m.noteBpc}
-                {inventory && inventory.unpricedTypes > 0 && m.noteUnpriced(inventory.unpricedTypes)}.
-              </p>
+              {/* Dos notas cortas: qué es el Total (en la vista de un piloto, que es el consolidado) y de dónde salen saldo e inventario */}
+              <div class="panel-note pilots-note">
+                <p>
+                  {selected && !pilotEmpty ? (
+                    m.pilotsTotalNotePilot(selected.name)
+                  ) : (
+                    <>
+                      <span class="wide-only">{m.pilotsTotalNote(false)}</span>
+                      <span class="narrow-only">{m.pilotsTotalNote(true)}</span>
+                    </>
+                  )}
+                </p>
+                <p>
+                  {withInv ? (
+                    <>
+                      {m.noteBalance}
+                      {inventory?.pricesUpdatedAt && (
+                        <span class:list={{ 'prices-old': pricesOld }}>
+                          {pricesOld && <Icon name="alert" class="stale-icon" />}
+                          {m.notePrices(nbsp(rel(inventory.pricesUpdatedAt)))}
+                        </span>
+                      )}
+                      {m.noteBpc}
+                      {inventory && inventory.unpricedTypes > 0 && m.noteUnpriced(inventory.unpricedTypes)}.
+                    </>
+                  ) : (
+                    <>{m.noteBalanceOnly}.</>
+                  )}
+                </p>
+              </div>
             </section>
 
-            {!pilotEmpty && inventory && inventory.stacks > 0 && (
+            {withInv && !pilotEmpty && inventory && inventory.stacks > 0 && (
               <div class="split">
                 <div class="stack">
                   <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
@@ -763,6 +901,7 @@ const worthNote =
                   iskLabel={m.value}
                   priceLabel={m.unitPrice}
                   empty={m.noInventoryDot}
+                  note={valuableItems.some((i) => i.typeId === PLEX_TYPE_ID) ? m.valuablePlex : undefined}
                 />
               </div>
             )}
@@ -1294,13 +1433,13 @@ const worthNote =
     color: var(--text);
   }
   /* Filtro activo: estado, por eso en cian */
-  .pilot-strip a[aria-current='page'],
-  .pilot-strip a.stale[aria-current='page'] {
+  .pilot-strip a[aria-current='true'],
+  .pilot-strip a.stale[aria-current='true'] {
     border-color: var(--cyan-dim);
     background: #61cce514;
     color: var(--text);
   }
-  .pilot-strip a[aria-current='page'] .pilot-name {
+  .pilot-strip a[aria-current='true'] .pilot-name {
     font-weight: 600;
   }
   /* Móvil: una sola fila deslizable a sangre, para no empujar el neto hacia abajo */
@@ -1420,6 +1559,36 @@ const worthNote =
       font-size: 13px;
       color: var(--text-secondary);
     }
+    .pilot-cards li.total {
+      border-top: 3px double var(--line-strong);
+      border-bottom: 0;
+    }
+    .pilot-cards li.total .who {
+      font-weight: 600;
+    }
+  }
+  /* Total: cierra la tabla como en un libro de contabilidad (doble línea) */
+  .pilots tfoot th,
+  .pilots tfoot td {
+    border-top: 3px double var(--line-strong);
+    border-bottom: 0;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .pilots tfoot th {
+    font-size: 13px;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: left;
+  }
+  .pilots tfoot td {
+    font-family: var(--mono);
+  }
+  .pilots tfoot td.pos {
+    color: var(--positive);
+  }
+  .pilots tfoot td.neg {
+    color: var(--critical);
   }
   tr.selected td {
     background: #61cce50d;
@@ -1466,6 +1635,80 @@ const worthNote =
   }
   .last-sync :global(.stale-icon) {
     margin-right: 6px;
+    vertical-align: -2px;
+  }
+  /* Conmutador de Patrimonio: control segmentado discreto en la propia tarjeta, estado en cian */
+  .inv-toggle {
+    display: inline-flex;
+    align-self: center;
+    margin-left: auto;
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .inv-toggle button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: 0 11px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    font: 550 13px var(--font);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .inv-toggle button:hover {
+    color: var(--text);
+  }
+  .inv-toggle button[aria-pressed='true'] {
+    background: #16304070;
+    color: #8addee;
+  }
+  @media (max-width: 750px) {
+    .inv-toggle {
+      margin-left: 0;
+    }
+    .inv-toggle button {
+      min-height: 40px;
+      padding: 0 12px;
+    }
+  }
+  /* La meta que paga el wallet, en una línea neutra con su enlace */
+  .omega-line {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  /* Tabla de pilotos: una línea separa el período (ingresos, gastos, neto) de «ahora» (saldo, inventario, sync) */
+  .pilots .now-start {
+    border-left: 1px solid var(--line);
+  }
+  .pilots-note {
+    display: grid;
+    gap: 4px;
+  }
+  .pilots-note p {
+    max-width: 78ch;
+  }
+  .narrow-only {
+    display: none;
+  }
+  @media (max-width: 600px) {
+    .wide-only {
+      display: none;
+    }
+    .narrow-only {
+      display: inline;
+    }
+  }
+  /* La antigüedad de los precios es frescura: no se parte, y el icono va pegado a ella */
+  .prices-old {
+    white-space: nowrap;
+  }
+  .prices-old :global(.stale-icon) {
+    margin: 0 2px 0 4px;
     vertical-align: -2px;
   }
   .period-meta .coverage {
