@@ -18,6 +18,10 @@ export function explainError(message: string, m: Messages): string {
 // o el sync nunca se lanzó. Si hay un sync en marcha ahora mismo, sí puede ser el suyo
 const FIRST_SYNC_GRACE_MS = 10 * 60_000;
 
+// Permisos opcionales: sin ellos el wallet funciona, pero falta el inventario o las naves perdidas
+export const ASSETS_SCOPE = 'esi-assets.read_assets.v1';
+export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
+
 // Necesita atención: el sync no está al día o le falta algún permiso (ambas cosas se arreglan desde Pilotos).
 // Es lo que cuenta el punto ámbar de «Pilotos» en la navegación
 export const hasIssue = (p: Pilot, st: PilotState) => st.kind !== 'ok' || p.missingScopes.length > 0;
@@ -25,7 +29,12 @@ export const hasIssue = (p: Pilot, st: PilotState) => st.kind !== 'ok' || p.miss
 // Estado de sync de un piloto: el mismo en la página de Pilotos y en la línea de avisos del resumen
 export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunning = false): PilotState {
   if (p.lastError) {
-    const kinds: Record<string, string> = { journal: m.kindJournal, transactions: m.kindTransactions, assets: m.kindAssets };
+    const kinds: Record<string, string> = {
+      journal: m.kindJournal,
+      transactions: m.kindTransactions,
+      assets: m.kindAssets,
+      killmails: m.kindKillmails,
+    };
     const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
     const hint = explainError(p.lastError.message, m);
     // Un token caducado se llama igual en todas partes (tarjeta, línea de salud y Pilotos)

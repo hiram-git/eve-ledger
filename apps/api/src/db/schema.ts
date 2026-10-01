@@ -67,7 +67,7 @@ export const names = sqliteTable('names', {
 export const syncLog = sqliteTable('sync_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   characterId: integer('character_id').notNull(),
-  kind: text('kind').notNull().default('journal'), // journal | transactions | assets
+  kind: text('kind').notNull().default('journal'), // journal | transactions | assets | killmails
   startedAt: ts('started_at').notNull(),
   finishedAt: ts('finished_at'),
   rowsInserted: integer('rows_inserted').default(0),
@@ -130,3 +130,25 @@ export const stationSystems = sqliteTable('station_systems', {
   stationId: integer('station_id').primaryKey(),
   systemId: integer('system_id').notNull(),
 });
+
+// Ítem del killmail aplanado (los contenedores de la bodega traen sus ítems anidados)
+// copy: copia de blueprint (vale 0, como en el inventario)
+export type KillmailItem = { typeId: number; destroyed: number; dropped: number; copy?: boolean };
+
+// Killmails de tus pilotos (GET /characters/{id}/killmails/recent + GET /killmails/{id}/{hash}): muertes y
+// pérdidas. Son inmutables, se piden una sola vez. Una pérdida es un killmail cuya víctima es un piloto vinculado
+export const killmails = sqliteTable(
+  'killmails',
+  {
+    killmailId: integer('killmail_id').primaryKey(),
+    hash: text('hash').notNull(),
+    characterId: integer('character_id').notNull(), // piloto en cuya lista apareció
+    time: ts('killmail_time').notNull(),
+    solarSystemId: integer('solar_system_id').notNull(),
+    victimCharacterId: integer('victim_character_id'), // null si la víctima es una estructura
+    shipTypeId: integer('ship_type_id').notNull(),
+    items: text('items', { mode: 'json' }).$type<KillmailItem[]>().notNull(),
+    attackers: integer('attackers').notNull(),
+  },
+  (t) => [index('killmails_victim_time_idx').on(t.victimCharacterId, t.time)],
+);

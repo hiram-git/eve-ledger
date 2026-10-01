@@ -98,6 +98,48 @@ const pilotQuery = (characterId?: number) => (characterId ? `characterId=${chara
 export const getSummary = (days: number, characterId?: number) =>
   call<Summary>(`/summary?days=${days}&${pilotQuery(characterId)}`);
 export const getInventory = (characterId?: number) => call<Inventory>(`/inventory?${pilotQuery(characterId)}`);
+
+// Naves perdidas del período (killmails) y lo que movieron en el wallet: seguro (+), primas (−) y reposición (−).
+// Valor perdido = casco + equipo al precio medio de ESI (ya pagado al comprarlo: no es un movimiento del wallet)
+export type Loss = {
+  killmailId: number;
+  time: string;
+  characterId: number;
+  pilot: string | null;
+  shipTypeId: number;
+  ship: string | null;
+  systemId: number;
+  system: string | null;
+  security: number | null;
+  attackers: number;
+  shipValue: number;
+  fitValue: number;
+  value: number;
+  insurance: number;
+  replacement: number;
+  shipReplacedAt: string | null;
+  walletEffect: number;
+};
+export type Losses = {
+  period: { days: number; from: string };
+  replacementDays: number;
+  pilots: number;
+  missingScope: { id: number; name: string }[];
+  totals: {
+    count: number;
+    value: number;
+    shipValue: number;
+    fitValue: number;
+    insurance: number;
+    premiums: number;
+    replacement: number;
+    walletEffect: number;
+    unpricedTypes: number;
+  };
+  losses: Loss[];
+};
+export const getLosses = (days: number, characterId?: number) =>
+  call<Losses>(`/losses?days=${days}${characterId ? `&characterId=${characterId}` : ''}`);
 export const getMap = (characterId?: number) => call<GeoMap>(`/map?${pilotQuery(characterId)}`);
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });

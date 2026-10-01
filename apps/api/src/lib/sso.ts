@@ -5,7 +5,8 @@ const AUTHORIZE_URL = 'https://login.eveonline.com/v2/oauth/authorize';
 const TOKEN_URL = 'https://login.eveonline.com/v2/oauth/token';
 const JWKS = createRemoteJWKSet(new URL('https://login.eveonline.com/oauth/jwks'));
 
-export const SCOPES = ['esi-wallet.read_character_wallet.v1', 'esi-assets.read_assets.v1'];
+// Los tres deben estar también en la app de developers.eveonline.com, o el login de EVE rechaza la petición
+export const SCOPES = ['esi-wallet.read_character_wallet.v1', 'esi-assets.read_assets.v1', 'esi-killmails.read_killmails.v1'];
 
 export type TokenResponse = {
   access_token: string;

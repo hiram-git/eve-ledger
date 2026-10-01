@@ -1,0 +1,326 @@
+---
+// Naves perdidas del período y cómo tocan el wallet. La nave se pagó al comprarla: perderla no mueve el wallet.
+// Lo que lo mueve es el seguro (+), las primas (−) y reponer casco y equipo (−): la cuenta lo dice en ese orden
+// y cada pérdida muestra su parte. El valor perdido (precio medio de ESI) es contexto, no un movimiento
+import type { Losses } from '../lib/api';
+import { isk, iskFull, shortDateTime } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+
+interface Props {
+  losses: Losses;
+  days: number;
+  // Vista de un piloto: su nombre (la fila no repite quién la perdió)
+  pilotName?: string;
+}
+const { losses, days, pilotName } = Astro.props;
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const fullNet = (v: number) => iskFull(v, lang, true);
+const when = (iso: string) => shortDateTime(iso, lang);
+const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
+const tot = losses.totals;
+const d = losses.replacementDays;
+
+// Sin permiso de killmails en ningún piloto de la vista: no se sabe nada de sus pérdidas (no es «cero pérdidas»)
+const noScope = losses.pilots > 0 && losses.missingScope.length === losses.pilots;
+const partial = !noScope && losses.missingScope.length > 0;
+const missingNames = losses.missingScope.map((p) => p.name).join(', ');
+// «Amamake 0.4»: la seguridad del sistema, como en el juego
+const where = (l: Losses['losses'][number]) =>
+  [l.system ?? `#${l.systemId}`, l.security === null ? null : l.security.toFixed(1)].filter(Boolean).join(' ');
+---
+
+<section class="panel losses" id="perdidas" aria-labelledby="losses-title">
+  <div class="panel-heading">
+    <h2 id="losses-title">{m.lossesPeriod(days)}</h2>
+  </div>
+  {
+    noScope ? (
+      <p class="panel-body empty">{pilotName ? m.lossesNoScopePilot(pilotName) : m.lossesNoScopeAll}</p>
+    ) : tot.count === 0 ? (
+      <div class="panel-body empty">
+        <p>{m.lossesNone(days)}</p>
+        {partial && <p class="muted">{m.lossesMissing(missingNames)}</p>}
+      </div>
+    ) : (
+      <>
+        <div class="panel-body losses-head">
+          <div class="lost">
+            <span class="label">{m.lossValue}</span>
+            <span class="value" title={full(tot.value)}>
+              {fmt(tot.value)}
+              <small>ISK</small>
+            </span>
+            <p class="sub">
+              {m.lossesCount(tot.count)} · {m.lossesSplit(fmt(tot.shipValue), fmt(tot.fitValue))}
+            </p>
+          </div>
+          {/* La cuenta del wallet: valores en positivo, el operador en su columna, el resultado con su signo */}
+          <table class="equation">
+            <caption class="sr-only">{m.lossesWallet}</caption>
+            <tbody>
+              <tr>
+                <th scope="row">{m.lossesInsurance}</th>
+                <td class="op" aria-hidden="true">+</td>
+                <td title={full(tot.insurance)}>{fmt(tot.insurance)}</td>
+              </tr>
+              {tot.premiums > 0 && (
+                <tr>
+                  <th scope="row">{m.lossesPremiums}</th>
+                  <td class="op" aria-hidden="true">−</td>
+                  <td title={full(tot.premiums)}>{fmt(tot.premiums)}</td>
+                </tr>
+              )}
+              <tr>
+                <th scope="row">{m.lossesReplacement}</th>
+                <td class="op" aria-hidden="true">−</td>
+                <td title={full(tot.replacement)}>{fmt(tot.replacement)}</td>
+              </tr>
+              <tr class="result">
+                <th scope="row">{m.lossesWallet}</th>
+                <td class="op" aria-hidden="true">=</td>
+                <td class:list={['signed', sign(tot.walletEffect)]} title={fullNet(tot.walletEffect)}>
+                  {fmt(tot.walletEffect, { sign: true })}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <table class="loss-table">
+          <caption class="sr-only">{m.lossesPeriod(days)}</caption>
+          <thead>
+            <tr>
+              <th>{m.lossShip}</th>
+              <th>{m.lossValue}</th>
+              <th>{m.lossInsurance}</th>
+              <th>{m.lossReplacement}</th>
+              <th>{m.lossWallet}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {losses.losses.map((l) => (
+              <tr>
+                <th scope="row">
+                  <span class="ship">{l.ship ?? `#${l.shipTypeId}`}</span>
+                  <span class="meta">
+                    {[pilotName ? null : l.pilot, where(l), m.lossAttackers(l.attackers)].filter(Boolean).join(' · ')}
+                    {' · '}
+                    <time datetime={l.time}>{when(l.time)}</time>
+                  </span>
+                </th>
+                <td data-label={m.lossValue} title={`${m.lossesSplit(full(l.shipValue), full(l.fitValue))}`}>
+                  {fmt(l.value)}
+                </td>
+                <td data-label={m.lossInsurance} title={l.insurance ? full(l.insurance) : m.lossNoInsurance}>
+                  {l.insurance ? fmt(l.insurance, { sign: true }) : '—'}
+                </td>
+                <td
+                  data-label={m.lossReplacement}
+                  title={
+                    !l.replacement ? m.lossNotReplaced(d) : l.shipReplacedAt ? m.lossReplaced(when(l.shipReplacedAt)) : m.lossFitOnly
+                  }
+                >
+                  {l.replacement ? fmt(-l.replacement) : '—'}
+                </td>
+                <td data-label={m.lossWallet} class:list={['signed', sign(l.walletEffect)]} title={fullNet(l.walletEffect)}>
+                  {l.walletEffect ? fmt(l.walletEffect, { sign: true }) : '0'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div class="panel-note losses-note">
+          <p>{m.lossesNote(d)}</p>
+          <p>
+            {m.lossesInNet}
+            {tot.unpricedTypes > 0 && m.lossesUnpriced(tot.unpricedTypes)}
+            {partial && <> {m.lossesMissing(missingNames)}</>}
+          </p>
+        </div>
+      </>
+    )
+  }
+</section>
+
+<style>
+  .empty {
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .empty .muted {
+    color: var(--text-muted);
+  }
+  /* Valor perdido (contexto) a la izquierda; la cuenta del wallet (lo que importa) a la derecha */
+  .losses-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+    align-items: start;
+    gap: 16px 40px;
+  }
+  .lost {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .lost .label {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .lost .value {
+    font: 500 24px var(--mono);
+    letter-spacing: -0.03em;
+    color: var(--text);
+  }
+  .lost .value small {
+    margin-left: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .lost .sub {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .equation {
+    width: 100%;
+    margin: 0;
+    border-collapse: collapse;
+  }
+  .equation th,
+  .equation td {
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 0;
+    vertical-align: baseline;
+  }
+  .equation tr:first-child th,
+  .equation tr:first-child td {
+    border-top: 0;
+  }
+  .equation th {
+    width: 100%;
+    white-space: normal;
+    padding-right: 16px;
+    font: 400 13px var(--font);
+    color: var(--text-secondary);
+    text-align: left;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .equation td {
+    font: 15px var(--mono);
+    color: var(--text);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .equation td:last-child {
+    padding-left: 10px;
+  }
+  .equation td.op {
+    width: 2ch;
+    padding-left: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  /* El resultado cierra la cuenta: doble línea como en un libro de contabilidad */
+  .equation tr.result th,
+  .equation tr.result td {
+    border-top: 3px double var(--line-strong);
+    font-weight: 600;
+  }
+  .equation tr.result th {
+    color: var(--text);
+  }
+  /* El signo del efecto en el wallet, como el del neto (más específico que las reglas de cada tabla) */
+  .equation td.signed.pos,
+  .loss-table td.signed.pos {
+    color: var(--positive);
+  }
+  .equation td.signed.neg,
+  .loss-table td.signed.neg {
+    color: var(--critical);
+  }
+  .loss-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .loss-table thead th:not(:first-child),
+  .loss-table td {
+    text-align: right;
+  }
+  .loss-table th:first-child {
+    padding-left: 22px;
+  }
+  .loss-table th:last-child,
+  .loss-table td:last-child {
+    padding-right: 22px;
+  }
+  .loss-table tbody th {
+    border-bottom-color: var(--line);
+    font: inherit;
+    text-align: left;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: normal;
+  }
+  .loss-table td {
+    font: 14px var(--mono);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .ship {
+    display: block;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .meta {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .losses-note {
+    display: grid;
+    gap: 4px;
+  }
+  .losses-note p {
+    max-width: 68ch;
+  }
+  @media (max-width: 720px) {
+    .losses-head {
+      grid-template-columns: 1fr;
+    }
+  }
+  /* Móvil: cada pérdida es una tarjeta (nave arriba, cuatro cifras con su etiqueta debajo) */
+  @media (max-width: 600px) {
+    .loss-table thead {
+      display: none;
+    }
+    .loss-table tr {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 12px;
+      padding: 12px 16px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .loss-table tbody th,
+    .loss-table td {
+      padding: 0 !important;
+      border: 0;
+      text-align: left;
+    }
+    .loss-table tbody th {
+      grid-column: 1 / -1;
+    }
+    .loss-table td::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: 2px;
+      font: 12px var(--font);
+      color: var(--text-muted);
+    }
+  }
+</style>
