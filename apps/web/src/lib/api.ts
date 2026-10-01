@@ -223,5 +223,30 @@ export type Indicators = {
     paceShare: number | null;
     balances: { characterId: number; balance: number | null }[];
   };
+  // ISK por hora de ratting: pagos de recompensas (uno cada 20 min) como reloj
+  ratting: {
+    days: number;
+    tickMinutes: number;
+    ticks: number;
+    hours: number;
+    isk: number;
+    iskPerHour: number | null;
+    recent: { days: number; hours: number; iskPerHour: number | null };
+    byPilot: { characterId: number; name: string; ticks: number; hours: number; isk: number; iskPerHour: number | null }[];
+    bySystem: { systemId: number; name: string | null; security: number | null; ticks: number; hours: number; isk: number; iskPerHour: number }[];
+  };
+  // Fondo de reposición: cuántas veces repones cada nave perdida con el saldo, y lo que te costaron en horas
+  replacement: {
+    available: number;
+    iskPerHour: number | null;
+    ships: { shipTypeId: number; ship: string | null; lostAt: string; value: number; times: number | null; hours: number | null }[];
+    days: number;
+    count: number;
+    cost: number;
+    costHours: number | null;
+    noScope: boolean;
+  };
+  // Comisiones e impuestos del mercado frente a lo vendido
+  fees: { days: number; total: number; sales: number; share: number | null; byType: { refType: string; total: number }[] };
 };
 export const getIndicators = () => call<Indicators>('/indicators');

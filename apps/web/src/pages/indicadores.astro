@@ -1,11 +1,11 @@
 ---
-// Indicadores: metas concretas medidas contra el saldo de los wallets. Hoy, Omega de todas las cuentas;
-// la rejilla admite más tarjetas.
+// Indicadores: metas y ritmos que responden preguntas de juego. Omega de todas las cuentas (contra el saldo de
+// los wallets), ISK por hora de ratting, fondo de reposición de las naves perdidas y comisiones del mercado
 import Base from '../layouts/Base.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
 import { hasIssue, pilotState } from '../lib/pilot-state';
-import { ago, isk, iskFull } from '../lib/format';
+import { ago, isk, iskFull, refTypeLabel } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 const lang = getLang(Astro);
@@ -13,6 +13,8 @@ const m = t(lang);
 const fmt = (v: number) => isk(v, { lang });
 const full = (v: number) => iskFull(v, lang);
 const pct = new Intl.NumberFormat(lang, { style: 'percent', maximumFractionDigits: 0 });
+// Comisiones: un decimal (5,5 %), que la diferencia entre 4 % y 5 % importa
+const pctFine = new Intl.NumberFormat(lang, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const qty = new Intl.NumberFormat(lang, { useGrouping: 'always' });
 
 let indicators: Indicators | undefined;
@@ -48,6 +50,19 @@ const paceLine =
         : m.omegaPace(`${fmt(o.costPerDay)} ISK`, `${fmt(o.avgDailyNet)} ISK`, pct.format(o.paceShare ?? 0))
     : '';
 const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded) * o.plexPrice : 0;
+
+const r = indicators?.ratting;
+const rep = indicators?.replacement;
+const fees = indicators?.fees;
+// «8 h», «2,3 h», «0,6 h»: una cifra decimal por debajo de 10 h; sin partirse entre líneas
+// Por debajo de una hora, en minutos (un Rifter son «1 min» de ratting, no «0 h»)
+const hours = (h: number) =>
+  (h < 1
+    ? m.minutesShort(String(Math.max(1, Math.round(h * 60))))
+    : m.hoursShort(new Intl.NumberFormat(lang, { maximumFractionDigits: h < 10 ? 1 : 0 }).format(h))
+  ).replace(/ /g, '\u00a0');
+const sec = (v: number | null) => (v === null ? '' : `\u00a0${v.toFixed(1)}`);
+const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
 ---
 
 <Base title={m.indicators} section="indicadores" status={status} pilots={pilots.length} pilotIssues={pilotIssues}>
@@ -158,6 +173,175 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
             {pilots.length === 0 && <p class="eta">{m.omegaNoPilots}</p>}
           </div>
         </section>
+
+        {r && (
+          <section class="panel" aria-labelledby="ratting-title">
+            <div class="panel-heading">
+              <h2 id="ratting-title">{m.rattingTitle}</h2>
+              <span class="meta">{m.periodDays(r.days)}</span>
+            </div>
+            <div class="panel-body">
+              {r.iskPerHour === null ? (
+                <p class="eta">{m.rattingNone(r.days)}</p>
+              ) : (
+                <>
+                  <p class="answer">
+                    <span class="answer-value" title={full(r.iskPerHour)}>
+                      {fmt(r.iskPerHour)}<span class="unit"> {m.perHour}</span>
+                    </span>
+                    <span class="answer-sub">{m.rattingSub(hours(r.hours), r.ticks, fmt(r.isk))}</span>
+                    {r.recent.iskPerHour !== null && <span class="answer-sub">{m.rattingRecent(r.recent.days, fmt(r.recent.iskPerHour))}</span>}
+                  </p>
+                  <table class="mini">
+                    <caption class="sr-only">{m.rattingByPilot}</caption>
+                    <thead>
+                      <tr>
+                        <th>{m.rattingByPilot}</th>
+                        <th>{m.rattingHours}</th>
+                        <th>{m.perHour}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.byPilot.map((p) => (
+                        <tr>
+                          <th scope="row">{p.name}</th>
+                          <td>{hours(p.hours)}</td>
+                          <td title={p.iskPerHour !== null ? full(p.iskPerHour) : undefined}>{p.iskPerHour !== null ? fmt(p.iskPerHour) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {r.bySystem.length > 0 && (
+                    <table class="mini">
+                      <caption class="sr-only">{m.rattingBySystem}</caption>
+                      <thead>
+                        <tr>
+                          <th>{m.rattingBySystem}</th>
+                          <th>{m.rattingHours}</th>
+                          <th>{m.perHour}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {r.bySystem.map((s) => (
+                          <tr>
+                            <th scope="row">{s.name ?? `#${s.systemId}`}<span class="sec">{sec(s.security)}</span></th>
+                            <td>{hours(s.hours)}</td>
+                            <td title={full(s.iskPerHour)}>{fmt(s.iskPerHour)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  <p class="price-meta">{m.rattingNote(r.tickMinutes)}</p>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
+        {rep && (
+          <section class="panel" aria-labelledby="repl-title">
+            <div class="panel-heading">
+              <h2 id="repl-title">{m.replTitle}</h2>
+              <span class="meta">{m.replLead}</span>
+            </div>
+            <div class="panel-body">
+              {rep.noScope ? (
+                <p class="eta">{m.replNoScope}</p>
+              ) : (
+                <>
+                  {/* Lo que te costaron las pérdidas del período, en la moneda del jugador: horas de ratting */}
+                  {rep.count > 0 ? (
+                    <p class="answer">
+                      <span class="answer-label">{m.replAnswerLabel(rep.days)}</span>
+                      {rep.costHours !== null ? (
+                        <span class="answer-value">
+                          {hours(rep.costHours)}<span class="unit"> {m.replAnswerUnit}</span>
+                        </span>
+                      ) : (
+                        <span class="answer-value">{fmt(rep.cost)}<span class="unit"> ISK</span></span>
+                      )}
+                      {rep.costHours !== null && rep.iskPerHour !== null && (
+                        <span class="answer-sub">{m.replSub(fmt(-rep.cost), fmt(rep.iskPerHour))}</span>
+                      )}
+                      {rep.costHours === null && <span class="answer-sub">{m.replNoRate}</span>}
+                    </p>
+                  ) : (
+                    <p class="eta">{m.replNoLosses(rep.days)}</p>
+                  )}
+                  {rep.ships.length > 0 && (
+                    <table class="mini">
+                      <caption class="sr-only">{m.replTitle}</caption>
+                      <thead>
+                        <tr>
+                          <th>{m.replShip}</th>
+                          <th>{m.replValue}</th>
+                          <th>{m.replTimes}</th>
+                          <th>{m.replHours}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rep.ships.map((sh) => (
+                          <tr>
+                            <th scope="row">{sh.ship ?? `#${sh.shipTypeId}`}</th>
+                            <td title={full(sh.value)}>{fmt(sh.value)}</td>
+                            <td>{sh.times !== null ? m.replTimesN(times.format(sh.times)) : '—'}</td>
+                            <td>{sh.hours !== null ? hours(sh.hours) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  <p class="price-meta">{m.replNote}</p>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
+        {fees && (
+          <section class="panel" aria-labelledby="fees-title">
+            <div class="panel-heading">
+              <h2 id="fees-title">{m.feesTitle}</h2>
+              <span class="meta">{m.feesLead(fees.days)}</span>
+            </div>
+            <div class="panel-body">
+              {fees.total === 0 ? (
+                <p class="eta">{m.feesNone(fees.days)}</p>
+              ) : (
+                <>
+                  <p class="answer">
+                    <span class="answer-label">{m.feesAnswerLabel}</span>
+                    <span class="answer-value" title={full(fees.total)}>
+                      {fmt(fees.total)}<span class="unit"> ISK</span>
+                    </span>
+                    {fees.share !== null && <span class="answer-sub">{m.feesSub(pctFine.format(fees.share), fmt(fees.sales))}</span>}
+                  </p>
+                  <table class="mini">
+                    <caption class="sr-only">{m.feesTitle}</caption>
+                    <thead>
+                      <tr>
+                        <th>{m.feesTitle}</th>
+                        <th>ISK</th>
+                        <th>{m.feesShareCol}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fees.byType.map((f) => (
+                        <tr>
+                          <th scope="row">{refTypeLabel(f.refType, lang)}</th>
+                          <td title={full(f.total)}>{fmt(f.total)}</td>
+                          <td>{fees.sales ? pctFine.format(f.total / fees.sales) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p class="price-meta">{m.feesNote}</p>
+                </>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     )
   }
@@ -167,6 +351,55 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
   .page-head {
     display: grid;
     gap: 6px;
+  }
+  /* Tablas cortas de las tarjetas: etiqueta a la izquierda, cifras a la derecha */
+  .mini {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .mini th,
+  .mini td {
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    text-align: right;
+  }
+  .mini th:first-child {
+    text-align: left;
+  }
+  .mini th:not(:first-child),
+  .mini td {
+    padding-left: 12px;
+  }
+  /* Las cabeceras se parten (el tema pone nowrap en th): si no, ensanchaban la tarjeta en móvil */
+  .mini thead th {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: normal;
+    vertical-align: bottom;
+  }
+  .cards > section {
+    min-width: 0;
+  }
+  .mini tbody th {
+    font-weight: 500;
+    color: var(--text);
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: normal;
+  }
+  .mini td {
+    font-family: var(--mono);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .mini tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  .sec {
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-weight: 400;
   }
   h1 {
     font-size: 28px;
