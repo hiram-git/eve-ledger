@@ -64,6 +64,7 @@ const SCOPE_LABELS: Record<string, string> = {
   'esi-wallet.read_character_wallet.v1': m.scopeWallet,
   'esi-assets.read_assets.v1': m.scopeInventory,
   'esi-killmails.read_killmails.v1': m.scopeLosses,
+  'esi-contracts.read_character_contracts.v1': m.scopeContracts,
 };
 const REQUIRED = Object.keys(SCOPE_LABELS);
 
@@ -395,7 +396,9 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     margin-top: 2px;
     font-size: 13px;
     color: var(--text-muted);
-    /* «Vinculado 16 sept 2026» en una línea */
+  }
+  /* La fecha no se parte, pero la línea sí puede bajar: en una columna estrecha se metía bajo «Último sync» */
+  .since time {
     white-space: nowrap;
   }
 

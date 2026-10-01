@@ -2,7 +2,7 @@ import { API_URL } from 'astro:env/server';
 
 export type Flow = { income: number; expenses: number; net: number };
 
-export type Activity = 'pve' | 'pvp' | 'trading' | 'other';
+export type Activity = 'pve' | 'pvp' | 'trading' | 'logistics' | 'other';
 
 // Revisión de mercado: por ítem, vendido y comprado en el período
 export type MarketItem = {
@@ -117,14 +117,27 @@ export type Loss = {
   value: number;
   insurance: number;
   replacement: number;
-  shipReplacedAt: string | null;
+  transport: number;
   walletEffect: number;
+  windowEndsAt: string;
+  // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (cifra «hasta ahora»);
+  // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
+  state: 'replaced' | 'pending' | 'unreplaced';
+  open: boolean;
+  toReplace: number;
+  replacementBy: Record<string, number>;
+  transportBy: number | null;
+  replacedBy: { id: number; name: string | null } | null;
+  shipReplacedAt: string | null;
+  replacedIn: string | null;
+  courier: { contractId: number; by: string | null; at: string } | null;
 };
 export type Losses = {
   period: { days: number; from: string };
   replacementDays: number;
   pilots: number;
   missingScope: { id: number; name: string }[];
+  missingContracts: { id: number; name: string }[];
   totals: {
     count: number;
     value: number;
@@ -133,9 +146,18 @@ export type Losses = {
     insurance: number;
     premiums: number;
     replacement: number;
+    transport: number;
+    // Vista de un piloto: lo que pagó por naves de sus otros pilotos
+    forOthers: number;
+    // Consolidado: suma de las filas; vista de un piloto: lo que pasó por su wallet. Las primas van aparte
     walletEffect: number;
+    open: number;
+    toReplace: number;
+    unreplaced: number;
     unpricedTypes: number;
   };
+  forOthers: { killmailId: number; ship: string | null; pilot: string | null; amount: number }[];
+  paidByOthers: { id: number; name: string | null; amount: number }[];
   losses: Loss[];
 };
 export const getLosses = (days: number, characterId?: number) =>

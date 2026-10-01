@@ -21,6 +21,7 @@ const FIRST_SYNC_GRACE_MS = 10 * 60_000;
 // Permisos opcionales: sin ellos el wallet funciona, pero falta el inventario o las naves perdidas
 export const ASSETS_SCOPE = 'esi-assets.read_assets.v1';
 export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
+export const CONTRACTS_SCOPE = 'esi-contracts.read_character_contracts.v1';
 
 // Necesita atención: el sync no está al día o le falta algún permiso (ambas cosas se arreglan desde Pilotos).
 // Es lo que cuenta el punto ámbar de «Pilotos» en la navegación
@@ -34,6 +35,7 @@ export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunn
       transactions: m.kindTransactions,
       assets: m.kindAssets,
       killmails: m.kindKillmails,
+      contracts: m.kindContracts,
     };
     const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
     const hint = explainError(p.lastError.message, m);
@@ -44,7 +46,8 @@ export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunn
   if (!p.lastSyncAt) {
     const recent = Date.now() - new Date(p.createdAt).getTime() < FIRST_SYNC_GRACE_MS;
     if (syncRunning || recent) return { kind: 'pending', text: m.statePending };
-    return { kind: 'stale', text: m.stateNoFirstSync, hint: m.noFirstSyncHint };
+    // Si además le falta algún permiso, la acción es revincular (da los permisos y lanza el primer sync)
+    return { kind: 'stale', text: m.stateNoFirstSync, hint: p.missingScopes.length ? m.noFirstSyncRelinkHint : m.noFirstSyncHint };
   }
   if (Date.now() - new Date(p.lastSyncAt).getTime() > staleAfterMs) return { kind: 'stale', text: m.stateStale };
   return { kind: 'ok', text: m.stateOk };

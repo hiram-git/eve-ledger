@@ -34,7 +34,7 @@ import {
 import { ago, isk, iskFull, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { withInventory } from '../lib/inventory-pref';
-import { ASSETS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
+import { ASSETS_SCOPE, CONTRACTS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -130,6 +130,9 @@ const needsAttention = (c: { id: number; lastSyncAt: string | null }) => {
   return st && p ? hasIssue(p, st) : isStale(c.lastSyncAt);
 };
 type HealthAction = 'relink' | 'sync' | 'review' | null;
+// Permisos que le faltan a un piloto, con su nombre corto («inventario», «killmails», «contratos»)
+const PERM_LABELS: Record<string, string> = { [ASSETS_SCOPE]: m.permAssets, [LOSSES_SCOPE]: m.permKillmails, [CONTRACTS_SCOPE]: m.permContracts };
+const missingPerms = (id: number) => (pilotById.get(id)?.missingScopes ?? []).map((s) => PERM_LABELS[s]).filter(Boolean);
 const healthItems =
   summary?.characters.filter(needsAttention).map((c): { id: number; name: string; cause: string; action: HealthAction } => {
     const st = pilotStates.get(c.id);
@@ -142,18 +145,16 @@ const healthItems =
         transactions: m.kindTransactions,
         assets: m.kindAssets,
         killmails: m.kindKillmails,
+        contracts: m.kindContracts,
       };
       const raw = pilotById.get(c.id)?.lastError?.kind ?? '';
       return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kinds[raw] ?? raw), action: token ? 'relink' : 'review' };
     }
-    // Sync al día, pero le falta un permiso (inventario, killmails o los dos): se arregla revinculando
-    if (st.kind === 'ok') {
-      const missing = pilotById.get(c.id)?.missingScopes ?? [];
-      const noAssets = missing.includes(ASSETS_SCOPE);
-      const noLosses = missing.includes(LOSSES_SCOPE);
-      const cause = noAssets && noLosses ? m.healthNoScopes : noLosses ? m.healthNoLosses : m.healthNoAssets;
-      return { id: c.id, name: c.name, cause, action: 'relink' };
-    }
+    // Sync al día, pero le falta algún permiso (inventario, killmails, contratos): se arregla revinculando
+    const perms = missingPerms(c.id);
+    if (st.kind === 'ok') return { id: c.id, name: c.name, cause: m.healthMissing(perms), action: 'relink' };
+    // Sin primer sync y sin algún permiso: revincular da los permisos y lanza el primer sync
+    if (!c.lastSyncAt && perms.length) return { id: c.id, name: c.name, cause: `${m.healthNoFirst} · ${m.healthMissing(perms)}`, action: 'relink' };
     return { id: c.id, name: c.name, cause: c.lastSyncAt ? m.healthStale(rel(c.lastSyncAt)) : m.healthNoFirst, action: 'sync' };
   }) ?? [];
 // Pilotos con el sync al día (un permiso que falta no cuenta aquí: no hace viejos los datos)
@@ -197,6 +198,9 @@ const pricesOld =
   !!inventory?.pricesUpdatedAt && Date.now() - new Date(inventory.pricesUpdatedAt).getTime() > staleAfterMs + 3_600_000;
 // Lo más valioso valora el PLEX con la media de ESI; Indicadores, con su venta más baja: si aparece, se dice
 const PLEX_TYPE_ID = 44992;
+// Naves perdidas hoy (día de EVE): «Hoy» lo dice, es cuando más importa la factura
+const todayIso = new Date().toISOString().slice(0, 10);
+const lostTodayList = losses?.losses.filter((l) => l.time.slice(0, 10) === todayIso) ?? [];
 // Omega de todas las cuentas, con el mismo cálculo que Indicadores (saldo de los wallets + PLEX guardado)
 const omega = !pilotId && pilotList?.length ? indicators?.omega : undefined;
 const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
@@ -466,9 +470,16 @@ const worthNote =
             {pilotEmpty && selected && (
               <section class="panel empty-pilot" aria-labelledby="empty-pilot-title">
                 <h2 id="empty-pilot-title">{m.emptyPilotTitle(selected.name)}</h2>
-                <p>{selectedState?.kind === 'pending' ? m.emptyPilotPending : m.emptyPilotLead}</p>
+                <p>{selectedState?.kind === 'pending' ? m.emptyPilotPending : missingPerms(selected.id).length ? m.emptyPilotRelink : m.emptyPilotLead}</p>
                 <div class="empty-actions">
-                  {selectedState?.kind !== 'pending' && (
+                  {/* Si además le falta un permiso, revincular lo da y lanza el primer sync */}
+                  {selectedState?.kind !== 'pending' && missingPerms(selected.id).length > 0 && (
+                    <a class="secondary-button" href={loginUrl} title={m.relinkAs(selected.name)} aria-label={m.relinkAs(selected.name)}>
+                      <Icon name="login" />
+                      <span class="label">{m.relink}</span>
+                    </a>
+                  )}
+                  {selectedState?.kind !== 'pending' && missingPerms(selected.id).length === 0 && (
                     <form method="post" action="/sync" class="sync-form">
                       <input type="hidden" name="back" value={href(days, pilotId)} />
                       <input type="hidden" name="character" value={selected.id} />
@@ -547,6 +558,15 @@ const worthNote =
                             ? m.todayNoData
                             : m.todayNone}
                       </p>
+                      {/* Perder una nave no mueve el wallet hoy, pero es cuando más importa: qué nave y cuánto valía
+                          (sin enlace: el de «De este neto, naves perdidas» ya lleva al panel) */}
+                      {lostTodayList.length > 0 && (
+                        <p class="versus today-lost">
+                          {lostTodayList.length === 1
+                            ? m.todayLostOne(lostTodayList[0].ship ?? '?', fmt(lostTodayList[0].value), lostTodayList[0].insurance > 0)
+                            : m.todayLostMany(lostTodayList.length, fmt(lostTodayList.reduce((n, l) => n + l.value, 0)))}
+                        </p>
+                      )}
                       {
                         selected ? (
                           /* Un solo piloto: de cuándo son sus datos. La causa y la acción están en la línea de salud */
@@ -614,6 +634,17 @@ const worthNote =
                               </li>
                             ))}
                           </ul>
+                          {losses && losses.totals.count > 0 && (
+                            /* Lo que el PvP no muestra: las naves perdidas se reponen en Trading y se llevan en Logística */
+                            <p class="acts-losses">
+                              <span class="acts-losses-label">{m.actsLosses}</span>
+                              <span class="acts-losses-value">
+                                {fmt(losses.totals.walletEffect, { sign: true })}
+                                {losses.totals.open > 0 && ` (${m.lossesSoFar})`}
+                              </span>
+                              <a class="inline-action" href="#perdidas">{m.actsLossesLink}</a>
+                            </p>
+                          )}
                           <p class="acts-note">{m.actsNote}</p>
                           <a class="acts-link" href="#por-actividad">
                             {m.activityDetailLink}
@@ -1056,6 +1087,21 @@ const worthNote =
   .act-bar i.neg {
     background: var(--critical);
     border-radius: 3px 0 0 3px;
+  }
+  /* Las naves perdidas bajo las actividades: el PvP en verde no cuenta lo que costó reponerlas */
+  .acts-losses {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  /* Parte del neto, no otra actividad: cifra neutra (sin el rojo de las barras), una sola línea con su enlace */
+  .acts-losses-value {
+    font: 500 13px var(--mono);
+    color: var(--text);
   }
   .acts-link {
     display: inline-flex;
@@ -1709,7 +1755,7 @@ const worthNote =
     gap: 4px;
   }
   .pilots-note p {
-    max-width: 78ch;
+    max-width: 60ch;
   }
   .narrow-only {
     display: none;

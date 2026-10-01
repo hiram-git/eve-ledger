@@ -39,7 +39,7 @@ Una contabilidad local y privada de *tus* 5 pilotos como una sola economía: los
 
 Confirmado en el código:
 
-- Vinculación de personajes con EVE SSO (scopes `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1` y `esi-killmails.read_killmails.v1`).
+- Vinculación de personajes con EVE SSO (scopes `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`, `esi-killmails.read_killmails.v1` y `esi-contracts.read_character_contracts.v1`).
 - Sync idempotente de wallet journal, wallet transactions e inventario (assets); nombres de ítems, estaciones y sistemas vía `/universe/names`.
 - Resumen consolidado por período (7 / 30 / 90 días): neto, ingresos, gastos, desglose por tipo de movimiento, por piloto y por día; top de ítems comprados y vendidos; patrimonio = saldo + inventario valorado.
 - Idioma: español neutro. Terminología de EVE: ISK con sufijos k / M / B, «pilotos», hora de EVE.
