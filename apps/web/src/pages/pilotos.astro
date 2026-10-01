@@ -204,14 +204,22 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
               )}
             </div>
 
+            {/* Solo los permisos que faltan: listar los concedidos era ruido en cada piloto sano */}
             <ul class="scopes" aria-label={m.permissions}>
-              {REQUIRED.map((s) => (
-                <li class:list={{ missing: p.missingScopes.includes(s) }}>
-                  <Icon name={p.missingScopes.includes(s) ? 'alert' : 'wallet'} />
-                  {SCOPE_LABELS[s]}
-                  {p.missingScopes.includes(s) && <span class="scope-missing">· {m.scopeMissingShort}</span>}
+              {p.missingScopes.length === 0 ? (
+                <li>
+                  <Icon name="wallet" />
+                  {m.allPermissions}
                 </li>
-              ))}
+              ) : (
+                REQUIRED.filter((s) => p.missingScopes.includes(s)).map((s) => (
+                  <li class="missing">
+                    <Icon name="alert" />
+                    {SCOPE_LABELS[s]}
+                    <span class="scope-missing">· {m.scopeMissingShort}</span>
+                  </li>
+                ))
+              )}
             </ul>
 
             <dl class="figures">
@@ -223,7 +231,17 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
               </div>
               <div>
                 <dt>{m.inventory}</dt>
-                <dd title={invByPilot.has(p.id) ? full(invByPilot.get(p.id)!) : m.noInventory}>
+                {/* Sin el permiso de inventario, lo guardado es una foto anterior: se ve apagado y lo dice */}
+                <dd
+                  class:list={{ stale: invByPilot.has(p.id) && p.missingScopes.includes('esi-assets.read_assets.v1') }}
+                  title={
+                    !invByPilot.has(p.id)
+                      ? m.noInventory
+                      : p.missingScopes.includes('esi-assets.read_assets.v1')
+                        ? `${full(invByPilot.get(p.id)!)} · ${m.inventoryOldPhoto}`
+                        : full(invByPilot.get(p.id)!)
+                  }
+                >
                   {invByPilot.has(p.id) ? fmt(invByPilot.get(p.id)!) : '—'}
                 </dd>
               </div>
@@ -486,6 +504,9 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     color: var(--warning);
   }
 
+  .figures dd.stale {
+    color: var(--text-muted);
+  }
   .figures {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

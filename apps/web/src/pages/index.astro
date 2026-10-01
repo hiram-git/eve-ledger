@@ -539,18 +539,23 @@ const worthNote =
                         </p>
                       )}
                     </div>
-                    <div class="fig today" title={m.todayTitle(fullNet(summary.today.net))}>
+                    <div class="fig today" title={todayUnknown ? m.todayNoData : m.todayTitle(fullNet(summary.today.net))}>
                       <span class="label">
                         <Icon name="clock" />
                         {m.today}
-                        <span class="sr-only"> · {m.todayTitle(fullNet(summary.today.net))}</span>
+                        <span class="sr-only"> · {todayUnknown ? m.todayNoData : m.todayTitle(fullNet(summary.today.net))}</span>
                       </span>
-                      <span class:list={['value', 'signed', sign(summary.today.net)]}>
-                        {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
-                        {fmt(summary.today.net, { sign: true })}
-                        <small>ISK</small>
-                        <span class="sr-only">{summary.today.net > 0 ? m.gain : summary.today.net < 0 ? m.loss : m.even} ({fullNet(summary.today.net)})</span>
-                      </span>
+                      {todayUnknown && !summary.today.income && !summary.today.expenses ? (
+                        /* Sin datos de hoy (sync atascado): un «0» se leería como «hoy no pasó nada» */
+                        <span class="value signed zero" aria-hidden="true">—</span>
+                      ) : (
+                        <span class:list={['value', 'signed', sign(summary.today.net)]}>
+                          {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
+                          {fmt(summary.today.net, { sign: true })}
+                          <small>ISK</small>
+                          <span class="sr-only">{summary.today.net > 0 ? m.gain : summary.today.net < 0 ? m.loss : m.even} ({fullNet(summary.today.net)})</span>
+                        </span>
+                      )}
                       <p class="versus">
                         {summary.today.income || summary.today.expenses
                           ? m.todayFlow(fmt(summary.today.income), fmt(summary.today.expenses))
@@ -618,6 +623,10 @@ const worthNote =
                           <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
                         </div>
                       </dl>
+                      {/* A 520–879 px de tarjeta, la nota va aquí: si no, queda un hueco bajo Ingresos/Gastos */}
+                      {summary.internalTransfers > 0 && (
+                        <span class="sub in-flow">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
+                      )}
                     </div>
                     {
                       summary.byActivity.length > 0 && (
@@ -634,28 +643,27 @@ const worthNote =
                               </li>
                             ))}
                           </ul>
-                          {losses && losses.totals.count > 0 && (
-                            /* Lo que el PvP no muestra: las naves perdidas se reponen en Trading y se llevan en Logística */
-                            <p class="acts-losses">
-                              <span class="acts-losses-label">{m.actsLosses}</span>
-                              <span class="acts-losses-value">
-                                {fmt(losses.totals.walletEffect, { sign: true })}
-                                {losses.totals.open > 0 && ` (${m.lossesSoFar})`}
-                              </span>
-                              <a class="inline-action" href="#perdidas">{m.actsLossesLink}</a>
-                            </p>
-                          )}
                           <p class="acts-note">{m.actsNote}</p>
                           <a class="acts-link" href="#por-actividad">
                             {m.activityDetailLink}
                             <i class="chev" aria-hidden="true" />
                           </a>
+                          {losses && losses.totals.count > 0 && (
+                            /* Lo que costaron las naves perdidas, separado de las actividades (no es una sexta):
+                               el PvP en verde es solo el seguro. La parte estimada, aparte y en gris */
+                            <p class="acts-losses">
+                              <span class="acts-losses-label">{m.actsLosses}</span>
+                              <span class:list={['acts-losses-value', sign(losses.totals.cost)]}>{fmt(losses.totals.cost, { sign: true })}</span>
+                              {losses.totals.toReplace > 0 && <span class="acts-losses-pending">{m.actsPending(fmt(losses.totals.toReplace))}</span>}
+                              <a class="inline-action" href="#perdidas">{m.actsLossesLink}</a>
+                            </p>
+                          )}
                         </div>
                       )
                     }
                   </div>
                   {summary.internalTransfers > 0 && (
-                    <span class="sub">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
+                    <span class="sub at-end">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
                   )}
                 </div>
               </div>
@@ -1007,6 +1015,9 @@ const worthNote =
   .hero-body .sub {
     order: 4;
   }
+  .sub.in-flow {
+    display: none;
+  }
   .fig {
     display: flex;
     flex-direction: column;
@@ -1094,14 +1105,24 @@ const worthNote =
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 8px;
-    margin-top: 6px;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
     font-size: 13px;
     color: var(--text-secondary);
   }
-  /* Parte del neto, no otra actividad: cifra neutra (sin el rojo de las barras), una sola línea con su enlace */
   .acts-losses-value {
     font: 500 13px var(--mono);
     color: var(--text);
+  }
+  .acts-losses-value.pos {
+    color: var(--positive);
+  }
+  .acts-losses-value.neg {
+    color: var(--critical);
+  }
+  .acts-losses-pending {
+    color: var(--text-muted);
   }
   .acts-link {
     display: inline-flex;
@@ -1164,6 +1185,13 @@ const worthNote =
     .composition,
     .hero-body .sub {
       order: 0;
+    }
+    .sub.in-flow {
+      display: block;
+      margin-top: 14px;
+    }
+    .sub.at-end {
+      display: none;
     }
     .fig.today {
       flex-direction: column;
@@ -1239,6 +1267,12 @@ const worthNote =
       grid-column: 1 / -1;
       grid-row: 3;
     }
+    .sub.in-flow {
+      display: none;
+    }
+    .sub.at-end {
+      display: block;
+    }
   }
   .signed {
     display: inline-flex;
@@ -1285,9 +1319,9 @@ const worthNote =
     margin-block: -12px;
   }
   /* Pilotos con datos viejos: la causa y el enlace, en una línea bajo el filtro */
+  /* El icono va pegado a la lista (con wrap se quedaba solo en su línea en móvil) */
   .pilot-health {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 4px 8px;
     margin: -4px 0 0;
@@ -1297,7 +1331,12 @@ const worthNote =
   .keep {
     white-space: nowrap;
   }
+  .pilot-health > :global(.stale-icon) {
+    flex-shrink: 0;
+  }
   .health-full {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 4px 6px;
