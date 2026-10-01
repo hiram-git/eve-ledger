@@ -25,6 +25,12 @@ export const iskFull = (value: number, lang: Lang = DEFAULT_LANG, sign = false) 
 export const shortDate = (iso: string, lang: Lang = DEFAULT_LANG) =>
   new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(iso));
 
+// «25 sept, 09:47» en hora de EVE (UTC)
+export const shortDateTime = (iso: string, lang: Lang = DEFAULT_LANG) =>
+  new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }).format(
+    new Date(iso),
+  );
+
 export const longDate = (iso: string, lang: Lang = DEFAULT_LANG) =>
   new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
     new Date(iso),

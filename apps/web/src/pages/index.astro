@@ -11,10 +11,12 @@ import MarketReview from '../components/MarketReview.astro';
 import ActivityList from '../components/ActivityList.astro';
 import BarList, { type BarRow } from '../components/BarList.astro';
 import CoverageNote from '../components/CoverageNote.astro';
+import ShipLosses from '../components/ShipLosses.astro';
 import {
   ApiError,
   getIndicators,
   getInventory,
+  getLosses,
   getMap,
   getPilots,
   getSummary,
@@ -24,6 +26,7 @@ import {
   type GeoMap,
   type Indicators,
   type Inventory,
+  type Losses,
   type Pilot,
   type Summary,
   type SyncStatus,
@@ -31,7 +34,7 @@ import {
 import { ago, isk, iskFull, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { withInventory } from '../lib/inventory-pref';
-import { hasIssue, pilotState } from '../lib/pilot-state';
+import { ASSETS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -63,11 +66,12 @@ let inventory: Inventory | undefined;
 let geo: GeoMap | undefined;
 let pilotList: Pilot[] | undefined;
 let indicators: Indicators | undefined;
+let losses: Losses | undefined;
 let apiError: string | undefined;
 try {
   // Inventario y mapa son opcionales: si fallan, el resto del dashboard se muestra igual
   const optional = <T,>(p: Promise<T>) => p.catch((err) => (console.error(err), undefined));
-  [summary, status, inventory, geo, pilotList, indicators] = await Promise.all([
+  [summary, status, inventory, geo, pilotList, indicators, losses] = await Promise.all([
     getSummary(days, pilotId),
     getSyncStatus(),
     // Sin inventario no se piden ni el inventario ni el mapa (que lo dibuja)
@@ -76,6 +80,8 @@ try {
     optional(getPilots()),
     // La línea del Omega bajo el saldo: solo en el consolidado (es una meta de todas las cuentas)
     pilotId ? undefined : optional(getIndicators()),
+    // Naves perdidas (killmails): opcional, como el inventario
+    optional(getLosses(days, pilotId)),
   ]);
 } catch (err) {
   // Un piloto que ya no está vinculado (enlace viejo): volver al consolidado
@@ -131,12 +137,23 @@ const healthItems =
     if (st.kind === 'pending') return { id: c.id, name: c.name, cause: m.healthPending, action: null };
     if (st.kind === 'error') {
       const token = st.hint === m.errToken;
-      const kinds: Record<string, string> = { journal: m.kindJournal, transactions: m.kindTransactions, assets: m.kindAssets };
+      const kinds: Record<string, string> = {
+        journal: m.kindJournal,
+        transactions: m.kindTransactions,
+        assets: m.kindAssets,
+        killmails: m.kindKillmails,
+      };
       const raw = pilotById.get(c.id)?.lastError?.kind ?? '';
       return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kinds[raw] ?? raw), action: token ? 'relink' : 'review' };
     }
-    // Sync al día, pero le falta un permiso (el de inventario): se arregla revinculando
-    if (st.kind === 'ok') return { id: c.id, name: c.name, cause: m.healthNoAssets, action: 'relink' };
+    // Sync al día, pero le falta un permiso (inventario, killmails o los dos): se arregla revinculando
+    if (st.kind === 'ok') {
+      const missing = pilotById.get(c.id)?.missingScopes ?? [];
+      const noAssets = missing.includes(ASSETS_SCOPE);
+      const noLosses = missing.includes(LOSSES_SCOPE);
+      const cause = noAssets && noLosses ? m.healthNoScopes : noLosses ? m.healthNoLosses : m.healthNoAssets;
+      return { id: c.id, name: c.name, cause, action: 'relink' };
+    }
     return { id: c.id, name: c.name, cause: c.lastSyncAt ? m.healthStale(rel(c.lastSyncAt)) : m.healthNoFirst, action: 'sync' };
   }) ?? [];
 // Pilotos con el sync al día (un permiso que falta no cuenta aquí: no hace viejos los datos)
@@ -239,7 +256,7 @@ const worthByPilot: Record<number, number> = Object.fromEntries(
 );
 // Vista de un piloto que no está al día (o sin permiso de inventario): de cuándo son su saldo y su inventario
 const selectedPilot = selected ? pilotById.get(selected.id) : undefined;
-const selectedNoAssets = !!selectedPilot?.missingScopes.includes('esi-assets.read_assets.v1');
+const selectedNoAssets = !!selectedPilot?.missingScopes.includes(ASSETS_SCOPE);
 const selectedInvAt = selected ? inventory?.byCharacter.find((c) => c.characterId === selected.id)?.updatedAt : undefined;
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const worthNote =
@@ -690,6 +707,8 @@ const worthNote =
             )}
 
             {!pilotEmpty && <ActivityList activities={summary.byActivity} />}
+
+            {!pilotEmpty && losses && <ShipLosses losses={losses} days={days} pilotName={selected?.name} />}
 
             <section class="panel">
               <div class="panel-heading">

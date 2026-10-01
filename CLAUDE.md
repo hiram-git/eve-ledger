@@ -21,7 +21,8 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Las compras/ventas entre personajes propios (`client_id` vinculado) se excluyen del top de ítems.
 - Inventario (`assets`): es una foto, no un historial. En cada sync se reemplazan los assets del personaje (upsert por `item_id`, así un ítem que pasa a otro personaje se mueve). `root_location_id` = estación/estructura/sistema final, subiendo por naves y contenedores.
 - Valoración: precio medio global de `GET /markets/prices` (tabla `market_prices`, refresco como mucho cada hora). No es el precio de venta de Jita. Las copias de blueprint valen 0.
-- Si un personaje no tiene el scope `esi-assets.read_assets.v1`, se salta su inventario (hay que revincularlo).
+- Si un personaje no tiene el scope `esi-assets.read_assets.v1`, se salta su inventario (hay que revincularlo). Igual con `esi-killmails.read_killmails.v1` y sus pérdidas.
+- Naves perdidas (`GET /losses?days=&characterId=`, `src/services/losses.ts`, tabla `killmails`): en cada sync, `GET /characters/{id}/killmails/recent` (muertes y pérdidas de ~90 días) y el detalle público e inmutable de los nuevos (`/killmails/{id}/{hash}`, como mucho 100 por sync; ítems aplanados en JSON, las copias de blueprint valen 0). Pérdida = killmail cuya víctima es un piloto vinculado. La nave se pagó al comprarla (gasto de trading): **perderla no mueve el wallet**; lo mueven el seguro (+, el primer `insurance` positivo del piloto en la hora siguiente, del mismo tipo si ESI lo dice), las primas (`insurance` negativo del período, −) y la reposición (−: compras de mercado del **mismo piloto** del casco y del equipo perdido en los 7 días siguientes, hasta las cantidades perdidas, cada compra una sola vez y sin operaciones con tus pilotos). Efecto en el wallet = seguro − primas − reposición; ya está en el neto (seguro en PvP, compras en trading), la sección solo lo explica. Valor perdido = casco + equipo (destruido y soltado) al precio medio de ESI, como contexto. En la web, panel «Naves perdidas · últimos N días» (`ShipLosses.astro`) tras «Por actividad»: valor perdido, la cuenta del wallet como ecuación (como Omega) y una fila por nave (nave, piloto · sistema y seguridad · atacantes · hora EVE; valor, seguro, reposición, wallet con signo; en móvil, tarjetas). Sin el permiso en ningún piloto de la vista lo dice (no es «cero pérdidas»); con algunos sin permiso, la nota dice a quién no incluye.
 - Mapa «tu New Eden» (`GET /map`, `src/services/geo.ts`): sistemas con inventario (tamaño = valor) y sistemas donde se ganó ISK hoy (journal con `context_id_type = system_id`). Estación → sistema → coordenadas vía `/universe/stations` y `/universe/systems` (públicos), en caché en `station_systems` y `systems`; se resuelven en cada sync (tope 150 llamadas). Las citadelas quedan «sin ubicar».
 - «Hoy» = desde las 00:00 EVE (UTC). La comparación con el período anterior solo se muestra si el historial lo cubre entero; los días anteriores al primer sync se muestran como «sin historial», no como cero.
 - Datos «desactualizados» cuando el último sync supera 2× el intervalo (2 h si el cron está apagado). El dashboard se recarga solo tras cada sync automático (`/status.json` en la web), pero solo si no tira la lectura (scroll arriba y ningún `<details>` abierto); si no, aparece el aviso «Hay datos nuevos · Actualizar». La frescura («Al último sync: hace 11 min», en ámbar si está vieja) va pegada a «Hoy», y bajo el filtro de pilotos una línea dice cuáles están sin sync reciente y por qué, con enlace a Pilotos.
@@ -46,10 +47,10 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - Críticas: la pausa tras la novena se levantó a petición del usuario (décima y undécima sobre los datos de demostración).
 
 ## Esquema (`src/db/schema.ts`)
-`characters`, `wallet_journal`, `wallet_transactions` (con `client_id` y `journal_ref_id`), `names`, `assets`, `market_prices`, `market_quotes`, `systems`, `station_systems`, `sync_log` (con `kind`: `journal` | `transactions` | `assets`).
+`characters`, `wallet_journal`, `wallet_transactions` (con `client_id` y `journal_ref_id`), `names`, `assets`, `market_prices`, `market_quotes`, `systems`, `station_systems`, `killmails`, `sync_log` (con `kind`: `journal` | `transactions` | `assets` | `killmails`).
 
 ## Estado
-- [x] 1. App registrada en developers.eveonline.com (scopes: `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`)
+- [x] 1. App registrada en developers.eveonline.com (scopes: `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`; **pendiente añadir `esi-killmails.read_killmails.v1`** en la app antes de vincular: el login lo pide y EVE rechaza un scope que la app no tiene)
 - [x] 2. Esquema Drizzle + migración
 - [x] 3. Flujo SSO (`/auth/login`, `/auth/callback`) + `GET /characters` + `GET /characters/:id/wallet`
 - [x] 4. Sync del wallet journal (`src/services/sync.ts`, `POST /sync/:characterId`, `POST /sync/all`, `GET /sync/log`)
@@ -72,6 +73,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - [x] 21. Ingresos y gastos por piloto con fila Total en la tabla de pilotos: la suma de los pilotos coincide al céntimo con el consolidado (verificado en 7, 30 y 90 días).
 - [x] 22. Filtro «Con inventario / Sin inventario» en el resumen (`?inv=0`).
 - [x] 23. Décima crítica de impeccable (27/40) resuelta entera, menores incluidas: Patrimonio solo wallets por defecto con conmutador en la tarjeta (cookie), línea del Omega bajo el saldo, Total etiquetado, orden de columnas, semántica de filtros y pulido.
+- [x] 24. Naves perdidas: killmails en el sync (scope `esi-killmails.read_killmails.v1`), `GET /losses` y panel en el resumen con el efecto en el wallet (seguro − primas − reposición).
 - [x] 17. Sexta crítica de impeccable (29/40) resuelta entera: frescura por piloto con causa, primer sync que caduca, línea de salud con acciones, Indicadores a 600 px cerrando con el ETA, «Hoy» bajo el neto en móvil.
 
 ## Paso 4 — especificación

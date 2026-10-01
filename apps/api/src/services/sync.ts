@@ -3,6 +3,7 @@ import { db } from '../db/client';
 import { characters, syncLog, walletJournal, walletTransactions } from '../db/schema';
 import { esiGet } from '../lib/esi';
 import { ASSETS_SCOPE, fetchAssets } from './assets';
+import { fetchLosses, LOSSES_SCOPE } from './losses';
 import { resolvePendingGeo } from './geo';
 import { resolvePendingNames } from './names';
 import { refreshPricesIfStale } from './prices';
@@ -35,7 +36,7 @@ type EsiTransaction = {
   journal_ref_id: number;
 };
 
-type Kind = 'journal' | 'transactions' | 'assets';
+type Kind = 'journal' | 'transactions' | 'assets' | 'killmails';
 
 export type StepResult = { pages: number; fetched: number; inserted: number; error?: string };
 
@@ -46,6 +47,7 @@ export type SyncResult = {
   journal?: StepResult;
   transactions?: StepResult;
   assets?: StepResult; // foto completa: inserted = ítems guardados, no "nuevos"
+  killmails?: StepResult; // inserted = killmails nuevos (muertes y pérdidas)
   skipped?: string[];
   namesResolved?: number;
   error?: string;
@@ -174,6 +176,9 @@ export const syncTransactions = (characterId: number) =>
 
 export const syncAssets = (characterId: number) => logged(characterId, 'assets', (r) => fetchAssets(characterId, r));
 
+export const syncKillmails = (characterId: number) =>
+  logged(characterId, 'killmails', (r) => fetchLosses(characterId, r));
+
 // Tareas públicas (sin token) tras sincronizar: fallan sin invalidar los datos ya guardados
 // y se reintentan en el próximo sync
 async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
@@ -201,13 +206,17 @@ export async function syncCharacter(characterId: number): Promise<SyncResult> {
     const tokenOk = !result.journal.error;
     if (tokenOk) {
       result.transactions = await syncTransactions(characterId);
-      // Personajes vinculados antes de pedir este scope: hay que revincularlos
-      if (ch.scopes.split(' ').includes(ASSETS_SCOPE)) result.assets = await syncAssets(characterId);
-      else result.skipped = [`inventario: falta el scope ${ASSETS_SCOPE}, vuelve a vincular el personaje`];
+      // Personajes vinculados antes de pedir estos scopes: hay que revincularlos
+      const scopes = ch.scopes.split(' ');
+      result.skipped = [];
+      if (scopes.includes(ASSETS_SCOPE)) result.assets = await syncAssets(characterId);
+      else result.skipped.push(`inventario: falta el scope ${ASSETS_SCOPE}, vuelve a vincular el personaje`);
+      if (scopes.includes(LOSSES_SCOPE)) result.killmails = await syncKillmails(characterId);
+      else result.skipped.push(`pérdidas: falta el scope ${LOSSES_SCOPE}, vuelve a vincular el personaje`);
     }
     result.inserted = result.journal.inserted + (result.transactions?.inserted ?? 0);
 
-    const errors = [result.journal.error, result.transactions?.error, result.assets?.error].filter(Boolean);
+    const errors = [result.journal.error, result.transactions?.error, result.assets?.error, result.killmails?.error].filter(Boolean);
     if (errors.length) result.error = errors.join(' | ');
     else await db.update(characters).set({ lastSyncAt: new Date() }).where(eq(characters.id, characterId));
 
@@ -216,7 +225,8 @@ export async function syncCharacter(characterId: number): Promise<SyncResult> {
 
     if (tokenOk) {
       // Solo llaman a ESI si hace falta: precios de más de 1 h, IDs sin nombre (reintenta fallos anteriores)
-      if (result.assets && !result.assets.error) await bestEffort('prices', refreshPricesIfStale);
+      // Valoran el inventario y las naves perdidas
+      if ((result.assets && !result.assets.error) || result.killmails?.inserted) await bestEffort('prices', refreshPricesIfStale);
       result.namesResolved = await bestEffort('names', resolvePendingNames);
       await bestEffort('geo', resolvePendingGeo);
     }
