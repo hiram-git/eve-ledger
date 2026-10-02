@@ -71,7 +71,8 @@ const REF_TYPES: Record<string, Record<Lang, string>> = {
   agent_mission_reward: { es: 'Misiones', en: 'Missions', de: 'Missionen' },
   agent_mission_time_bonus_reward: { es: 'Bonus de misión', en: 'Mission time bonus', de: 'Missions-Zeitbonus' },
   market_transaction: { es: 'Mercado', en: 'Market', de: 'Markt' },
-  market_escrow: { es: 'Escrow de mercado', en: 'Market escrow', de: 'Markt-Treuhand' },
+  // ESI asienta así las compras de mercado del comprador (y el escrow de las órdenes de compra)
+  market_escrow: { es: 'Compras de mercado', en: 'Market purchases', de: 'Marktkäufe' },
   transaction_tax: { es: 'Impuesto de venta', en: 'Sales tax', de: 'Verkaufssteuer' },
   brokers_fee: { es: 'Comisión de broker', en: 'Broker fee', de: 'Maklergebühr' },
   player_donation: { es: 'Donaciones', en: 'Donations', de: 'Spenden' },

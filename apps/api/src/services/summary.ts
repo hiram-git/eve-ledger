@@ -8,9 +8,12 @@ import { marketReview } from './transactions';
 const DAY_MS = 86_400_000;
 
 // Transferencias entre mis propios personajes: en el consolidado se anulan
-// (una sale de un wallet y entra en otro), así que no cuentan como ingreso ni gasto
+// (una sale de un wallet y entra en otro), así que no cuentan como ingreso ni gasto.
+// Dos pilotos DISTINTOS: en una compra de mercado (market_escrow) ESI pone al propio comprador como
+// primera y segunda parte, y eso es un gasto, no una transferencia
 const isInternal = sql<number>`(case when ${walletJournal.firstPartyId} in (select id from characters)
-  and ${walletJournal.secondPartyId} in (select id from characters) then 1 else 0 end)`;
+  and ${walletJournal.secondPartyId} in (select id from characters)
+  and ${walletJournal.firstPartyId} <> ${walletJournal.secondPartyId} then 1 else 0 end)`;
 
 const income = sql<number>`coalesce(sum(case when ${walletJournal.amount} > 0 then ${walletJournal.amount} end), 0)`;
 const expenses = sql<number>`coalesce(sum(case when ${walletJournal.amount} < 0 then -${walletJournal.amount} end), 0)`;
@@ -127,10 +130,34 @@ export async function getSummary(days: number, characterId?: number) {
 
   // «PvP con naves» (decisión del usuario): reponer una nave perdida y llevarla cuesta PvP, no trading ni
   // logística. Las compras de reposición (emparejadas por shipLosses, también las de pérdidas de los 7 días
-  // previos al período) salen de market_transaction, y los movimientos de los couriers que llevaron naves
-  // perdidas (recompensa y comisión, con el contrato como context_id) salen de logística
+  // previos al período) salen del asiento del journal de cada compra (market_escrow para el comprador;
+  // market_transaction en datos antiguos), y los movimientos de los couriers que llevaron naves perdidas
+  // (recompensa y comisión, con el contrato como context_id) salen de logística
   const shipFlow = await shipLosses(days + REPLACEMENT_DAYS);
   const replacementSpend = shipFlow.spend.filter((s) => s.date >= from && (!characterId || s.characterId === characterId));
+  const refIds = [...new Set(replacementSpend.map((s) => s.journalRefId).filter((id): id is number => id !== null))];
+  const refOf = new Map(
+    (refIds.length
+      ? await db
+          .select({ id: walletJournal.journalId, refType, activity })
+          .from(walletJournal)
+          .where(and(inPeriod, inArray(walletJournal.journalId, refIds)))
+      : []
+    ).map((r) => [r.id, r]),
+  );
+  // Lo que sale de cada fila (ref_type + actividad): una compra repartida entre dos pérdidas es un solo movimiento
+  const fromRows = new Map<string, { amount: number; ids: Set<number> }>();
+  for (const s of replacementSpend) {
+    const r = s.journalRefId !== null ? refOf.get(s.journalRefId) : undefined;
+    if (!r) continue;
+    const key = `${r.refType}|${r.activity}`;
+    const row = fromRows.get(key) ?? { amount: 0, ids: new Set<number>() };
+    row.amount += s.amount;
+    row.ids.add(s.journalRefId!);
+    fromRows.set(key, row);
+  }
+  const replacementTotal = [...fromRows.values()].reduce((n, r) => n + r.amount, 0);
+  const replacementCount = [...fromRows.values()].reduce((n, r) => n + r.ids.size, 0);
   const transportRows = shipFlow.shipCouriers.length
     ? await db
         .select({ refType, activity, income, expenses, count: sql<number>`count(*)` })
@@ -139,9 +166,8 @@ export async function getSummary(days: number, characterId?: number) {
         .groupBy(refType, activity)
     : [];
   const moved = {
-    replacement: replacementSpend.reduce((n, s) => n + s.amount, 0),
-    // Una compra repartida entre dos pérdidas es un solo movimiento del journal
-    replacementCount: new Set(replacementSpend.map((s) => s.transactionId)).size,
+    replacement: replacementTotal,
+    replacementCount,
     transport: withNet({
       income: transportRows.reduce((n, r) => n + r.income, 0),
       expenses: transportRows.reduce((n, r) => n + r.expenses, 0),
@@ -150,9 +176,10 @@ export async function getSummary(days: number, characterId?: number) {
   };
   const shift = (a: string, r: { refType: string; activity: string; income: number; expenses: number; count: number }) => {
     let { income: inc, expenses: exp, count } = r;
-    if (r.activity === a && a === 'trading' && r.refType === 'market_transaction') {
-      exp -= moved.replacement;
-      count -= moved.replacementCount;
+    const repl = fromRows.get(`${r.refType}|${r.activity}`);
+    if (repl && r.activity === a) {
+      exp -= repl.amount;
+      count -= repl.ids.size;
     }
     const t = transportRows.find((x) => x.refType === r.refType && x.activity === r.activity);
     if (t && r.activity === a) {

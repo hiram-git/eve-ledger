@@ -183,10 +183,18 @@ const nbsp = (text: string) => text.replace(/ /g, '\u00a0');
 const todayUnknown =
   !!selected && selectedBroken && !!selected.lastSyncAt && selected.lastSyncAt.slice(0, 10) < new Date().toISOString().slice(0, 10);
 const chartLastDate = selected && selectedBroken && selected.lastSyncAt ? selected.lastSyncAt.slice(0, 10) : null;
-// Conciliación de la revisión de mercado: lo que dice el wallet (market_transaction del journal)
-const walletMarket = summary?.byActivity
-  .find((a) => a.activity === 'trading')
-  ?.refTypes.find((r) => r.refType === 'market_transaction');
+// Conciliación de la revisión de mercado: lo que dice el wallet. Las ventas son market_transaction; las compras,
+// market_escrow (así las asienta ESI para el comprador; market_transaction negativo en datos antiguos) más la
+// reposición de naves perdidas, que está en PvP pero también son compras de mercado
+const tradingRefs = summary?.byActivity.find((a) => a.activity === 'trading')?.refTypes ?? [];
+const marketRef = (ref: string) => tradingRefs.find((r) => r.refType === ref);
+const walletMarket = summary
+  ? {
+      sold: marketRef('market_transaction')?.income ?? 0,
+      bought:
+        (marketRef('market_transaction')?.expenses ?? 0) + (marketRef('market_escrow')?.expenses ?? 0) + summary.shipFlow.replacement,
+    }
+  : undefined;
 // «Todos» al principio de la franja: se queda fijo en móvil mientras la fila se desliza
 const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firstEntryAt) : null;
 // El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
@@ -1022,16 +1030,8 @@ const worthNote =
               </div>
             )}
 
-            {/* La reposición de naves perdidas está en PvP, pero son compras de mercado: la conciliación las suma */}
             {!pilotEmpty && summary.market.items.length > 0 && (
-              <MarketReview
-                market={summary.market}
-                wallet={
-                  walletMarket || summary.shipFlow.replacement
-                    ? { sold: walletMarket?.income ?? 0, bought: (walletMarket?.expenses ?? 0) + summary.shipFlow.replacement }
-                    : undefined
-                }
-              />
+              <MarketReview market={summary.market} wallet={walletMarket && (walletMarket.sold || walletMarket.bought) ? walletMarket : undefined} />
             )}
 
           </>

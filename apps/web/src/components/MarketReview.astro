@@ -7,7 +7,7 @@ import { getLang, t } from '../lib/i18n';
 
 interface Props {
   market: Summary['market'];
-  // Lo que dice el wallet (market_transaction del journal) en el mismo período: concilia la tabla
+  // Lo que dice el wallet en el mismo período (ventas: market_transaction; compras: market_escrow y reposición): concilia la tabla
   wallet?: { sold: number; bought: number };
 }
 const { market, wallet } = Astro.props;

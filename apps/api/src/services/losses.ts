@@ -207,6 +207,7 @@ export async function shipLosses(days: number, characterId?: number) {
         await db
           .select({
             id: walletTransactions.transactionId,
+            journalRefId: walletTransactions.journalRefId,
             characterId: walletTransactions.characterId,
             date: walletTransactions.date,
             typeId: walletTransactions.typeId,
@@ -253,7 +254,7 @@ export async function shipLosses(days: number, characterId?: number) {
   const feeOf = new Map(feeRows.map((f) => [f.contractId, f.fee]));
   const usedCouriers = new Set<number>();
   // Compras de reposición por pagador y fecha: el resumen las cuenta como PvP («PvP con naves»)
-  const spend: { transactionId: number; characterId: number; date: Date; amount: number }[] = [];
+  const spend: { transactionId: number; journalRefId: number | null; characterId: number; date: Date; amount: number }[] = [];
 
   const losses = rows.map((r) => {
     const victim = r.characterId!;
@@ -290,7 +291,7 @@ export async function shipLosses(days: number, characterId?: number) {
       need.set(t.typeId, want - qty);
       replacement += qty * t.unitPrice;
       buyers.set(t.characterId, (buyers.get(t.characterId) ?? 0) + qty * t.unitPrice);
-      spend.push({ transactionId: t.id, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
+      spend.push({ transactionId: t.id, journalRefId: t.journalRefId, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
       if (t.typeId === r.shipTypeId && !hull) hull = t;
     }
     // Quién repuso: quien compró el casco; si solo se compró equipo, quien más gastó
