@@ -32,6 +32,8 @@ export type Summary = {
   })[];
   // Brutos por actividad (totals también es bruto); el neto del trading es su margen
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
+  // «PvP con naves»: compras de reposición y couriers de naves perdidas movidos a PvP (ship_replacement, ship_transport)
+  shipFlow: { replacement: number; transport: number };
   daily: (Flow & { date: string })[];
   today: Flow;
   previous: Flow & { complete: boolean };
@@ -119,6 +121,8 @@ export type Loss = {
   replacement: number;
   transport: number;
   walletEffect: number;
+  // Lo que te costó: walletEffect − lo que no volvió o falta por reponer (precio medio)
+  cost: number;
   windowEndsAt: string;
   // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (cifra «hasta ahora»);
   // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
@@ -147,15 +151,19 @@ export type Losses = {
     premiums: number;
     replacement: number;
     transport: number;
-    // Vista de un piloto: lo que pagó por naves de sus otros pilotos
-    forOthers: number;
-    // Consolidado: suma de las filas; vista de un piloto: lo que pasó por su wallet. Las primas van aparte
+    // Lo que movieron en tus wallets (suma de la columna Wallet)
     walletEffect: number;
-    open: number;
-    toReplace: number;
     unreplaced: number;
+    toReplace: number;
+    open: number;
+    // Lo que te costaron: suma de la columna Coste. Las primas van aparte
+    cost: number;
+    // Lo firme: Coste sin lo que falta por reponer (estimado al precio medio, aún puede cambiar)
+    firmCost: number;
     unpricedTypes: number;
   };
+  // Vista de un piloto: el flujo de su wallet por pérdidas (seguro de sus naves y lo que él pagó)
+  ownWallet: { insurance: number; replacement: number; transport: number; forOthers: number; total: number } | null;
   forOthers: { killmailId: number; ship: string | null; pilot: string | null; amount: number }[];
   paidByOthers: { id: number; name: string | null; amount: number }[];
   losses: Loss[];
@@ -219,5 +227,30 @@ export type Indicators = {
     paceShare: number | null;
     balances: { characterId: number; balance: number | null }[];
   };
+  // ISK por hora de ratting: pagos de recompensas (uno cada 20 min) como reloj
+  ratting: {
+    days: number;
+    tickMinutes: number;
+    ticks: number;
+    hours: number;
+    isk: number;
+    iskPerHour: number | null;
+    recent: { days: number; hours: number; iskPerHour: number | null };
+    byPilot: { characterId: number; name: string; ticks: number; hours: number; isk: number; iskPerHour: number | null }[];
+    bySystem: { systemId: number; name: string | null; security: number | null; ticks: number; hours: number; isk: number; iskPerHour: number }[];
+  };
+  // Fondo de reposición: cuántas veces repones cada nave perdida con el saldo, y lo que te costaron en horas
+  replacement: {
+    available: number;
+    iskPerHour: number | null;
+    ships: { shipTypeId: number; ship: string | null; lostAt: string; value: number; times: number | null; hours: number | null }[];
+    days: number;
+    count: number;
+    cost: number;
+    costHours: number | null;
+    noScope: boolean;
+  };
+  // Comisiones e impuestos del mercado frente a lo vendido
+  fees: { days: number; total: number; sales: number; share: number | null; byType: { refType: string; total: number }[] };
 };
 export const getIndicators = () => call<Indicators>('/indicators');

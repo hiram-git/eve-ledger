@@ -252,6 +252,8 @@ export async function shipLosses(days: number, characterId?: number) {
     : [];
   const feeOf = new Map(feeRows.map((f) => [f.contractId, f.fee]));
   const usedCouriers = new Set<number>();
+  // Compras de reposición por pagador y fecha: el resumen las cuenta como PvP («PvP con naves»)
+  const spend: { transactionId: number; characterId: number; date: Date; amount: number }[] = [];
 
   const losses = rows.map((r) => {
     const victim = r.characterId!;
@@ -288,6 +290,7 @@ export async function shipLosses(days: number, characterId?: number) {
       need.set(t.typeId, want - qty);
       replacement += qty * t.unitPrice;
       buyers.set(t.characterId, (buyers.get(t.characterId) ?? 0) + qty * t.unitPrice);
+      spend.push({ transactionId: t.id, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
       if (t.typeId === r.shipTypeId && !hull) hull = t;
     }
     // Quién repuso: quien compró el casco; si solo se compró equipo, quien más gastó
@@ -327,8 +330,10 @@ export async function shipLosses(days: number, characterId?: number) {
       insurance,
       replacement,
       transport,
-      // Seguro − reposición − transporte, lo pague el piloto que sea (la historia de la nave)
+      // Seguro − reposición − transporte, lo pague el piloto que sea (lo que la nave movió en tus wallets)
       walletEffect: insurance - replacement - transport,
+      // Lo que te costó perderla: lo del wallet y además lo que no volvió (o falta por reponer, al precio medio)
+      cost: insurance - replacement - transport - toReplace,
       windowEndsAt,
       // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (la cifra es «hasta ahora»);
       // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
@@ -358,16 +363,15 @@ export async function shipLosses(days: number, characterId?: number) {
       ),
     );
 
-  // La vista: las pérdidas de sus pilotos. En la de un piloto, la cuenta es la de SU wallet: el seguro de sus
-  // naves y lo que él pagó (reposición y courier, también para las naves de sus otros pilotos); lo que otros
-  // pilotos pagaron por las suyas (p. ej. el alter de Jita que repuso su nave) va aparte
+  // La vista: las pérdidas de sus pilotos. Las cifras cuentan la historia de SUS naves, la pague quien la pague:
+  // lo que te costaron = seguro − reposición − transporte − lo que no volvió − lo que falta por reponer (estimado).
+  // En la vista de un piloto, además, el flujo de SU wallet por pérdidas va aparte (ownWallet): el seguro de sus
+  // naves y lo que él pagó (también para las naves de sus otros pilotos); quién pagó por las suyas, en paidByOthers
   type Row = (typeof losses)[number];
   const view = losses.filter((l) => !characterId || l.characterId === characterId);
   const sum = (rows: Row[], f: (l: Row) => number) => rows.reduce((n, l) => n + f(l), 0);
   // Lo que pagó un piloto por una pérdida (reposición + courier)
   const paidBy = (l: Row, id: number) => (l.replacementBy[id] ?? 0) + (l.transportBy === id ? l.transport : 0);
-  const mineRep = (l: Row) => (characterId ? (l.replacementBy[characterId] ?? 0) : l.replacement);
-  const mineTr = (l: Row) => (characterId ? (l.transportBy === characterId ? l.transport : 0) : l.transport);
   const forOthers = characterId
     ? losses
         .filter((l) => l.characterId !== characterId && paidBy(l, characterId) > 0)
@@ -380,9 +384,18 @@ export async function shipLosses(days: number, characterId?: number) {
         if (id !== characterId) byOthers.set(id, (byOthers.get(id) ?? 0) + paidBy(l, id));
 
   const insurance = sum(view, (l) => l.insurance);
-  const replacement = sum(view, mineRep);
-  const transport = sum(view, mineTr);
+  const replacement = sum(view, (l) => l.replacement);
+  const transport = sum(view, (l) => l.transport);
+  const toReplace = sum(view, (l) => (l.state === 'pending' ? l.toReplace : 0));
+  const unreplaced = sum(view, (l) => (l.state === 'unreplaced' ? l.toReplace : 0));
   const forOthersTotal = forOthers.reduce((n, f) => n + f.amount, 0);
+  const ownWallet = characterId
+    ? (() => {
+        const rep = sum(view, (l) => l.replacementBy[characterId] ?? 0);
+        const tr = sum(view, (l) => (l.transportBy === characterId ? l.transport : 0));
+        return { insurance, replacement: rep, transport: tr, forOthers: forOthersTotal, total: insurance - rep - tr - forOthersTotal };
+      })()
+    : null;
   return {
     period: { days, from },
     replacementDays: REPLACEMENT_DAYS,
@@ -395,24 +408,31 @@ export async function shipLosses(days: number, characterId?: number) {
       value: sum(view, (l) => l.value),
       shipValue: sum(view, (l) => l.shipValue),
       fitValue: sum(view, (l) => l.fitValue),
-      // En el consolidado, la suma de las filas; en la de un piloto, solo lo que pasó por su wallet
       insurance,
       replacement,
       transport,
-      forOthers: forOthersTotal,
-      walletEffect: insurance - replacement - transport - forOthersTotal,
-      // Pérdidas con algo por reponer y la ventana abierta: el efecto es «hasta ahora»
+      // Lo que movieron en tus wallets (en el consolidado, la suma de la columna Wallet)
+      walletEffect: insurance - replacement - transport,
+      // Patrimonio que no volvió (ventana cerrada) y lo que falta por reponer (ventana abierta, estimado)
+      unreplaced,
+      toReplace,
       open: view.filter((l) => l.state === 'pending').length,
-      toReplace: sum(view, (l) => (l.state === 'pending' ? l.toReplace : 0)),
-      // Lo que no se repuso de las pérdidas ya cerradas (patrimonio que no volvió)
-      unreplaced: sum(view, (l) => (l.state === 'unreplaced' ? l.toReplace : 0)),
+      // Lo que te costaron: la suma de la columna Coste (incluye lo estimado por reponer)
+      cost: insurance - replacement - transport - unreplaced - toReplace,
+      // Lo firme: sin lo que falta por reponer (una estimación que aún puede cambiar)
+      firmCost: insurance - replacement - transport - unreplaced,
       premiums: prem?.total ?? 0,
       unpricedTypes: unpriced.size,
     },
-    // Vista de un piloto: lo que pagó por las naves de sus otros pilotos, y quién pagó por las suyas
+    // Vista de un piloto: el flujo de su wallet por pérdidas, lo que pagó por naves de otros y quién pagó por las suyas
+    ownWallet,
     forOthers,
     paidByOthers: [...byOthers.entries()].map(([id, amount]) => ({ id, name: nameOf.get(id) ?? null, amount })),
     // La más reciente primero
     losses: view.reverse(),
+    // Para el resumen (no para la web): las compras de reposición de todas las pérdidas, por pagador y fecha,
+    // y los couriers que llevaron naves perdidas (sus movimientos del journal tienen el contrato como context_id)
+    spend,
+    shipCouriers: [...usedCouriers],
   };
 }

@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "bun src/db/migrate.ts"
+    "db:migrate": "bun src/db/migrate.ts",
+    "export:debug": "bun scripts/export-debug.ts",
+    "import:debug": "bun scripts/import-debug.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.0",
