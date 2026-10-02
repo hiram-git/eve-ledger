@@ -209,6 +209,17 @@ const partialHistory = summary && summary.coverage.firstEntryAt && summary.cover
 // Signo del neto como estado semántico (verde/rojo + flecha), no como decoración
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 const delta = summary && summary.previous.complete ? summary.totals.net - summary.previous.net : undefined;
+// Resultado económico: el neto del wallet menos el patrimonio de las naves perdidas que no volvió (ventana cerrada)
+// o falta por reponer (estimado). La reposición, el courier y el seguro ya están en el neto (PvP)
+const notBack = losses?.totals.unreplaced ?? 0;
+const toReplace = losses?.totals.toReplace ?? 0;
+const showResult = !!summary && !!losses && notBack + toReplace >= 0.5;
+const headline = summary ? summary.totals.net - (showResult ? notBack + toReplace : 0) : 0;
+// Pie de la tarjeta: naves perdidas (lo firme con su signo, lo estimado en gris). En el consolidado, cuánto de lo
+// firme ya está en el neto (PvP); en la vista de un piloto no, porque otro pudo pagar la reposición de sus naves
+const lossesFirm = losses?.totals.firmCost ?? 0;
+const lossesInNet = !selected && losses ? losses.totals.walletEffect : 0;
+const lossesOnlyEstimate = Math.abs(lossesFirm) < 0.5 && toReplace >= 0.5;
 
 // Neto con cobertura parcial: el título lo dice (90 días pedidos, 42 con historial)
 const coverageNote = partialHistory && summary ? ` (${m.onlyCovered(summary.coverage.coveredDays)})` : '';
@@ -503,17 +514,46 @@ const worthNote =
                     <div class="fig">
                       <span class="label">
                         <Icon name="activity" />
-                        {selected ? m.netPeriodPilot(selected.name, days) : m.netPeriod(days)}{coverageNote}
+                        {showResult
+                          ? selected
+                            ? m.resultPeriodPilot(selected.name, days)
+                            : m.resultPeriod(days)
+                          : selected
+                            ? m.netPeriodPilot(selected.name, days)
+                            : m.netPeriod(days)}
+                        {coverageNote}
                       </span>
-                      <span class:list={['value', 'signed', sign(summary.totals.net)]} title={fullNet(summary.totals.net)}>
-                        {summary.totals.net !== 0 && <Icon name={summary.totals.net > 0 ? 'up' : 'down'} class="trend" />}
-                        {fmt(summary.totals.net, { sign: true })}
+                      <span class:list={['value', 'signed', sign(headline)]} title={fullNet(headline)}>
+                        {headline !== 0 && <Icon name={headline > 0 ? 'up' : 'down'} class="trend" />}
+                        {fmt(headline, { sign: true })}
                         <small>ISK</small>
-                        <span class="sr-only">{summary.totals.net > 0 ? m.gain : summary.totals.net < 0 ? m.loss : m.even} ({fullNet(summary.totals.net)})</span>
+                        <span class="sr-only">{headline > 0 ? m.gain : headline < 0 ? m.loss : m.even} ({fullNet(headline)})</span>
                       </span>
+                      {showResult && (
+                        /* De dónde sale: el neto del wallet (lo que miden las actividades, «Hoy» y el gráfico) menos
+                           el patrimonio de las naves que no volvió; lo estimado, en gris */
+                        <p class="versus result-note">
+                          {m.resultWallet}{' '}
+                          <span class="num" title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</span>
+                          {notBack >= 0.5 && (
+                            <>
+                              {' '}
+                              {m.resultNotBack(nbsp(fmt(notBack)))}
+                            </>
+                          )}
+                          {toReplace >= 0.5 && (
+                            <span class="estimate">
+                              {' '}
+                              {m.resultToReplace(nbsp(fmt(toReplace)))}
+                            </span>
+                          )}
+                        </p>
+                      )}
                       {
                         delta !== undefined ? (
                           <p class="versus compare">
+                            {/* La comparación es del neto del wallet (del período anterior no hay resultado) */}
+                            {showResult && <span class="compare-of">{m.resultCompareOf} </span>}
                             {delta === 0 ? (
                               m.versusSame(days)
                             ) : (
@@ -543,7 +583,8 @@ const worthNote =
                       <span class="label">
                         <Icon name="clock" />
                         {m.today}
-                        <span class="sr-only"> · {todayUnknown ? m.todayNoData : m.todayTitle(fullNet(summary.today.net))}</span>
+                        {/* La cifra la anuncia su valor; aquí solo desde cuándo (o que no hay datos: el «—» va oculto) */}
+                        <span class="sr-only"> · {todayUnknown ? m.todayNoData : m.todaySince}</span>
                       </span>
                       {todayUnknown && !summary.today.income && !summary.today.expenses ? (
                         /* Sin datos de hoy (sync atascado): un «0» se leería como «hoy no pasó nada» */
@@ -564,7 +605,7 @@ const worthNote =
                             : m.todayNone}
                       </p>
                       {/* Perder una nave no mueve el wallet hoy, pero es cuando más importa: qué nave y cuánto valía
-                          (sin enlace: el de «De este neto, naves perdidas» ya lleva al panel) */}
+                          (sin enlace: «Ver naves perdidas», al pie de la tarjeta, ya lleva al panel) */}
                       {lostTodayList.length > 0 && (
                         <p class="versus today-lost">
                           {lostTodayList.length === 1
@@ -648,23 +689,40 @@ const worthNote =
                             {m.activityDetailLink}
                             <i class="chev" aria-hidden="true" />
                           </a>
-                          {losses && losses.totals.count > 0 && (
-                            /* Lo que costaron las naves perdidas, separado de las actividades (no es una sexta):
-                               el PvP en verde es solo el seguro. La parte estimada, aparte y en gris */
-                            <p class="acts-losses">
-                              <span class="acts-losses-label">{m.actsLosses}</span>
-                              <span class:list={['acts-losses-value', sign(losses.totals.cost)]}>{fmt(losses.totals.cost, { sign: true })}</span>
-                              {losses.totals.toReplace > 0 && <span class="acts-losses-pending">{m.actsPending(fmt(losses.totals.toReplace))}</span>}
-                              <a class="inline-action" href="#perdidas">{m.actsLossesLink}</a>
-                            </p>
-                          )}
                         </div>
                       )
                     }
                   </div>
-                  {summary.internalTransfers > 0 && (
-                    <span class="sub at-end">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
-                  )}
+                  <div class="hero-foot">
+                    {losses && losses.totals.count > 0 && (
+                      /* Lo que costaron las naves perdidas, a todo el ancho (no es una sexta actividad): lo firme
+                         con su signo, cuánto de ello ya está en el neto (PvP) y lo estimado en gris */
+                      <p class="foot-losses">
+                        <span>{m.actsLosses}</span>
+                        {lossesOnlyEstimate ? (
+                          /* Nada firme aún (ventanas abiertas sin reponer): la cifra es la estimación, en gris */
+                          <span class="foot-losses-value estimate" title={fullNet(-toReplace)}>
+                            ~{fmt(-toReplace, { sign: true })}
+                            <span class="sr-only"> ({m.lossEstimate})</span>
+                          </span>
+                        ) : (
+                          <>
+                            <span class:list={['foot-losses-value', sign(lossesFirm)]} title={fullNet(lossesFirm)}>
+                              {fmt(lossesFirm, { sign: true })}
+                            </span>
+                            {lossesInNet !== 0 && Math.abs(lossesInNet - lossesFirm) >= 0.5 && (
+                              <span class="foot-losses-split">{m.actsInPvp(fmt(lossesInNet, { sign: true }))}</span>
+                            )}
+                            {toReplace >= 0.5 && <span class="foot-losses-pending">{m.actsPending(fmt(toReplace))}</span>}
+                          </>
+                        )}
+                        <a class="inline-action" href="#perdidas">{nbsp(m.actsLossesLink)}</a>
+                      </p>
+                    )}
+                    {summary.internalTransfers > 0 && (
+                      <span class="sub at-end">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div class:list={['panel', 'stat', 'worth', { compact: !showMap, stale: selectedBroken }]}>
@@ -964,8 +1022,16 @@ const worthNote =
               </div>
             )}
 
+            {/* La reposición de naves perdidas está en PvP, pero son compras de mercado: la conciliación las suma */}
             {!pilotEmpty && summary.market.items.length > 0 && (
-              <MarketReview market={summary.market} wallet={walletMarket ? { sold: walletMarket.income, bought: walletMarket.expenses } : undefined} />
+              <MarketReview
+                market={summary.market}
+                wallet={
+                  walletMarket || summary.shipFlow.replacement
+                    ? { sold: walletMarket?.income ?? 0, bought: (walletMarket?.expenses ?? 0) + summary.shipFlow.replacement }
+                    : undefined
+                }
+              />
             )}
 
           </>
@@ -1099,29 +1165,52 @@ const worthNote =
     background: var(--critical);
     border-radius: 3px 0 0 3px;
   }
-  /* Las naves perdidas bajo las actividades: el PvP en verde no cuenta lo que costó reponerlas */
-  .acts-losses {
+  /* De dónde sale el resultado: neto del wallet − lo que no volvió − lo estimado (en gris) */
+  .result-note {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .result-note .num {
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+  .result-note .estimate,
+  .compare-of {
+    color: var(--text-muted);
+  }
+  /* Pie de la tarjeta, a todo el ancho: naves perdidas y transferencias internas */
+  .hero-foot {
+    order: 5;
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+  .hero-foot:empty {
+    display: none;
+  }
+  .foot-losses {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 4px 8px;
-    margin-top: 4px;
-    padding-top: 10px;
+    gap: 0 8px;
+    margin-top: 8px;
+    padding-top: 6px;
     border-top: 1px solid var(--line);
     font-size: 13px;
     color: var(--text-secondary);
   }
-  .acts-losses-value {
+  .foot-losses-value {
     font: 500 13px var(--mono);
     color: var(--text);
   }
-  .acts-losses-value.pos {
+  .foot-losses-value.pos {
     color: var(--positive);
   }
-  .acts-losses-value.neg {
+  .foot-losses-value.neg {
     color: var(--critical);
   }
-  .acts-losses-pending {
+  .foot-losses-pending,
+  .foot-losses-value.estimate {
     color: var(--text-muted);
   }
   .acts-link {
@@ -1183,7 +1272,8 @@ const worthNote =
     .fig:not(.today),
     .fig.today,
     .composition,
-    .hero-body .sub {
+    .hero-body .sub,
+    .hero-foot {
       order: 0;
     }
     .sub.in-flow {
@@ -1263,7 +1353,7 @@ const worthNote =
       grid-column: 3;
       grid-row: 1 / 3;
     }
-    .hero-body .sub {
+    .hero-foot {
       grid-column: 1 / -1;
       grid-row: 3;
     }

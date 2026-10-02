@@ -252,6 +252,8 @@ export async function shipLosses(days: number, characterId?: number) {
     : [];
   const feeOf = new Map(feeRows.map((f) => [f.contractId, f.fee]));
   const usedCouriers = new Set<number>();
+  // Compras de reposición por pagador y fecha: el resumen las cuenta como PvP («PvP con naves»)
+  const spend: { transactionId: number; characterId: number; date: Date; amount: number }[] = [];
 
   const losses = rows.map((r) => {
     const victim = r.characterId!;
@@ -288,6 +290,7 @@ export async function shipLosses(days: number, characterId?: number) {
       need.set(t.typeId, want - qty);
       replacement += qty * t.unitPrice;
       buyers.set(t.characterId, (buyers.get(t.characterId) ?? 0) + qty * t.unitPrice);
+      spend.push({ transactionId: t.id, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
       if (t.typeId === r.shipTypeId && !hull) hull = t;
     }
     // Quién repuso: quien compró el casco; si solo se compró equipo, quien más gastó
@@ -414,8 +417,10 @@ export async function shipLosses(days: number, characterId?: number) {
       unreplaced,
       toReplace,
       open: view.filter((l) => l.state === 'pending').length,
-      // Lo que te costaron: la suma de la columna Coste
+      // Lo que te costaron: la suma de la columna Coste (incluye lo estimado por reponer)
       cost: insurance - replacement - transport - unreplaced - toReplace,
+      // Lo firme: sin lo que falta por reponer (una estimación que aún puede cambiar)
+      firmCost: insurance - replacement - transport - unreplaced,
       premiums: prem?.total ?? 0,
       unpricedTypes: unpriced.size,
     },
@@ -425,5 +430,9 @@ export async function shipLosses(days: number, characterId?: number) {
     paidByOthers: [...byOthers.entries()].map(([id, amount]) => ({ id, name: nameOf.get(id) ?? null, amount })),
     // La más reciente primero
     losses: view.reverse(),
+    // Para el resumen (no para la web): las compras de reposición de todas las pérdidas, por pagador y fecha,
+    // y los couriers que llevaron naves perdidas (sus movimientos del journal tienen el contrato como context_id)
+    spend,
+    shipCouriers: [...usedCouriers],
   };
 }

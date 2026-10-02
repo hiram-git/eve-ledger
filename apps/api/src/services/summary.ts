@@ -1,7 +1,8 @@
-import { and, desc, eq, gte, lt, min, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, min, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, walletJournal } from '../db/schema';
 import { ACTIVITIES, activityOf } from '../lib/activities';
+import { REPLACEMENT_DAYS, shipLosses } from './losses';
 import { marketReview } from './transactions';
 
 const DAY_MS = 86_400_000;
@@ -124,6 +125,48 @@ export async function getSummary(days: number, characterId?: number) {
     // La misma comisión de contrato puede ser logística (courier) o trading (compraventa)
     .groupBy(refType, activity);
 
+  // «PvP con naves» (decisión del usuario): reponer una nave perdida y llevarla cuesta PvP, no trading ni
+  // logística. Las compras de reposición (emparejadas por shipLosses, también las de pérdidas de los 7 días
+  // previos al período) salen de market_transaction, y los movimientos de los couriers que llevaron naves
+  // perdidas (recompensa y comisión, con el contrato como context_id) salen de logística
+  const shipFlow = await shipLosses(days + REPLACEMENT_DAYS);
+  const replacementSpend = shipFlow.spend.filter((s) => s.date >= from && (!characterId || s.characterId === characterId));
+  const transportRows = shipFlow.shipCouriers.length
+    ? await db
+        .select({ refType, activity, income, expenses, count: sql<number>`count(*)` })
+        .from(walletJournal)
+        .where(and(inPeriod, eq(walletJournal.contextIdType, 'contract_id'), inArray(walletJournal.contextId, shipFlow.shipCouriers)))
+        .groupBy(refType, activity)
+    : [];
+  const moved = {
+    replacement: replacementSpend.reduce((n, s) => n + s.amount, 0),
+    // Una compra repartida entre dos pérdidas es un solo movimiento del journal
+    replacementCount: new Set(replacementSpend.map((s) => s.transactionId)).size,
+    transport: withNet({
+      income: transportRows.reduce((n, r) => n + r.income, 0),
+      expenses: transportRows.reduce((n, r) => n + r.expenses, 0),
+    }),
+    transportCount: transportRows.reduce((n, r) => n + r.count, 0),
+  };
+  const shift = (a: string, r: { refType: string; activity: string; income: number; expenses: number; count: number }) => {
+    let { income: inc, expenses: exp, count } = r;
+    if (r.activity === a && a === 'trading' && r.refType === 'market_transaction') {
+      exp -= moved.replacement;
+      count -= moved.replacementCount;
+    }
+    const t = transportRows.find((x) => x.refType === r.refType && x.activity === r.activity);
+    if (t && r.activity === a) {
+      inc -= t.income;
+      exp -= t.expenses;
+      count -= t.count;
+    }
+    return { refType: r.refType, income: inc, expenses: exp, count };
+  };
+  const shipRefTypes = [
+    { refType: 'ship_replacement', income: 0, expenses: moved.replacement, count: moved.replacementCount },
+    { refType: 'ship_transport', income: moved.transport.income, expenses: moved.transport.expenses, count: moved.transportCount },
+  ].filter((r) => r.count > 0);
+
   const day = sql<string>`date(${walletJournal.date}, 'unixepoch')`;
   const dailyRows = await db.select({ day, income, expenses }).from(walletJournal).where(inPeriod).groupBy(day);
 
@@ -162,19 +205,27 @@ export async function getSummary(days: number, characterId?: number) {
     internalTransfers: internal.volume,
     characters: perCharacter,
     // Por actividad, con brutos y detalle por ref_type; el neto del trading es su margen
+    // Las compras de reposición y los couriers de naves perdidas ya están movidos a PvP (ship_replacement,
+    // ship_transport); los brutos de cada actividad son la suma de sus ref_types
     byActivity: ACTIVITIES.map((a) => {
-      const row = activityRows.find((r) => r.activity === a);
+      const refTypes = [
+        ...byRefType.filter((r) => r.activity === a).map((r) => shift(a, r)),
+        ...(a === 'pvp' ? shipRefTypes : []),
+      ]
+        // Sin redondeo: una fila que queda en 0 (todas sus compras eran reposición) desaparece
+        .filter((r) => r.count > 0 && (Math.abs(r.income) > 0.005 || Math.abs(r.expenses) > 0.005))
+        .map(withNet)
+        .sort((x, y) => Math.abs(y.net) - Math.abs(x.net));
       return withNet({
         activity: a,
-        income: row?.income ?? 0,
-        expenses: row?.expenses ?? 0,
-        count: row?.count ?? 0,
-        refTypes: byRefType
-          .filter((r) => r.activity === a)
-          .map(({ activity: _, ...r }) => withNet(r))
-          .sort((x, y) => Math.abs(y.net) - Math.abs(x.net)),
+        income: refTypes.reduce((n, r) => n + r.income, 0),
+        expenses: refTypes.reduce((n, r) => n + r.expenses, 0),
+        count: refTypes.reduce((n, r) => n + r.count, 0),
+        refTypes,
       });
     }).filter((a) => a.count > 0),
+    // Lo movido a PvP por «PvP con naves» (para las notas de la web)
+    shipFlow: { replacement: moved.replacement, transport: moved.transport.expenses - moved.transport.income },
     daily,
     today,
     previous: { ...previous, complete: previousComplete },

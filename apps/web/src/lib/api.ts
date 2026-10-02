@@ -32,6 +32,8 @@ export type Summary = {
   })[];
   // Brutos por actividad (totals también es bruto); el neto del trading es su margen
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
+  // «PvP con naves»: compras de reposición y couriers de naves perdidas movidos a PvP (ship_replacement, ship_transport)
+  shipFlow: { replacement: number; transport: number };
   daily: (Flow & { date: string })[];
   today: Flow;
   previous: Flow & { complete: boolean };
@@ -156,6 +158,8 @@ export type Losses = {
     open: number;
     // Lo que te costaron: suma de la columna Coste. Las primas van aparte
     cost: number;
+    // Lo firme: Coste sin lo que falta por reponer (estimado al precio medio, aún puede cambiar)
+    firmCost: number;
     unpricedTypes: number;
   };
   // Vista de un piloto: el flujo de su wallet por pérdidas (seguro de sus naves y lo que él pagó)
