@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, real, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, integer, text, real, index, primaryKey } from 'drizzle-orm/sqlite-core';
 
 const ts = (name: string) => integer(name, { mode: 'timestamp' });
 
@@ -17,7 +17,9 @@ export const characters = sqliteTable('characters', {
 export const walletJournal = sqliteTable(
   'wallet_journal',
   {
-    journalId: integer('journal_id').primaryKey(), // id de ESI → sync idempotente
+    // id de ESI + piloto → sync idempotente. ESI da el MISMO id a las dos partes de un movimiento entre dos
+    // personajes (una donación de tu main a tu alter aparece en los dos journals con el mismo id): la clave es por piloto
+    journalId: integer('journal_id').notNull(),
     characterId: integer('character_id').notNull().references(() => characters.id),
     date: ts('date').notNull(),
     refType: text('ref_type').notNull(),
@@ -30,6 +32,7 @@ export const walletJournal = sqliteTable(
     contextIdType: text('context_id_type'),
   },
   (t) => [
+    primaryKey({ columns: [t.journalId, t.characterId] }),
     index('journal_char_date_idx').on(t.characterId, t.date),
     index('journal_ref_type_idx').on(t.refType),
   ],
@@ -38,7 +41,8 @@ export const walletJournal = sqliteTable(
 export const walletTransactions = sqliteTable(
   'wallet_transactions',
   {
-    transactionId: integer('transaction_id').primaryKey(), // id de ESI → sync idempotente
+    // id de ESI + piloto: una compraventa entre dos de tus pilotos tiene el mismo id en los dos lados
+    transactionId: integer('transaction_id').notNull(),
     characterId: integer('character_id').notNull().references(() => characters.id),
     date: ts('date').notNull(),
     typeId: integer('type_id').notNull(),
@@ -47,9 +51,10 @@ export const walletTransactions = sqliteTable(
     isBuy: integer('is_buy', { mode: 'boolean' }).notNull(),
     locationId: integer('location_id').notNull(),
     clientId: integer('client_id'), // contraparte; si es un personaje propio, es una operación interna
-    journalRefId: integer('journal_ref_id'), // enlaza con wallet_journal.journal_id
+    journalRefId: integer('journal_ref_id'), // enlaza con wallet_journal.journal_id (del mismo piloto)
   },
   (t) => [
+    primaryKey({ columns: [t.transactionId, t.characterId] }),
     index('tx_char_date_idx').on(t.characterId, t.date),
     index('tx_type_idx').on(t.typeId),
   ],
@@ -133,7 +138,9 @@ export const stationSystems = sqliteTable('station_systems', {
 
 // Ítem del killmail aplanado (los contenedores de la bodega traen sus ítems anidados)
 // copy: copia de blueprint (vale 0, como en el inventario)
-export type KillmailItem = { typeId: number; destroyed: number; dropped: number; copy?: boolean };
+// flag: dónde iba (ranura, bahía de drones, bodega…; ver FITTED_FLAGS en losses.ts). Los ítems dentro de un
+// contenedor llevan el flag del contenedor. Sin flag = killmail guardado antes de pedirlo (se completa en el sync)
+export type KillmailItem = { typeId: number; destroyed: number; dropped: number; copy?: boolean; flag?: number };
 
 // Killmails de tus pilotos (GET /characters/{id}/killmails/recent + GET /killmails/{id}/{hash}): muertes y
 // pérdidas. Son inmutables, se piden una sola vez. Una pérdida es un killmail cuya víctima es un piloto vinculado
@@ -179,3 +186,12 @@ export const contracts = sqliteTable(
   },
   (t) => [index('contracts_issuer_date_idx').on(t.issuerId, t.dateIssued)],
 );
+
+// Tipos de ítem (GET /universe/types/{id}, público y estático): grupo y grupo de mercado. Sirven para
+// reconocer un módulo equivalente al perdido (mismo grupo de mercado: «Large Smart Bombs») al reponer una nave
+export const types = sqliteTable('types', {
+  typeId: integer('type_id').primaryKey(),
+  groupId: integer('group_id').notNull(),
+  marketGroupId: integer('market_group_id'), // null = no se vende en el mercado
+  updatedAt: ts('updated_at').notNull(),
+});

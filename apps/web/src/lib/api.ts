@@ -2,7 +2,8 @@ import { API_URL } from 'astro:env/server';
 
 export type Flow = { income: number; expenses: number; net: number };
 
-export type Activity = 'pve' | 'pvp' | 'trading' | 'logistics' | 'other';
+// accounts: PLEX comprado o vendido en el mercado (coste de las cuentas, aparte del resultado de juego)
+export type Activity = 'pve' | 'pvp' | 'trading' | 'logistics' | 'other' | 'accounts';
 
 // Revisión de mercado: por ítem, vendido y comprado en el período
 export type MarketItem = {
@@ -23,6 +24,11 @@ export type Summary = {
   characterId: number | null;
   balance: number;
   internalTransfers: number;
+  // Movido con tus otros pilotos: recibido y enviado (en la vista de un piloto pueden diferir)
+  internalReceived: number;
+  internalSent: number;
+  // PLEX comprado y vendido en el mercado en el período (unidades)
+  accounts: { plexBought: number; plexSold: number };
   characters: (Flow & {
     id: number;
     name: string;
@@ -34,7 +40,8 @@ export type Summary = {
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
   // «PvP con naves»: compras de reposición y couriers de naves perdidas movidos a PvP (ship_replacement, ship_transport)
   shipFlow: { replacement: number; transport: number };
-  daily: (Flow & { date: string })[];
+  // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos
+  daily: (Flow & { date: string; accounts: number })[];
   today: Flow;
   previous: Flow & { complete: boolean };
   coverage: { firstEntryAt: string | null; coveredDays: number };
@@ -116,6 +123,7 @@ export type Loss = {
   attackers: number;
   shipValue: number;
   fitValue: number;
+  cargoValue: number;
   value: number;
   insurance: number;
   replacement: number;
@@ -126,9 +134,16 @@ export type Loss = {
   windowEndsAt: string;
   // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (cifra «hasta ahora»);
   // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
-  state: 'replaced' | 'pending' | 'unreplaced';
+  // nohistory: anterior al primer movimiento guardado (lo que falte no cuenta: no se sabe si se repuso)
+  state: 'replaced' | 'pending' | 'unreplaced' | 'nohistory';
   open: boolean;
   toReplace: number;
+  // Lo que falta, por partes (precio medio): casco, equipo (montado y drones) y carga
+  missing: { hull: number; fit: number; cargo: number };
+  // Unidades de equipo repuestas con un módulo equivalente (mismo grupo de mercado)
+  substitutes: number;
+  // Menos de 1 M (cápsula, nave de iniciación): se pliega en la tabla
+  trivial: boolean;
   replacementBy: Record<string, number>;
   transportBy: number | null;
   replacedBy: { id: number; name: string | null } | null;
@@ -147,6 +162,8 @@ export type Losses = {
     value: number;
     shipValue: number;
     fitValue: number;
+    cargoValue: number;
+    noHistory: number;
     insurance: number;
     premiums: number;
     replacement: number;
@@ -166,6 +183,8 @@ export type Losses = {
   ownWallet: { insurance: number; replacement: number; transport: number; forOthers: number; total: number } | null;
   forOthers: { killmailId: number; ship: string | null; pilot: string | null; amount: number }[];
   paidByOthers: { id: number; name: string | null; amount: number }[];
+  // Primer movimiento guardado: las pérdidas anteriores son «sin historial»
+  historyFrom: string | null;
   losses: Loss[];
 };
 export const getLosses = (days: number, characterId?: number) =>

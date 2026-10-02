@@ -37,30 +37,71 @@ const noContracts = losses.missingContracts.map((p) => p.name).join(', ');
 const sameMissing = !!missingNames && missingNames === noContracts;
 // «Amamake 0.4»: la seguridad del sistema, como en el juego
 const where = (l: Loss) => [l.system ?? `#${l.systemId}`, l.security === null ? null : l.security.toFixed(1)].filter(Boolean).join('\u00a0');
-// El porqué de cada fila, en palabras que no se contradicen: qué se repuso, qué falta, el courier, el seguro
+// Lo que falta, por partes: «casco ~124 M y equipo ~34,7 M» (la carga no es equipo: el Iteron llevaba MTUs)
+const listFmt = new Intl.ListFormat(lang, { style: 'long', type: 'conjunction' });
+const missingList = (l: Loss, estimate: boolean) => {
+  const v = (x: number) => nbsp(`${estimate ? '~' : ''}${fmt(x)}`);
+  return listFmt.format(
+    [
+      l.missing.hull >= 0.5 ? m.partHull(v(l.missing.hull)) : null,
+      l.missing.fit >= 0.5 ? m.partFit(v(l.missing.fit)) : null,
+      l.missing.cargo >= 0.5 ? m.partCargo(v(l.missing.cargo)) : null,
+    ].filter((p): p is string => !!p),
+  );
+};
+// Las cápsulas no se pueden asegurar: «sin seguro» solo donde podía haberlo
+const CAPSULES = new Set([670, 33328]);
+// El porqué de cada fila, en palabras que no se contradicen: qué se repuso (y con qué), qué falta, el courier, el seguro
 const status = (l: Loss) => {
   const who = l.replacedBy?.name ?? '?';
   const left = nbsp(remaining(l.windowEndsAt, lang));
-  const v = fmt(l.toReplace);
   const parts = [
     l.shipReplacedAt ? m.lossHull(who, l.replacedIn, day(l.shipReplacedAt)) : l.replacement ? m.lossFitOnly(who) : null,
+    l.substitutes ? m.lossSubstitutes(l.substitutes) : null,
     l.state === 'pending'
-      ? l.replacement
-        ? m.lossFitPending(v, left)
-        : m.lossPendingAll(v, left)
+      ? m.lossMissingPending(missingList(l, true), left)
       : l.state === 'unreplaced'
-        ? l.shipReplacedAt
-          ? m.lossFitMissing(v)
-          : m.lossMissing(v)
-        : null,
+        ? m.lossMissingClosed(missingList(l, false))
+        : l.state === 'nohistory' && losses.historyFrom
+          ? m.lossNoHistory(day(losses.historyFrom))
+          : null,
     l.courier?.by ? m.lossCourier(l.courier.by) : null,
-    l.insurance ? null : m.lossNoInsurance,
+    l.insurance || l.trivial || CAPSULES.has(l.shipTypeId) ? null : m.lossNoInsurance,
   ];
   // Los fragmentos cortos no se parten («sin seguro», «faltan 27 h»)
   return parts
     .filter((p): p is string => !!p)
     .map((p) => (p.length <= 32 ? nbsp(p) : p))
     .join(' · ');
+};
+// Las pérdidas de menos de 1 M (cápsulas, naves de iniciación) se pliegan en una fila: siguen en los totales
+const shown = losses.losses.filter((l) => !l.trivial);
+const folded = losses.losses.filter((l) => l.trivial);
+const foldedCount = new Map<string, number>();
+for (const l of folded) foldedCount.set(l.ship ?? `#${l.shipTypeId}`, (foldedCount.get(l.ship ?? `#${l.shipTypeId}`) ?? 0) + 1);
+const foldedList = [...foldedCount]
+  .map(([ship, n]) => (n > 1 ? `${ship} ×${n}` : ship))
+  .join(', ');
+// Eventos: pérdidas en el mismo sistema con menos de 15 min entre una y la siguiente (una emboscada, una flota)
+const EVENT_GAP_MS = 15 * 60_000;
+const groups: Loss[][] = [];
+for (const l of shown) {
+  const g = groups.at(-1);
+  const prev = g?.at(-1);
+  if (g && prev && prev.systemId === l.systemId && Math.abs(new Date(prev.time).getTime() - new Date(l.time).getTime()) <= EVENT_GAP_MS) g.push(l);
+  else groups.push([l]);
+}
+const hhmm = new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+const eventHead = (g: Loss[]) => {
+  const first = g.at(-1)!;
+  const last = g[0];
+  const cost = g.reduce((n, l) => n + l.cost, 0);
+  const estimate = g.some((l) => l.state === 'pending');
+  return {
+    text: m.lossEvent(where(first), when(first.time), hhmm.format(new Date(last.time)), g.length),
+    cost,
+    estimate,
+  };
 };
 // De dónde sale el coste: valores en positivo, el operador en su columna (el lector oye «más»/«menos»), sin
 // filas a cero, y la cuenta cierra en «= Te costaron» (lo firme). Lo que falta por reponer va después, en gris
@@ -75,8 +116,8 @@ const pending = tot.toReplace >= 0.5 ? tot.toReplace : 0;
 // Todo estimado (solo pérdidas con la ventana abierta y nada repuesto aún): la cifra es la estimación, en gris
 const onlyEstimate = parts.length === 0 && pending > 0;
 const headValue = onlyEstimate ? -pending : firm;
-// Cifras estimadas: «~» delante y «estimado» para el lector
-const approx = (v: number) => `~${fmt(v, { sign: true })}`;
+// Cifras estimadas: «~» delante (con un espacio fino: «~−» se leía como «~~») y «estimado» para el lector
+const approx = (v: number) => `~\u2009${fmt(v, { sign: true })}`;
 // Vista de un piloto: por dónde pasó el dinero (su wallet, quién pagó por sus naves, qué pagó él por las de otros)
 const own = losses.ownWallet;
 const ownLine =
@@ -97,6 +138,7 @@ const ownLine =
 const coverage = [
   !noScope && losses.missingScope.length > 0 ? (sameMissing ? m.lossesMissingBoth(missingNames) : m.lossesMissing(missingNames)) : null,
   tot.premiums > 0 ? (pilotName ? m.lossesPremiumsPilot(pilotName, fmt(tot.premiums)) : m.lossesPremiums(fmt(tot.premiums))) : null,
+  tot.noHistory > 0 && losses.historyFrom ? m.lossesNoHistoryNote(tot.noHistory, day(losses.historyFrom)) : null,
 ]
   .filter(Boolean)
   .join(' ');
@@ -136,14 +178,18 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
       <div class="panel-body losses-head">
         <div class="effect">
           {/* La respuesta a «¿cuánto me costó perderlas?»: lo del wallet y además lo que no volvió */}
-          <span class="label" id="losses-cost">{pilotName ? m.lossesCostPilot(pilotName) : m.lossesCost}</span>
+          <h3 class="label" id="losses-cost">{pilotName ? m.lossesCostPilot(pilotName) : m.lossesCost}</h3>
           <span class:list={['value', onlyEstimate ? 'estimate' : sign(headValue)]} title={fullNet(headValue)}>
             {onlyEstimate ? approx(headValue) : fmt(headValue, { sign: true })}
             <small> ISK</small>
             {onlyEstimate && <span class="sr-only"> ({m.lossEstimate})</span>}
           </span>
           {pending > 0 && !onlyEstimate && <p class="pending-line">{m.lossesPendingLine(fmt(pending))}</p>}
-          {tot.count > 0 && <p class="bridge">{m.lossesBridge(fmt(tot.value), fmt(tot.shipValue), fmt(tot.fitValue))}</p>}
+          {tot.count > 0 && (
+            <p class="bridge">
+              {m.lossesBridge(fmt(tot.value), fmt(tot.shipValue), fmt(tot.fitValue), tot.cargoValue >= 0.5 ? fmt(tot.cargoValue) : null)}
+            </p>
+          )}
           {ownLine && <p class="head-note">{ownLine}</p>}
         </div>
         <table class="breakdown" aria-labelledby="losses-cost">
@@ -194,57 +240,84 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
               <th title={m.lossCostTitle}>{m.lossCost}</th>
             </tr>
           </thead>
-          <tbody>
-            {losses.losses.map((l) => (
+          {groups.map((g) => {
+            const head = g.length > 1 ? eventHead(g) : null;
+            return (
+              <tbody class:list={{ event: !!head }}>
+                {head && (
+                  /* Varias pérdidas juntas (mismo sistema, minutos): una cabecera con lo que costó el evento */
+                  <tr class="event-head">
+                    <th colspan="7" scope="colgroup">
+                      <span>{head.text}</span>
+                      <span class="sr-only"> · </span>
+                      <span class:list={['event-cost', head.estimate ? 'estimate' : sign(head.cost)]} title={fullNet(head.cost)}>
+                        {head.estimate ? approx(head.cost) : fmt(head.cost, { sign: true })}
+                        {head.estimate && <span class="sr-only"> ({m.lossEstimate})</span>}
+                      </span>
+                    </th>
+                  </tr>
+                )}
+                {g.map((l) => (
+                  <tr>
+                    {/* El nombre de la fila es solo la nave: el lector no repite metadatos y estado en cada celda */}
+                    <th scope="row" aria-labelledby={`loss-${l.killmailId}`}>
+                      <span class="ship" id={`loss-${l.killmailId}`}>{l.ship ?? `#${l.shipTypeId}`}</span>
+                      <span class="meta">
+                        {[pilotName ? null : l.pilot, where(l), m.lossAttackers(l.attackers)].filter(Boolean).join(' · ')}
+                        {' · '}
+                        <time datetime={l.time}>{when(l.time)}</time>
+                        <span title={m.lossSplit(full(l.shipValue), full(l.fitValue), l.cargoValue >= 0.5 ? full(l.cargoValue) : null)}>
+                          {' · '}
+                          {nbsp(`${m.lossValue} ${fmt(l.value)}`)}
+                        </span>
+                      </span>
+                      <span class="status">{status(l)}</span>
+                    </th>
+                    {/* Sin dato: «—» en la tabla; en la tarjeta móvil la celda desaparece (.empty) */}
+                    <td data-label={m.lossInsurance} class:list={{ empty: !l.insurance }} title={l.insurance ? full(l.insurance) : undefined}>
+                      {l.insurance ? fmt(l.insurance, { sign: true }) : '—'}
+                    </td>
+                    <td data-label={m.lossReplacement} class:list={{ empty: !l.replacement }} title={l.replacement ? full(-l.replacement) : undefined}>
+                      {l.replacement ? fmt(-l.replacement) : '—'}
+                    </td>
+                    <td data-label={m.lossTransport} class:list={{ empty: !l.transport }} title={l.transport ? full(-l.transport) : undefined}>
+                      {l.transport ? fmt(-l.transport) : '—'}
+                    </td>
+                    <td data-label={m.lossWallet} class:list={{ empty: !l.walletEffect }} title={`${m.lossWalletTitle}: ${fullNet(l.walletEffect)}`}>
+                      {l.walletEffect ? fmt(l.walletEffect, { sign: true }) : '—'}
+                    </td>
+                    {/* Lo que no volvió (firme) o lo que falta por reponer (estimado, en gris con «~») */}
+                    <td
+                      data-label={m.lossNotBack}
+                      class:list={{ empty: !l.toReplace, estimate: l.state === 'pending' }}
+                      title={l.toReplace ? `${m.lossNotBackTitle}: ${full(-l.toReplace)}` : undefined}
+                    >
+                      {l.toReplace ? (l.state === 'pending' ? approx(-l.toReplace) : fmt(-l.toReplace)) : '—'}
+                      {l.toReplace > 0 && l.state === 'pending' && <span class="sr-only"> ({m.lossEstimate})</span>}
+                    </td>
+                    {/* Lo que te costó (Wallet − No volvió): con su signo si es firme; en gris con «~» mientras falte reponer */}
+                    <td
+                      data-label={m.lossCost}
+                      class:list={['total', l.state === 'pending' ? 'estimate' : sign(l.cost)]}
+                      title={`${m.lossCostTitle}: ${fullNet(l.cost)}`}
+                    >
+                      {l.state === 'pending' ? approx(l.cost) : fmt(l.cost, { sign: true })}
+                      {l.state === 'pending' && <span class="sr-only"> ({m.lossEstimate})</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            );
+          })}
+          {folded.length > 0 && (
+            <tbody class="folded">
               <tr>
-                {/* El nombre de la fila es solo la nave: el lector no repite metadatos y estado en cada celda */}
-                <th scope="row" aria-labelledby={`loss-${l.killmailId}`}>
-                  <span class="ship" id={`loss-${l.killmailId}`}>{l.ship ?? `#${l.shipTypeId}`}</span>
-                  <span class="meta">
-                    {[pilotName ? null : l.pilot, where(l), m.lossAttackers(l.attackers)].filter(Boolean).join(' · ')}
-                    {' · '}
-                    <time datetime={l.time}>{when(l.time)}</time>
-                    <span title={m.lossSplit(full(l.shipValue), full(l.fitValue))}>
-                      {' · '}
-                      {nbsp(`${m.lossValue} ${fmt(l.value)}`)}
-                    </span>
-                  </span>
-                  <span class="status">{status(l)}</span>
+                <th colspan="7" scope="row" title={folded.map((l) => `${l.ship ?? ''} · ${when(l.time)}`).join('\n')}>
+                  {m.lossesFolded(folded.length, foldedList, fmt(folded.reduce((n, l) => n + l.value, 0)))}
                 </th>
-                {/* Sin dato: «—» en la tabla; en la tarjeta móvil la celda desaparece (.empty) */}
-                <td data-label={m.lossInsurance} class:list={{ empty: !l.insurance }} title={l.insurance ? full(l.insurance) : undefined}>
-                  {l.insurance ? fmt(l.insurance, { sign: true }) : '—'}
-                </td>
-                <td data-label={m.lossReplacement} class:list={{ empty: !l.replacement }} title={l.replacement ? full(-l.replacement) : undefined}>
-                  {l.replacement ? fmt(-l.replacement) : '—'}
-                </td>
-                <td data-label={m.lossTransport} class:list={{ empty: !l.transport }} title={l.transport ? full(-l.transport) : undefined}>
-                  {l.transport ? fmt(-l.transport) : '—'}
-                </td>
-                <td data-label={m.lossWallet} class:list={{ empty: !l.walletEffect }} title={`${m.lossWalletTitle}: ${fullNet(l.walletEffect)}`}>
-                  {l.walletEffect ? fmt(l.walletEffect, { sign: true }) : '—'}
-                </td>
-                {/* Lo que no volvió (firme) o lo que falta por reponer (estimado, en gris con «~») */}
-                <td
-                  data-label={m.lossNotBack}
-                  class:list={{ empty: !l.toReplace, estimate: l.state === 'pending' }}
-                  title={l.toReplace ? `${m.lossNotBackTitle}: ${full(-l.toReplace)}` : undefined}
-                >
-                  {l.toReplace ? (l.state === 'pending' ? `~${fmt(-l.toReplace)}` : fmt(-l.toReplace)) : '—'}
-                  {l.toReplace > 0 && l.state === 'pending' && <span class="sr-only"> ({m.lossEstimate})</span>}
-                </td>
-                {/* Lo que te costó (Wallet − No volvió): con su signo si es firme; en gris con «~» mientras falte reponer */}
-                <td
-                  data-label={m.lossCost}
-                  class:list={['total', l.state === 'pending' ? 'estimate' : sign(l.cost)]}
-                  title={`${m.lossCostTitle}: ${fullNet(l.cost)}`}
-                >
-                  {l.state === 'pending' ? approx(l.cost) : fmt(l.cost, { sign: true })}
-                  {l.state === 'pending' && <span class="sr-only"> ({m.lossEstimate})</span>}
-                </td>
               </tr>
-            ))}
-          </tbody>
+            </tbody>
+          )}
         </table>
       )}
       <div class="panel-note losses-note">
@@ -295,7 +368,8 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
     gap: 6px;
   }
   .effect .label {
-    font-size: 13px;
+    margin: 0;
+    font: 400 13px var(--font);
     color: var(--text-secondary);
   }
   .effect .value {
@@ -438,6 +512,44 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
   .loss-table td.estimate {
     color: var(--text-muted);
   }
+  /* Cabecera de un evento (varias pérdidas en minutos en el mismo sistema) y fila de pérdidas menores */
+  .loss-table tr.event-head th {
+    padding-top: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .event-head th {
+    text-align: left;
+  }
+  .event-head th > span:first-child {
+    margin-right: 12px;
+  }
+  .event-cost {
+    font: 500 13px var(--mono);
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .event-cost.pos {
+    color: var(--positive);
+  }
+  .event-cost.neg {
+    color: var(--critical);
+  }
+  .event-cost.estimate {
+    color: var(--text-muted);
+  }
+  .loss-table tbody.event tr:not(.event-head) th {
+    padding-left: 34px;
+  }
+  .loss-table tbody.folded th {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .loss-table tbody + tbody tr:first-child > * {
+    border-top: 1px solid var(--line);
+  }
   .ship {
     display: block;
     font-weight: 500;
@@ -502,6 +614,13 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
     /* Sin dato, en la tarjeta no se pinta un «—» con su etiqueta */
     .loss-table td.empty {
       display: none;
+    }
+    .loss-table tr.event-head th,
+    .loss-table tbody.folded th {
+      grid-column: 1 / -1;
+    }
+    .loss-table tbody.event tr:not(.event-head) th {
+      padding-left: 0 !important;
     }
     .loss-table td::before {
       content: attr(data-label);

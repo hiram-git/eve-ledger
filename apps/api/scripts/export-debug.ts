@@ -123,6 +123,14 @@ const typeIds = new Set<number>([
 const marketPrices = all<{ type_id: number }>(`select * from market_prices`).filter((p) => typeIds.has(p.type_id));
 const marketQuotes = all(`select * from market_quotes`);
 const systems = all(`select * from systems`);
+// Grupos de mercado de los tipos (reconocen el equipo equivalente al reponer una nave); la tabla puede no existir aún
+const typesTable = (() => {
+  try {
+    return all(`select * from types`);
+  } catch {
+    return [];
+  }
+})();
 const stationSystems = all(`select * from station_systems`);
 
 const syncLog = all<Record<string, number | string | null>>(`select * from sync_log order by id desc limit 300`).map((l) => ({
@@ -141,6 +149,7 @@ const tables = {
   market_quotes: marketQuotes,
   systems,
   station_systems: stationSystems,
+  types: typesTable,
   killmails,
   contracts,
   sync_log: syncLog,

@@ -50,6 +50,20 @@
       "when": 1790835524334,
       "tag": "0006_ordinary_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790923479439,
+      "tag": "0007_vengeful_johnny_blaze",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790923609750,
+      "tag": "0008_curly_shape",
+      "breakpoints": true
     }
   ]
 }

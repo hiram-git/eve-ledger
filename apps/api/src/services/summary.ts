@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, lt, min, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
-import { characters, walletJournal } from '../db/schema';
-import { ACTIVITIES, activityOf } from '../lib/activities';
+import { characters, walletJournal, walletTransactions } from '../db/schema';
+import { ACTIVITIES, activityOf, PLEX_TYPE_ID } from '../lib/activities';
 import { REPLACEMENT_DAYS, shipLosses } from './losses';
 import { marketReview } from './transactions';
 
@@ -32,11 +32,19 @@ const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 // Ingresos, gastos y neto entre dos instantes, sin transferencias internas. Brutos: las compras de
 // mercado son gasto y las ventas ingreso; el margen del trading solo se muestra en byActivity
-async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date) {
+async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date, withoutAccounts = false) {
   const [row] = await db
     .select({ income, expenses })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), to ? lt(walletJournal.date, to) : undefined, eq(isInternal, 0), pilot));
+    .where(
+      and(
+        gte(walletJournal.date, from),
+        to ? lt(walletJournal.date, to) : undefined,
+        eq(isInternal, 0),
+        pilot,
+        withoutAccounts ? sql`${activity} <> 'accounts'` : undefined,
+      ),
+    );
   return withNet(row);
 }
 
@@ -56,9 +64,29 @@ export async function dailyNetRate(characterId: number, lastSyncAt: Date | null,
   const to = lastSyncAt < now ? lastSyncAt : now;
   const span = (to.getTime() - from.getTime()) / DAY_MS;
   if (span <= 0) return null;
-  const flow = await flowBetween(eq(walletJournal.characterId, characterId), from, to);
+  // Sin el PLEX: comprarlo ES pagar el Omega, no el ritmo con el que lo pagas
+  const flow = await flowBetween(eq(walletJournal.characterId, characterId), from, to, true);
   // Menos de un día de datos: se divide por un día entero para no inflar el ritmo
   return flow.net / Math.max(1, span);
+}
+
+// PLEX comprado y vendido en el mercado en el período (sin operaciones entre tus pilotos)
+async function plexTraded(from: Date, characterId?: number) {
+  const [row] = await db
+    .select({
+      bought: sql<number>`coalesce(sum(case when ${walletTransactions.isBuy} = 1 then ${walletTransactions.quantity} end), 0)`,
+      sold: sql<number>`coalesce(sum(case when ${walletTransactions.isBuy} = 0 then ${walletTransactions.quantity} end), 0)`,
+    })
+    .from(walletTransactions)
+    .where(
+      and(
+        eq(walletTransactions.typeId, PLEX_TYPE_ID),
+        gte(walletTransactions.date, from),
+        sql`(${walletTransactions.clientId} is null or ${walletTransactions.clientId} not in (select id from characters))`,
+        characterId ? eq(walletTransactions.characterId, characterId) : undefined,
+      ),
+    );
+  return { plexBought: row?.bought ?? 0, plexSold: row?.sold ?? 0 };
 }
 
 // characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos siguen
@@ -109,8 +137,10 @@ export async function getSummary(days: number, characterId?: number) {
   // El período anterior solo es comparable si el historial lo cubre entero
   const previousComplete = !!firstEntryAt && firstEntryAt <= previousFrom;
 
+  // Movido entre tus pilotos: lo recibido y lo enviado (en la vista de un piloto pueden diferir; en el
+  // consolidado son lo mismo, salvo movimientos de antes de que el journal guardara los dos lados)
   const [internal] = await db
-    .select({ volume: income })
+    .select({ received: income, sent: expenses })
     .from(walletJournal)
     .where(and(gte(walletJournal.date, from), eq(isInternal, 1), pilot));
 
@@ -135,25 +165,26 @@ export async function getSummary(days: number, characterId?: number) {
   // (recompensa y comisión, con el contrato como context_id) salen de logística
   const shipFlow = await shipLosses(days + REPLACEMENT_DAYS);
   const replacementSpend = shipFlow.spend.filter((s) => s.date >= from && (!characterId || s.characterId === characterId));
+  // El asiento de una compra es el del journal del mismo piloto (el id puede repetirse en el del vendedor)
   const refIds = [...new Set(replacementSpend.map((s) => s.journalRefId).filter((id): id is number => id !== null))];
   const refOf = new Map(
     (refIds.length
       ? await db
-          .select({ id: walletJournal.journalId, refType, activity })
+          .select({ id: walletJournal.journalId, characterId: walletJournal.characterId, refType, activity })
           .from(walletJournal)
           .where(and(inPeriod, inArray(walletJournal.journalId, refIds)))
       : []
-    ).map((r) => [r.id, r]),
+    ).map((r) => [`${r.id}|${r.characterId}`, r]),
   );
   // Lo que sale de cada fila (ref_type + actividad): una compra repartida entre dos pérdidas es un solo movimiento
-  const fromRows = new Map<string, { amount: number; ids: Set<number> }>();
+  const fromRows = new Map<string, { amount: number; ids: Set<string> }>();
   for (const s of replacementSpend) {
-    const r = s.journalRefId !== null ? refOf.get(s.journalRefId) : undefined;
+    const r = s.journalRefId !== null ? refOf.get(`${s.journalRefId}|${s.characterId}`) : undefined;
     if (!r) continue;
     const key = `${r.refType}|${r.activity}`;
-    const row = fromRows.get(key) ?? { amount: 0, ids: new Set<number>() };
+    const row = fromRows.get(key) ?? { amount: 0, ids: new Set<string>() };
     row.amount += s.amount;
-    row.ids.add(s.journalRefId!);
+    row.ids.add(`${s.journalRefId}|${s.characterId}`);
     fromRows.set(key, row);
   }
   const replacementTotal = [...fromRows.values()].reduce((n, r) => n + r.amount, 0);
@@ -195,13 +226,15 @@ export async function getSummary(days: number, characterId?: number) {
   ].filter((r) => r.count > 0);
 
   const day = sql<string>`date(${walletJournal.date}, 'unixepoch')`;
-  const dailyRows = await db.select({ day, income, expenses }).from(walletJournal).where(inPeriod).groupBy(day);
+  const accountsDay = sql<number>`coalesce(sum(case when ${activity} = 'accounts' then ${walletJournal.amount} end), 0)`;
+  const dailyRows = await db.select({ day, income, expenses, accounts: accountsDay }).from(walletJournal).where(inPeriod).groupBy(day);
 
   // Serie diaria completa, con ceros en los días sin movimientos
   const dailyMap = new Map(dailyRows.map((r) => [r.day, r]));
   const daily = Array.from({ length: days }, (_, i) => {
     const d = isoDay(new Date(from.getTime() + i * DAY_MS));
-    return withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0 });
+    // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos: el gráfico lo señala
+    return withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0, accounts: dailyMap.get(d)?.accounts ?? 0 });
   });
 
   // Saldo = el balance del último movimiento sincronizado de cada personaje
@@ -229,7 +262,9 @@ export async function getSummary(days: number, characterId?: number) {
     totals: totals as Totals,
     characterId: characterId ?? null,
     balance: perCharacter.filter((c) => !characterId || c.id === characterId).reduce((n, c) => n + (c.balance ?? 0), 0),
-    internalTransfers: internal.volume,
+    internalTransfers: Math.max(internal.received, internal.sent),
+    internalReceived: internal.received,
+    internalSent: internal.sent,
     characters: perCharacter,
     // Por actividad, con brutos y detalle por ref_type; el neto del trading es su margen
     // Las compras de reposición y los couriers de naves perdidas ya están movidos a PvP (ship_replacement,
@@ -258,5 +293,7 @@ export async function getSummary(days: number, characterId?: number) {
     previous: { ...previous, complete: previousComplete },
     coverage: { firstEntryAt, coveredDays },
     market: await marketReview(from, characterId),
+    // PLEX / cuentas: aparte del resultado de juego (el neto de la actividad está en byActivity)
+    accounts: await plexTraded(from, characterId),
   };
 }
