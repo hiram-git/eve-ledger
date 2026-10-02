@@ -1,6 +1,6 @@
 import { and, eq, gte, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '../db/client';
-import { assets, marketPrices, stationSystems, systems, walletJournal } from '../db/schema';
+import { assets, killmails, marketPrices, stationSystems, systems, walletJournal } from '../db/schema';
 import { EsiError, esiGet } from '../lib/esi';
 import { unitPrice } from './inventory';
 import { STATION_RANGE, SYSTEM_RANGE } from './names';
@@ -39,7 +39,7 @@ export async function resolvePendingGeo(): Promise<{ stations: number; systems: 
     }
   }
 
-  // Sistemas: los de las estaciones, los de ítems sueltos en el espacio y los del journal
+  // Sistemas: los de las estaciones, los de ítems sueltos en el espacio, los de las pérdidas y los del journal
   const known = db.select({ id: systems.id }).from(systems);
   const wanted = new Set<number>();
   for (const r of await db
@@ -51,6 +51,12 @@ export async function resolvePendingGeo(): Promise<{ stations: number; systems: 
     .selectDistinct({ id: assets.rootLocationId })
     .from(assets)
     .where(and(inRange(assets.rootLocationId, SYSTEM_RANGE), notInArray(assets.rootLocationId, known))))
+    wanted.add(r.id);
+  // Los de las pérdidas: la fila de cada nave dice la seguridad del sistema
+  for (const r of await db
+    .selectDistinct({ id: killmails.solarSystemId })
+    .from(killmails)
+    .where(notInArray(killmails.solarSystemId, known)))
     wanted.add(r.id);
   for (const r of await db
     .selectDistinct({ id: walletJournal.contextId })

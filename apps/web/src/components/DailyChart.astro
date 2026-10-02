@@ -65,12 +65,16 @@ const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
 // Tabla: cifra completa sin repetir «ISK» en cada celda (la unidad va en el encabezado)
 const wholeIsk = new Intl.NumberFormat(lang, { maximumFractionDigits: 0 });
 const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
+// PLEX (coste de las cuentas, aparte del resultado de juego): la parte de la barra que es PLEX va rayada
+const hasPlex = daily.some((d) => Math.abs(d.accounts ?? 0) >= 0.5);
+const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part) / whole) * 100);
 ---
 
 <div class="legend" aria-hidden="true">
   <span><i class="key income"></i>{m.income}</span>
   <span><i class="key expenses"></i>{m.expenses}</span>
   <span><i class="key net"></i>{m.net}</span>
+  {hasPlex && <span><i class="key plex"></i>{m.chartPlex}</span>}
 </div>
 
 <div
@@ -81,6 +85,7 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
   data-l-income={m.income}
   data-l-expenses={m.expenses}
   data-l-net={m.net}
+  data-l-plex={m.chartPlexTip}
 >
   <div class="y-axis" aria-hidden="true">
     {ticks.map((t) => <span style={`bottom:${pct(t + bottom)}%`}>{axisLabel(t)}</span>)}
@@ -90,7 +95,8 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
     {
       missing > 0 && (
         <div class="nodata-band" style={`width:${(missing / daily.length) * 100}%`}>
-          <span>{m.noHistory}</span>
+          {/* Con pocos días la franja es estrecha: la etiqueta solo si cabe (si no, se leía «Sin h») */}
+          {missing / daily.length >= 0.15 && <span>{m.noHistory}</span>}
         </div>
       )
     }
@@ -112,14 +118,26 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
             class="col"
             role="listitem"
             tabindex={i === entry ? 0 : -1}
-            aria-label={m.chartDay(date(d.date), short(d.income), short(out(d.expenses)), short(d.net, { sign: true }))}
+            aria-label={
+              m.chartDay(date(d.date), short(d.income), short(out(d.expenses)), short(d.net, { sign: true })) +
+              (Math.abs(d.accounts ?? 0) >= 0.5 ? m.chartDayPlex(short(d.accounts, { sign: true })) : '')
+            }
             data-date={date(d.date)}
             data-income={short(d.income)}
             data-expenses={short(out(d.expenses))}
             data-net={short(d.net, { sign: true })}
+            data-plex={Math.abs(d.accounts ?? 0) >= 0.5 ? short(d.accounts, { sign: true }) : undefined}
           >
-            {d.income > 0 && <div class="bar income" style={`bottom:${zero}%;height:${pct(d.income)}%`} />}
-            {d.expenses > 0 && <div class="bar expenses" style={`top:${100 - zero}%;height:${pct(d.expenses)}%`} />}
+            {d.income > 0 && (
+              <div class="bar income" style={`bottom:${zero}%;height:${pct(d.income)}%`}>
+                {d.accounts > 0 && <i class="plex-part top" style={`height:${plexShare(d.accounts, d.income)}%`} />}
+              </div>
+            )}
+            {d.expenses > 0 && (
+              <div class="bar expenses" style={`top:${100 - zero}%;height:${pct(d.expenses)}%`}>
+                {d.accounts < 0 && <i class="plex-part bottom" style={`height:${plexShare(d.accounts, d.expenses)}%`} />}
+              </div>
+            )}
             {/* Neto del día: un punto neutro sobre el eje; la barra sola no dice si el día cerró en positivo o en negativo */}
             {hasActivity(d) && <i class="net-mark" aria-hidden="true" style={`bottom:${pct(d.net + bottom)}%`} />}
             {/* Día sin movimientos: una marca corta en el eje; los días anteriores al historial van rayados */}
@@ -177,12 +195,12 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
     const tip = chart.querySelector<HTMLElement>('.tooltip')!;
     const cols = [...chart.querySelectorAll<HTMLElement>('.col:not(.nodata)')];
     const show = (col: HTMLElement) => {
-      const { date, income, expenses, net } = col.dataset;
+      const { date, income, expenses, net, plex } = col.dataset;
       const l = chart.dataset;
       tip.innerHTML = `<strong>${date}</strong>
         <span><i class="key income"></i>${l.lIncome}</span><b>${income}</b>
         <span><i class="key expenses"></i>${l.lExpenses}</span><b>${expenses}</b>
-        <span>${l.lNet}</span><b>${net}</b>`;
+        <span>${l.lNet}</span><b>${net}</b>${plex ? `<span><i class="key plex"></i>${l.lPlex}</span><b>${plex}</b>` : ''}`;
       tip.hidden = false;
       // Al lado de la columna (derecha si cabe, si no izquierda) para no tapar sus barras
       const c = chart.getBoundingClientRect();
@@ -390,6 +408,24 @@ const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
   .bar.expenses {
     background: var(--expenses);
     border-radius: 0 0 4px 4px;
+  }
+  /* La parte de la barra que es PLEX: rayada sobre el color de la barra (sigue siendo ingreso o gasto) */
+  .plex-part {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background: repeating-linear-gradient(135deg, #0f1822 0 2px, transparent 2px 5px);
+  }
+  .plex-part.bottom {
+    bottom: 0;
+    border-radius: 0 0 4px 4px;
+  }
+  .plex-part.top {
+    top: 0;
+    border-radius: 4px 4px 0 0;
+  }
+  :global(.key.plex) {
+    background: repeating-linear-gradient(135deg, #0f1822 0 2px, transparent 2px 5px), var(--expenses);
   }
   .x-axis {
     grid-column: 2;

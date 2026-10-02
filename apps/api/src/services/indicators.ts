@@ -226,7 +226,7 @@ export async function feesIndicator(days = 30) {
         eq(walletJournal.refType, 'market_transaction'),
         sql`${walletJournal.amount} > 0`,
         gte(walletJournal.date, from),
-        sql`not (${walletJournal.firstPartyId} in (select id from characters) and ${walletJournal.secondPartyId} in (select id from characters))`,
+        sql`not (${walletJournal.firstPartyId} in (select id from characters) and ${walletJournal.secondPartyId} in (select id from characters) and ${walletJournal.firstPartyId} <> ${walletJournal.secondPartyId})`,
       ),
     );
   const byType = rows.map((r) => ({ refType: r.refType, total: r.total })).filter((r) => r.total > 0).sort((a, b) => b.total - a.total);

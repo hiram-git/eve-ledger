@@ -43,6 +43,7 @@ const ORDER = [
   'names',
   'systems',
   'station_systems',
+  'types',
   'market_prices',
   'market_quotes',
   'wallet_journal',

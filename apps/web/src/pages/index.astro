@@ -31,7 +31,7 @@ import {
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { ago, isk, iskFull, shortDate } from '../lib/format';
+import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { withInventory } from '../lib/inventory-pref';
 import { ASSETS_SCOPE, CONTRACTS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
@@ -183,10 +183,20 @@ const nbsp = (text: string) => text.replace(/ /g, '\u00a0');
 const todayUnknown =
   !!selected && selectedBroken && !!selected.lastSyncAt && selected.lastSyncAt.slice(0, 10) < new Date().toISOString().slice(0, 10);
 const chartLastDate = selected && selectedBroken && selected.lastSyncAt ? selected.lastSyncAt.slice(0, 10) : null;
-// Conciliación de la revisión de mercado: lo que dice el wallet (market_transaction del journal)
-const walletMarket = summary?.byActivity
-  .find((a) => a.activity === 'trading')
-  ?.refTypes.find((r) => r.refType === 'market_transaction');
+// Conciliación de la revisión de mercado: lo que dice el wallet. Las ventas son market_transaction; las compras,
+// market_escrow (así las asienta ESI para el comprador; market_transaction negativo en datos antiguos) más la
+// reposición de naves perdidas, que está en PvP pero también son compras de mercado
+// (y el PLEX, que va en «PLEX / cuentas» pero también se compra y se vende en el mercado)
+const marketRefs = (summary?.byActivity ?? [])
+  .filter((a) => a.activity === 'trading' || a.activity === 'accounts')
+  .flatMap((a) => a.refTypes)
+  .filter((r) => r.refType === 'market_transaction' || r.refType === 'market_escrow');
+const walletMarket = summary
+  ? {
+      sold: marketRefs.reduce((n, r) => n + r.income, 0),
+      bought: marketRefs.reduce((n, r) => n + r.expenses, 0) + summary.shipFlow.replacement,
+    }
+  : undefined;
 // «Todos» al principio de la franja: se queda fijo en móvil mientras la fila se desliza
 const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firstEntryAt) : null;
 // El mapa protagoniza la primera pantalla solo cuando hay algo que contar hoy (ISK ganado en algún sistema);
@@ -209,12 +219,30 @@ const partialHistory = summary && summary.coverage.firstEntryAt && summary.cover
 // Signo del neto como estado semántico (verde/rojo + flecha), no como decoración
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 const delta = summary && summary.previous.complete ? summary.totals.net - summary.previous.net : undefined;
-// Resultado económico: el neto del wallet menos el patrimonio de las naves perdidas que no volvió (ventana cerrada)
-// o falta por reponer (estimado). La reposición, el courier y el seguro ya están en el neto (PvP)
+// Resultado de juego: el neto del wallet sin el PLEX (el coste de las cuentas, aparte: decisión del usuario) y
+// menos el patrimonio de las naves perdidas que no volvió (ventana cerrada) o falta por reponer (estimado).
+// La reposición, el courier y el seguro ya están en el neto (PvP)
 const notBack = losses?.totals.unreplaced ?? 0;
 const toReplace = losses?.totals.toReplace ?? 0;
-const showResult = !!summary && !!losses && notBack + toReplace >= 0.5;
-const headline = summary ? summary.totals.net - (showResult ? notBack + toReplace : 0) : 0;
+const accountsNet = summary?.byActivity.find((a) => a.activity === 'accounts')?.net ?? 0;
+const hasAccounts = Math.abs(accountsNet) >= 0.5;
+const showResult = !!summary && ((!!losses && notBack + toReplace >= 0.5) || hasAccounts);
+const headline = summary ? summary.totals.net - (showResult ? accountsNet + notBack + toReplace : 0) : 0;
+// Las actividades de la tarjeta son las de juego: el PLEX va en su propia línea al pie
+const cardActivities = summary?.byActivity.filter((a) => a.activity !== 'accounts') ?? [];
+// Movido con tus otros pilotos: en la vista de un piloto, en los dos sentidos (lo que recibió y lo que envió)
+const internalNote = !summary
+  ? null
+  : selected
+    ? summary.internalReceived || summary.internalSent
+      ? m.internalPilotBoth(
+          summary.internalReceived ? fmt(summary.internalReceived) : null,
+          summary.internalSent ? fmt(summary.internalSent) : null,
+        )
+      : null
+    : summary.internalTransfers > 0
+      ? m.internal(fmt(summary.internalTransfers))
+      : null;
 // Pie de la tarjeta: naves perdidas (lo firme con su signo, lo estimado en gris). En el consolidado, cuánto de lo
 // firme ya está en el neto (PvP); en la vista de un piloto no, porque otro pudo pagar la reposición de sus naves
 const lossesFirm = losses?.totals.firmCost ?? 0;
@@ -224,9 +252,18 @@ const lossesOnlyEstimate = Math.abs(lossesFirm) < 0.5 && toReplace >= 0.5;
 // Neto con cobertura parcial: el título lo dice (90 días pedidos, 42 con historial)
 const coverageNote = partialHistory && summary ? ` (${m.onlyCovered(summary.coverage.coveredDays)})` : '';
 // Desglose por actividad en la tarjeta de Neto (orden fijo de la API: PvE, PvP, Trading, Otros)
-const actMax = Math.max(1, ...(summary?.byActivity ?? []).map((a) => Math.abs(a.net)));
+const actMax = Math.max(1, ...cardActivities.map((a) => Math.abs(a.net)));
 const actBar = (v: number) => (v >= 0 ? `left:50%;width:${(v / actMax) * 50}%` : `right:50%;width:${(-v / actMax) * 50}%`);
 const out = (v: number) => (v ? -v : 0);
+// Unidades («3.840 PLEX») con el formato del idioma
+const count = (n: number) => new Intl.NumberFormat(lang).format(n);
+// Si un tipo de movimiento es casi toda la actividad (las donaciones en Otros), el detalle lo nombra
+const mainRef = (a: NonNullable<typeof summary>['byActivity'][number]) => {
+  const top = a.refTypes[0];
+  return top && a.refTypes.length > 1 && Math.abs(top.net) >= 0.6 * (a.income + a.expenses)
+    ? ` · ${m.mainlyRef(refTypeLabel(top.refType, lang), fmt(top.net, { sign: true }))}`
+    : '';
+};
 
 // Rango real del período en hora de EVE, para el subtítulo de la navegación
 const range = summary ? `${date(summary.period.from)} – ${date(summary.period.to)}` : undefined;
@@ -507,7 +544,7 @@ const worthNote =
 
             {!pilotEmpty && (
             <section class:list={['glance', { solo: !showMap }]} aria-labelledby="glance-title">
-              <h2 id="glance-title" class="sr-only">{m.net} · {withInv ? m.netWorth : m.walletsOnly}</h2>
+              <h2 id="glance-title" class="sr-only">{showResult ? m.result : m.net} · {withInv ? m.netWorth : m.walletsOnly}</h2>
               <div class:list={['panel', 'stat', 'hero-stat', { stale: selectedBroken }]}>
                 <div class="hero-body">
                   <div class="headline">
@@ -526,7 +563,7 @@ const worthNote =
                       <span class:list={['value', 'signed', sign(headline)]} title={fullNet(headline)}>
                         {headline !== 0 && <Icon name={headline > 0 ? 'up' : 'down'} class="trend" />}
                         {fmt(headline, { sign: true })}
-                        <small>ISK</small>
+                        <small> ISK</small>
                         <span class="sr-only">{headline > 0 ? m.gain : headline < 0 ? m.loss : m.even} ({fullNet(headline)})</span>
                       </span>
                       {showResult && (
@@ -535,6 +572,12 @@ const worthNote =
                         <p class="versus result-note">
                           {m.resultWallet}{' '}
                           <span class="num" title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</span>
+                          {hasAccounts && (
+                            <>
+                              {' '}
+                              {m.resultAccounts(accountsNet < 0 ? '+' : '−', nbsp(fmt(Math.abs(accountsNet))))}
+                            </>
+                          )}
                           {notBack >= 0.5 && (
                             <>
                               {' '}
@@ -593,7 +636,7 @@ const worthNote =
                         <span class:list={['value', 'signed', sign(summary.today.net)]}>
                           {summary.today.net !== 0 && <Icon name={summary.today.net > 0 ? 'up' : 'down'} class="trend" />}
                           {fmt(summary.today.net, { sign: true })}
-                          <small>ISK</small>
+                          <small> ISK</small>
                           <span class="sr-only">{summary.today.net > 0 ? m.gain : summary.today.net < 0 ? m.loss : m.even} ({fullNet(summary.today.net)})</span>
                         </span>
                       )}
@@ -665,19 +708,22 @@ const worthNote =
                         </div>
                       </dl>
                       {/* A 520–879 px de tarjeta, la nota va aquí: si no, queda un hueco bajo Ingresos/Gastos */}
-                      {summary.internalTransfers > 0 && (
-                        <span class="sub in-flow">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
-                      )}
+                      {internalNote && <span class="sub in-flow">{internalNote}</span>}
                     </div>
                     {
-                      summary.byActivity.length > 0 && (
+                      cardActivities.length > 0 && (
                         <div class="acts-block">
                           <p class="acts-title">{m.byActivityPeriod(days)}</p>
                           <ul class="acts" aria-label={m.byActivity}>
-                            {summary.byActivity.map((a) => (
-                              <li title={`${m.activityHint[a.activity]} · ${m.activityInOut(full(a.income), full(out(a.expenses)))}`}>
+                            {cardActivities.map((a) => (
+                              /* El detalle completo va en el title de la barra (oculta al lector): la fila se oye una vez */
+                              <li>
                                 <span class="act-name">{m.activityName[a.activity]}<span class="sr-only"> ({m.activityHint[a.activity]})</span></span>
-                                <span class="act-bar" aria-hidden="true">
+                                <span
+                                  class="act-bar"
+                                  aria-hidden="true"
+                                  title={`${m.activityHint[a.activity]} · ${m.activityInOut(full(a.income), full(out(a.expenses)))}${mainRef(a)}`}
+                                >
                                   <i class:list={[sign(a.net)]} style={actBar(a.net)} />
                                 </span>
                                 <span class:list={['act-net', sign(a.net)]}>{fmt(a.net, { sign: true })}</span>
@@ -719,9 +765,29 @@ const worthNote =
                         <a class="inline-action" href="#perdidas">{nbsp(m.actsLossesLink)}</a>
                       </p>
                     )}
-                    {summary.internalTransfers > 0 && (
-                      <span class="sub at-end">{(selected ? m.internalPilot : m.internal)(fmt(summary.internalTransfers))}</span>
+                    {hasAccounts && (
+                      /* El PLEX: el coste de las cuentas, aparte del resultado de juego; el Omega está en Indicadores */
+                      <p class="foot-accounts">
+                        <span>{m.accountsLine}</span>
+                        <span class:list={['foot-losses-value', sign(accountsNet)]} title={fullNet(accountsNet)}>
+                          {fmt(accountsNet, { sign: true })}
+                        </span>
+                        <span class="foot-losses-split">
+                          {[
+                            summary.accounts.plexBought ? m.plexBought(count(summary.accounts.plexBought)) : null,
+                            summary.accounts.plexSold ? m.plexSold(count(summary.accounts.plexSold)) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                        {!selected && (
+                          <a class="inline-action" href="/indicadores">
+                            {m.accountsOmegaLink}
+                          </a>
+                        )}
+                      </p>
                     )}
+                    {internalNote && <span class="sub at-end">{internalNote}</span>}
                   </div>
                 </div>
               </div>
@@ -734,7 +800,7 @@ const worthNote =
                     </span>
                     <span class="value" title={full(netWorth)}>
                       {fmt(netWorth)}
-                      <small>ISK</small>
+                      <small> ISK</small>
                     </span>
                   </div>
                   {withInv && (
@@ -1022,16 +1088,8 @@ const worthNote =
               </div>
             )}
 
-            {/* La reposición de naves perdidas está en PvP, pero son compras de mercado: la conciliación las suma */}
             {!pilotEmpty && summary.market.items.length > 0 && (
-              <MarketReview
-                market={summary.market}
-                wallet={
-                  walletMarket || summary.shipFlow.replacement
-                    ? { sold: walletMarket?.income ?? 0, bought: (walletMarket?.expenses ?? 0) + summary.shipFlow.replacement }
-                    : undefined
-                }
-              />
+              <MarketReview market={summary.market} wallet={walletMarket && (walletMarket.sold || walletMarket.bought) ? walletMarket : undefined} />
             )}
 
           </>
@@ -1170,8 +1228,9 @@ const worthNote =
     font-size: 13px;
     color: var(--text-secondary);
   }
+  /* La cifra dentro de la frase va en la tipografía de la frase (la monoespaciada dejaba un espacio ancho) */
   .result-note .num {
-    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .result-note .estimate,
@@ -1211,6 +1270,26 @@ const worthNote =
   }
   .foot-losses-pending,
   .foot-losses-value.estimate {
+    color: var(--text-muted);
+  }
+  /* El PLEX, aparte: misma forma que la línea de pérdidas, sin filete propio (comparten el del pie) */
+  .foot-accounts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .foot-losses + .foot-accounts {
+    margin-top: -4px;
+  }
+  .hero-foot > :first-child:not(.foot-losses):not(.sub) {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+  .foot-losses-split {
     color: var(--text-muted);
   }
   .acts-link {
@@ -1635,6 +1714,16 @@ const worthNote =
   }
   .pilot-strip a[aria-current='true'] .pilot-name {
     font-weight: 600;
+  }
+  /* Tableta: con 6 pilotos la franja partía a uno en una segunda fila; chips algo más compactos */
+  @media (max-width: 1100px) {
+    .pilot-strip ul {
+      gap: 6px;
+    }
+    .pilot-strip a {
+      gap: 8px;
+      padding: 7px 10px;
+    }
   }
   /* Móvil: una sola fila deslizable a sangre, para no empujar el neto hacia abajo */
   @media (max-width: 750px) {

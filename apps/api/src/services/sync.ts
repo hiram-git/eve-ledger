@@ -7,6 +7,7 @@ import { CONTRACTS_SCOPE, fetchContracts } from './contracts';
 import { fetchLosses, LOSSES_SCOPE } from './losses';
 import { resolvePendingGeo } from './geo';
 import { resolvePendingNames } from './names';
+import { resolvePendingTypes } from './types';
 import { refreshPricesIfStale } from './prices';
 import { refreshPlexQuote } from './quotes';
 
@@ -236,6 +237,8 @@ export async function syncCharacter(characterId: number): Promise<SyncResult> {
       if ((result.assets && !result.assets.error) || result.killmails?.inserted) await bestEffort('prices', refreshPricesIfStale);
       result.namesResolved = await bestEffort('names', resolvePendingNames);
       await bestEffort('geo', resolvePendingGeo);
+      // Grupo de mercado de lo perdido y lo comprado: reconoce el equipo equivalente al reponer una nave
+      await bestEffort('types', resolvePendingTypes);
     }
   } finally {
     running.delete(characterId);

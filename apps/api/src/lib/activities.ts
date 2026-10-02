@@ -2,11 +2,15 @@ import { sql, type SQL } from 'drizzle-orm';
 
 // Actividad de cada ref_type del journal: responde «¿de dónde sale el ISK?» en términos de juego,
 // no de ESI. Lo que no está en ninguna lista cuenta como «otros» (skills, clones, donaciones, PI…).
-// Logística: lo que pagas (o cobras) por mover cosas con couriers
-export const ACTIVITIES = ['pve', 'pvp', 'trading', 'logistics', 'other'] as const;
+// Logística: lo que pagas (o cobras) por mover cosas con couriers.
+// Cuentas (decisión del usuario, decimosexta crítica): comprar o vender PLEX en el mercado es el coste de las
+// cuentas (Omega), no trading ni juego; va aparte del resultado y del ritmo del Omega
+export const ACTIVITIES = ['pve', 'pvp', 'trading', 'logistics', 'other', 'accounts'] as const;
 export type Activity = (typeof ACTIVITIES)[number];
 
-const REF_TYPES: Record<Exclude<Activity, 'other'>, string[]> = {
+export const PLEX_TYPE_ID = 44992;
+
+const REF_TYPES: Record<Exclude<Activity, 'other' | 'accounts'>, string[]> = {
   logistics: [
     'contract_reward',
     'contract_reward_deposited',
@@ -52,8 +56,11 @@ type Column = SQL | { getSQL(): SQL };
 
 // La comisión de un contrato es logística si el contrato es un courier (los conocemos con el permiso de
 // contratos: context_id = contract_id); si no, es la de un contrato de compraventa (trading)
+// Una compra o venta de mercado es de las cuentas si su transacción (context_id) es de PLEX
 export const activityOf = (refType: Column, contextId: Column) =>
   sql<Activity>`(case
+    when ${refType} in ('market_transaction', 'market_escrow')
+      and ${contextId} in (select transaction_id from wallet_transactions where type_id = ${PLEX_TYPE_ID}) then 'accounts'
     when ${refType} = 'contract_brokers_fee'
       and ${contextId} in (select contract_id from contracts where type = 'courier') then 'logistics'
     when ${refType} in (${list(REF_TYPES.logistics)}) then 'logistics'

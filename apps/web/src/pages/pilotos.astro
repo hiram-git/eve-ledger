@@ -88,7 +88,8 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     <div>
       <h1>{m.pilots}</h1>
       <p class="subtitle">
-        {m.pilotsLinked(pilots.length, PILOT_SLOTS)}
+        {/* Más pilotos que plazas (PILOT_SLOTS): no «6 de 5», solo cuántos hay */}
+        {pilots.length > PILOT_SLOTS ? m.pilotsLinkedOnly(pilots.length) : m.pilotsLinked(pilots.length, PILOT_SLOTS)}
         {freeSlots > 0 && <span>{m.pilotsHurry}</span>}
       </p>
     </div>

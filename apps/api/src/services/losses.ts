@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lt, min, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   characters,
@@ -6,11 +6,12 @@ import {
   marketPrices,
   names,
   systems,
+  types,
   walletJournal,
   walletTransactions,
   type KillmailItem,
 } from '../db/schema';
-import { esiGet } from '../lib/esi';
+import { EsiError, esiGet } from '../lib/esi';
 import { CONTRACTS_SCOPE, courierContracts } from './contracts';
 
 export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
@@ -20,6 +21,7 @@ type EsiKillmailRef = { killmail_id: number; killmail_hash: string };
 // GET /killmails/{id}/{hash}: público e inmutable
 type EsiItem = {
   item_type_id: number;
+  flag: number;
   quantity_destroyed?: number;
   quantity_dropped?: number;
   singleton: number; // 2 = copia de blueprint
@@ -42,16 +44,32 @@ const INSURANCE_WINDOW_MS = 60 * 60_000;
 // Compras del mismo casco y equipo en los días siguientes a la pérdida: lo que costó reponerla
 export const REPLACEMENT_DAYS = 7;
 
-// Los contenedores de la bodega traen sus ítems anidados: se aplanan
-function flatten(items: EsiItem[] = [], out: KillmailItem[] = []): KillmailItem[] {
+// Los contenedores de la bodega traen sus ítems anidados: se aplanan con el flag del contenedor
+function flatten(items: EsiItem[] = [], out: KillmailItem[] = [], parentFlag?: number): KillmailItem[] {
   for (const i of items) {
+    const flag = parentFlag ?? i.flag;
     const destroyed = i.quantity_destroyed ?? 0;
     const dropped = i.quantity_dropped ?? 0;
-    if (destroyed || dropped) out.push({ typeId: i.item_type_id, destroyed, dropped, ...(i.singleton === 2 ? { copy: true } : {}) });
-    flatten(i.items, out);
+    if (destroyed || dropped) out.push({ typeId: i.item_type_id, destroyed, dropped, flag, ...(i.singleton === 2 ? { copy: true } : {}) });
+    flatten(i.items, out, flag);
   }
   return out;
 }
+
+// Flags de lo que va montado en la nave: ranuras baja/media/alta (11–34), bahía de drones (87), rigs (92–99),
+// subsistemas (125–132) y cazas (158–163). Lo demás (bodega, bodegas especiales, hangares) es carga
+const FITTED_FLAGS: [number, number][] = [
+  [11, 34],
+  [87, 87],
+  [92, 99],
+  [125, 132],
+  [158, 163],
+];
+// Sin flag (killmail aún sin completar, o −1 si ESI no lo dio) cuenta como equipo, como antes
+export const isCargo = (i: KillmailItem) =>
+  i.flag !== undefined && i.flag >= 0 && !FITTED_FLAGS.some(([lo, hi]) => i.flag! >= lo && i.flag! <= hi);
+// Killmails guardados antes de pedir el flag: se vuelven a pedir (son públicos e inmutables) como mucho estos por sync
+const MAX_BACKFILL = 50;
 
 export async function fetchLosses(characterId: number, r: { pages: number; fetched: number; inserted: number }) {
   const refs: EsiKillmailRef[] = [];
@@ -96,6 +114,24 @@ export async function fetchLosses(characterId: number, r: { pages: number; fetch
       .onConflictDoNothing()
       .returning({ id: killmails.killmailId })
       .all().length;
+  }
+
+  // Los guardados sin flag (antes de distinguir equipo y carga): se completan
+  const incomplete = (await db.select({ id: killmails.killmailId, hash: killmails.hash, items: killmails.items }).from(killmails))
+    .filter((k) => k.items.some((i) => i.flag === undefined))
+    .slice(0, MAX_BACKFILL);
+  for (const k of incomplete) {
+    try {
+      const { data } = await esiGet<EsiKillmail>(`/killmails/${k.id}/${k.hash}`);
+      await db.update(killmails).set({ items: flatten(data.victim.items) }).where(eq(killmails.killmailId, k.id));
+    } catch (err) {
+      // Un killmail que ESI ya no da no debe parar el sync ni volver a pedirse: flag −1 (cuenta como equipo)
+      if (!(err instanceof EsiError) || err.status >= 500) throw err;
+      await db
+        .update(killmails)
+        .set({ items: k.items.map((i) => ({ ...i, flag: i.flag ?? -1 })) })
+        .where(eq(killmails.killmailId, k.id));
+    }
   }
 }
 
@@ -179,6 +215,24 @@ export async function shipLosses(days: number, characterId?: number) {
     return (p ?? 0) * qty;
   };
 
+  // Grupo de mercado de lo perdido: un módulo del mismo grupo (Republic Fleet en vez de Domination) también
+  // repone el equipo. Los tipos se resuelven en el sync (tabla types); sin grupo conocido, solo el mismo tipo
+  const lostTypes = typeIds.length
+    ? await db.select({ typeId: types.typeId, marketGroupId: types.marketGroupId }).from(types).where(inArray(types.typeId, typeIds))
+    : [];
+  const groupOf = new Map<number, number>();
+  for (const t of lostTypes) if (t.marketGroupId !== null) groupOf.set(t.typeId, t.marketGroupId);
+  const lostGroups = [...new Set(groupOf.values())];
+  const substituteTypes = lostGroups.length
+    ? await db.select({ typeId: types.typeId, marketGroupId: types.marketGroupId }).from(types).where(inArray(types.marketGroupId, lostGroups))
+    : [];
+  for (const t of substituteTypes) groupOf.set(t.typeId, t.marketGroupId!);
+  const candidateTypes = [...new Set([...typeIds, ...substituteTypes.map((t) => t.typeId)])];
+
+  // Desde cuándo hay historial: una pérdida anterior no pudo emparejarse con ninguna compra
+  const [firstEntry] = await db.select({ at: min(walletJournal.date) }).from(walletJournal);
+  const historyFrom = firstEntry?.at ?? null;
+
   const victims = [...new Set(rows.map((r) => r.characterId!))];
   const firstLoss = rows[0]?.time;
   const lastLoss = rows.at(-1)?.time;
@@ -207,6 +261,7 @@ export async function shipLosses(days: number, characterId?: number) {
         await db
           .select({
             id: walletTransactions.transactionId,
+            journalRefId: walletTransactions.journalRefId,
             characterId: walletTransactions.characterId,
             date: walletTransactions.date,
             typeId: walletTransactions.typeId,
@@ -223,13 +278,15 @@ export async function shipLosses(days: number, characterId?: number) {
               eq(walletTransactions.isBuy, true),
               inArray(walletTransactions.characterId, linkedIds),
               gte(walletTransactions.date, firstLoss!),
-              inArray(walletTransactions.typeId, typeIds),
+              inArray(walletTransactions.typeId, candidateTypes),
             ),
           )
           .orderBy(asc(walletTransactions.date))
       ).filter((t) => !t.clientId || !linked.has(t.clientId))
     : [];
-  const qtyLeft0 = new Map(purchases.map((t) => [t.id, t.quantity]));
+  // Cantidad aún sin usar de cada compra (id de ESI + piloto)
+  const keyOf = (t: { id: number; characterId: number }) => `${t.id}|${t.characterId}`;
+  const qtyLeft0 = new Map(purchases.map((t) => [keyOf(t), t.quantity]));
 
   // Couriers de tus pilotos tras las pérdidas (los cancelados o borrados devuelven la recompensa) y sus comisiones
   const couriers = rows.length
@@ -253,7 +310,7 @@ export async function shipLosses(days: number, characterId?: number) {
   const feeOf = new Map(feeRows.map((f) => [f.contractId, f.fee]));
   const usedCouriers = new Set<number>();
   // Compras de reposición por pagador y fecha: el resumen las cuenta como PvP («PvP con naves»)
-  const spend: { transactionId: number; characterId: number; date: Date; amount: number }[] = [];
+  const spend: { transactionId: number; journalRefId: number | null; characterId: number; date: Date; amount: number }[] = [];
 
   const losses = rows.map((r) => {
     const victim = r.characterId!;
@@ -261,7 +318,12 @@ export async function shipLosses(days: number, characterId?: number) {
     const windowEndsAt = new Date(at + REPLACEMENT_DAYS * DAY_MS);
     const inWindow = (d: Date) => d.getTime() >= at && d.getTime() <= windowEndsAt.getTime();
     const shipValue = valueOf(r.shipTypeId, 1);
-    const fitValue = r.items.reduce((v, i) => v + valueOf(i.typeId, i.destroyed + i.dropped, i.copy), 0);
+    // Equipo (lo montado y los drones) y carga (bodegas y hangares), al precio medio
+    const fitItems = r.items.filter((i) => !i.copy && !isCargo(i));
+    const cargoItems = r.items.filter((i) => !i.copy && isCargo(i));
+    const fitValue = fitItems.reduce((v, i) => v + valueOf(i.typeId, i.destroyed + i.dropped), 0);
+    const cargoValue = cargoItems.reduce((v, i) => v + valueOf(i.typeId, i.destroyed + i.dropped), 0);
+    const value = shipValue + fitValue + cargoValue;
 
     // El pago del seguro de esta nave: el primero del piloto tras la pérdida (si ESI dice de qué tipo es, ese tipo)
     const payout = payouts.find(
@@ -274,24 +336,54 @@ export async function shipLosses(days: number, characterId?: number) {
     );
     if (payout) usedPayouts.add(payout.id);
 
-    // Reposición: casco y equipo comprados por cualquiera de tus pilotos en la ventana, hasta las cantidades perdidas
-    const lost = new Map<number, number>([[r.shipTypeId, 1]]);
-    for (const i of r.items) if (!i.copy) lost.set(i.typeId, (lost.get(i.typeId) ?? 0) + i.destroyed + i.dropped);
-    const need = new Map(lost);
+    // Reposición: casco, equipo y carga comprados por cualquiera de tus pilotos en la ventana, hasta las
+    // cantidades perdidas. Primero el mismo tipo; después, para el equipo, un módulo del mismo grupo de mercado
+    const needOf = (items: KillmailItem[]) => {
+      const m = new Map<number, number>();
+      for (const i of items) m.set(i.typeId, (m.get(i.typeId) ?? 0) + i.destroyed + i.dropped);
+      return m;
+    };
+    const fitNeed = needOf(fitItems);
+    const cargoNeed = needOf(cargoItems);
+    let hullNeed = 1;
+    const lost = new Set([r.shipTypeId, ...fitNeed.keys(), ...cargoNeed.keys()]);
     let replacement = 0;
+    let substitutes = 0;
     let hull: (typeof purchases)[number] | undefined;
     const buyers = new Map<number, number>(); // piloto → ISK gastado en reponer
-    for (const t of purchases) {
-      const qtyLeft = qtyLeft0.get(t.id) ?? 0;
-      const want = need.get(t.typeId) ?? 0;
-      if (!qtyLeft || !want || !inWindow(t.date)) continue;
-      const qty = Math.min(qtyLeft, want);
-      qtyLeft0.set(t.id, qtyLeft - qty);
-      need.set(t.typeId, want - qty);
+    const take = (t: (typeof purchases)[number], qty: number) => {
+      qtyLeft0.set(keyOf(t), (qtyLeft0.get(keyOf(t)) ?? 0) - qty);
       replacement += qty * t.unitPrice;
       buyers.set(t.characterId, (buyers.get(t.characterId) ?? 0) + qty * t.unitPrice);
-      spend.push({ transactionId: t.id, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
-      if (t.typeId === r.shipTypeId && !hull) hull = t;
+      spend.push({ transactionId: t.id, journalRefId: t.journalRefId, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
+    };
+    const inWindowPurchases = purchases.filter((t) => inWindow(t.date));
+    for (const t of inWindowPurchases) {
+      if (hullNeed && t.typeId === r.shipTypeId && (qtyLeft0.get(keyOf(t)) ?? 0) > 0) {
+        take(t, 1);
+        hullNeed = 0;
+        hull ??= t;
+      }
+      for (const need of [fitNeed, cargoNeed]) {
+        const left = qtyLeft0.get(keyOf(t)) ?? 0;
+        const want = need.get(t.typeId) ?? 0;
+        if (!left || !want) continue;
+        const qty = Math.min(left, want);
+        take(t, qty);
+        need.set(t.typeId, want - qty);
+      }
+    }
+    for (const t of inWindowPurchases) {
+      const group = groupOf.get(t.typeId);
+      if (group === undefined || t.typeId === r.shipTypeId) continue;
+      for (const [typeId, want] of fitNeed) {
+        const left = qtyLeft0.get(keyOf(t)) ?? 0;
+        if (!left || !want || typeId === t.typeId || groupOf.get(typeId) !== group) continue;
+        const qty = Math.min(left, want);
+        take(t, qty);
+        fitNeed.set(typeId, want - qty);
+        substitutes += qty;
+      }
     }
     // Quién repuso: quien compró el casco; si solo se compró equipo, quien más gastó
     const buyerId = hull?.characterId ?? [...buyers.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -306,11 +398,26 @@ export async function shipLosses(days: number, characterId?: number) {
 
     const system = systemById.get(r.systemId);
     const insurance = payout?.amount ?? 0;
-    // Lo que falta por reponer, al precio medio de ESI. Se da por repuesta si falta menos del 2 % de lo perdido
-    // (munición, drones sueltos…): «por reponer» no debe quedarse abierto por una carga de munición
-    const left = [...need.entries()].reduce((v, [typeId, qty]) => v + (qty > 0 ? (price.get(typeId) ?? 0) * qty : 0), 0);
-    const toReplace = left > 0.02 * (shipValue + fitValue) ? left : 0;
-    const state: 'replaced' | 'pending' | 'unreplaced' = !toReplace ? 'replaced' : now < windowEndsAt ? 'pending' : 'unreplaced';
+    // Lo que falta por reponer, al precio medio de ESI, por partes. Se da por repuesta si falta menos del 2 % de
+    // lo perdido (munición, drones sueltos…): «por reponer» no debe quedarse abierto por una carga de munición
+    const missingOf = (need: Map<number, number>) =>
+      [...need.entries()].reduce((v, [typeId, qty]) => v + (qty > 0 ? (price.get(typeId) ?? 0) * qty : 0), 0);
+    const missHull = hullNeed ? (price.get(r.shipTypeId) ?? 0) : 0;
+    const missFit = missingOf(fitNeed);
+    const missCargo = missingOf(cargoNeed);
+    const significant = missHull + missFit + missCargo > 0.02 * value;
+    // Sin historial: la pérdida es anterior al primer movimiento guardado; lo que falte no se sabe si se repuso
+    const noHistory = !historyFrom || r.time < historyFrom;
+    // Una pérdida de menos de 1 M (cápsula, nave de iniciación) no espera reposición: no queda abierta
+    const trivial = value < 1_000_000;
+    const state: 'replaced' | 'pending' | 'unreplaced' | 'nohistory' = !significant
+      ? 'replaced'
+      : noHistory
+        ? 'nohistory'
+        : now < windowEndsAt && !trivial
+          ? 'pending'
+          : 'unreplaced';
+    const toReplace = significant && state !== 'nohistory' ? missHull + missFit + missCargo : 0;
     // Quién pagó qué: la víctima cobra el seguro; cada comprador paga su reposición; quien emite el courier, el transporte
     const replacementBy: Record<number, number> = Object.fromEntries(buyers);
     return {
@@ -326,7 +433,8 @@ export async function shipLosses(days: number, characterId?: number) {
       attackers: r.attackers,
       shipValue,
       fitValue,
-      value: shipValue + fitValue,
+      cargoValue,
+      value,
       insurance,
       replacement,
       transport,
@@ -336,10 +444,16 @@ export async function shipLosses(days: number, characterId?: number) {
       cost: insurance - replacement - transport - toReplace,
       windowEndsAt,
       // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (la cifra es «hasta ahora»);
-      // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
+      // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio);
+      // nohistory: anterior al primer movimiento guardado (no cuenta lo que falte: no se sabe)
       state,
       open: state === 'pending',
       toReplace,
+      // De qué es lo que falta (al precio medio): casco, equipo (montado y drones) y carga
+      missing: significant ? { hull: missHull, fit: missFit, cargo: missCargo } : { hull: 0, fit: 0, cargo: 0 },
+      // Unidades de equipo repuestas con un módulo equivalente (mismo grupo de mercado)
+      substitutes,
+      trivial,
       replacementBy,
       transportBy: courier?.issuerId ?? null,
       replacedBy: buyerId ? { id: buyerId, name: nameOf.get(buyerId) ?? null } : null,
@@ -408,6 +522,9 @@ export async function shipLosses(days: number, characterId?: number) {
       value: sum(view, (l) => l.value),
       shipValue: sum(view, (l) => l.shipValue),
       fitValue: sum(view, (l) => l.fitValue),
+      cargoValue: sum(view, (l) => l.cargoValue),
+      // Pérdidas anteriores al historial: no cuentan lo que falte por reponer
+      noHistory: view.filter((l) => l.state === 'nohistory').length,
       insurance,
       replacement,
       transport,
@@ -428,6 +545,7 @@ export async function shipLosses(days: number, characterId?: number) {
     ownWallet,
     forOthers,
     paidByOthers: [...byOthers.entries()].map(([id, amount]) => ({ id, name: nameOf.get(id) ?? null, amount })),
+    historyFrom,
     // La más reciente primero
     losses: view.reverse(),
     // Para el resumen (no para la web): las compras de reposición de todas las pérdidas, por pagador y fecha,
