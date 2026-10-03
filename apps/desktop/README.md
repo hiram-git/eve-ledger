@@ -8,7 +8,7 @@ Empaqueta el ledger personal (`apps/api` + `apps/web`) como una app de escritori
 - Con la configuración válida, `src-tauri/src/services.rs` arranca dos procesos con **Bun como sidecar**:
   - la API (`resources/server/api/api.js`), con `DB_PATH` en la carpeta de datos del usuario y `MIGRATIONS_DIR` en los recursos;
   - la web (Astro SSR, `resources/server/web/server/entry.js`), con `API_URL` y `PILOT_SLOTS` leídos al arrancar.
-- Los dos escuchan solo en `127.0.0.1`, por defecto en los puertos 47300 (API) y 47321 (web). La ventana principal navega a `http://127.0.0.1:47321`; esa página remota no tiene acceso a ningún comando de Tauri.
+- Los dos escuchan solo en `127.0.0.1`, por defecto en los puertos 47300 (API) y 47321 (web). La ventana principal navega a `http://127.0.0.1:47321`; esa página remota no puede invocar ningún comando de Tauri (lo deniega el ACL de las capacidades).
 - **Configuración…** (menú, `Ctrl/Cmd+,`) reabre el asistente en otra ventana; guardar reinicia los servicios.
 - La salida de los procesos va a `api.log` y `web.log` en la carpeta de registros. Una sola instancia (los puertos y la base son únicos).
 

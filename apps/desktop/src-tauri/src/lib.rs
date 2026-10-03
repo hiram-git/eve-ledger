@@ -44,7 +44,7 @@ struct StateView {
 }
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app.path().app_config_dir().map_err(|e| e.to_string())?.join("ledger.env"))
+    Ok(services::plain(app.path().app_config_dir().map_err(|e| e.to_string())?.join("ledger.env")))
 }
 
 fn load_config(app: &AppHandle) -> Option<Config> {

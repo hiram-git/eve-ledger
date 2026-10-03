@@ -6,7 +6,7 @@
 //   src-tauri/binaries/bun-<triple>            el propio Bun, como proceso auxiliar (sidecar) de Tauri
 // Se corre en cada sistema para el que se compila (Tauri no compila de forma cruzada): copia el Bun de esa máquina.
 import { $ } from 'bun';
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '..', '..', '..');
@@ -32,19 +32,8 @@ await $`bun run build`.cwd(web).quiet();
 await $`bun build dist/server/entry.mjs --target=bun --splitting --external sharp --outdir ${join(out, 'web', 'server')}`.cwd(web).quiet();
 cpSync(join(web, 'dist', 'client'), join(out, 'web', 'client'), { recursive: true });
 
-// Lanzador de la API y la web: si la app de escritorio muere sin avisar (cuelgue, kill), se cierra la tubería de
-// stdin que la une con cada proceso y estos salen también; si no, quedarían ocupando los puertos
-writeFileSync(
-  join(out, 'launch.js'),
-  `// Generado por apps/desktop/scripts/prepare-server.ts
-import { pathToFileURL } from 'node:url';
-const exit = () => process.exit(0);
-process.stdin.on('end', exit);
-process.stdin.on('error', exit);
-process.stdin.resume();
-await import(pathToFileURL(process.argv[2]).href);
-`,
-);
+// Lanzador de la API y la web (sale si la app muere sin avisar; arregla las rutas «verbatim» de Windows)
+copyFileSync(join(import.meta.dir, 'launch.js'), join(out, 'launch.js'));
 
 // Tauri espera el sidecar como binaries/<nombre>-<triple del destino>[.exe]
 const triple =
