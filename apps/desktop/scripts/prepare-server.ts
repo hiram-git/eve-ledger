@@ -18,7 +18,9 @@ const out = join(tauri, 'resources', 'server');
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'api'), { recursive: true });
 
-console.log('· Dependencias de la API y la web');
+console.log('· Dependencias (escritorio, API y web)');
+// La del escritorio trae la CLI de Tauri: sin ella, `bun run tauri build` dice «command not found: tauri»
+await $`bun install --frozen-lockfile`.cwd(resolve(import.meta.dir, '..')).quiet();
 await $`bun install --frozen-lockfile`.cwd(api).quiet();
 await $`bun install --frozen-lockfile`.cwd(web).quiet();
 

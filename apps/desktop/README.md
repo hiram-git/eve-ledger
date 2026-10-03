@@ -14,12 +14,14 @@ Empaqueta el ledger personal (`apps/api` + `apps/web`) como una app de escritori
 
 ## Compilar
 
-Requisitos: [Bun](https://bun.sh) 1.3, [Rust](https://rustup.rs) estable y las [dependencias de Tauri](https://v2.tauri.app/start/prerequisites/) de tu sistema (en Linux: `libwebkit2gtk-4.1-dev`, `librsvg2-dev`, `libayatana-appindicator3-dev`…).
+Requisitos: [Bun](https://bun.sh) 1.3, [Rust](https://rustup.rs) estable y las [dependencias de Tauri](https://v2.tauri.app/start/prerequisites/) de tu sistema:
+- **Windows:** [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) con «Desarrollo para el escritorio con C++», y Rust con el toolchain MSVC (el de `rustup` por defecto). WebView2 ya viene con Windows 10/11. La CLI de Tauri descarga NSIS y WiX ella sola la primera vez.
+- **macOS:** Xcode Command Line Tools (`xcode-select --install`).
+- **Linux:** `libwebkit2gtk-4.1-dev`, `librsvg2-dev`, `libayatana-appindicator3-dev`…
 
 ```sh
 cd apps/desktop
-bun install
-bun run prepare:server   # API y web empaquetadas en src-tauri/resources/server, y Bun en src-tauri/binaries
+bun run prepare:server   # dependencias (también la CLI de Tauri), API y web empaquetadas en src-tauri/resources/server, y Bun en src-tauri/binaries
 bun run tauri dev        # o: bun run tauri build  → src-tauri/target/release/bundle/
 ```
 
