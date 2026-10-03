@@ -34,10 +34,26 @@ pub struct Paths {
 pub fn paths(app: &AppHandle) -> Result<Paths, String> {
     let p = app.path();
     Ok(Paths {
-        server: p.resource_dir().map_err(|e| e.to_string())?.join("server"),
-        data: p.app_data_dir().map_err(|e| e.to_string())?,
-        logs: p.app_log_dir().map_err(|e| e.to_string())?,
+        server: plain(p.resource_dir().map_err(|e| e.to_string())?.join("server")),
+        data: plain(p.app_data_dir().map_err(|e| e.to_string())?),
+        logs: plain(p.app_log_dir().map_err(|e| e.to_string())?),
     })
+}
+
+/// En Windows, Tauri da rutas «verbatim» (`\\?\C:\Program Files\…`) que Bun no sabe abrir
+/// («Module not found»): se quita el prefijo. `\\?\UNC\servidor\…` pasa a `\\servidor\…`. En el resto, igual
+pub fn plain(path: PathBuf) -> PathBuf {
+    PathBuf::from(strip_verbatim(&path.to_string_lossy()))
+}
+
+fn strip_verbatim(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        path.to_string()
+    }
 }
 
 fn port_free(port: u16) -> bool {
@@ -161,5 +177,18 @@ impl Services {
         drop(running);
         // Que los puertos queden libres antes de volver a arrancar
         std::thread::sleep(Duration::from_millis(300));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_verbatim;
+
+    #[test]
+    fn quita_el_prefijo_verbatim_de_windows() {
+        assert_eq!(strip_verbatim(r"\\?\C:\Program Files\EVE Ledger\server"), r"C:\Program Files\EVE Ledger\server");
+        assert_eq!(strip_verbatim(r"\\?\UNC\nas\juegos\EVE Ledger"), r"\\nas\juegos\EVE Ledger");
+        assert_eq!(strip_verbatim(r"C:\Users\Piloto\AppData"), r"C:\Users\Piloto\AppData");
+        assert_eq!(strip_verbatim("/usr/lib/EVE Ledger/server"), "/usr/lib/EVE Ledger/server");
     }
 }
