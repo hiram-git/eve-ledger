@@ -254,6 +254,8 @@ export type Indicators = {
     hours: number;
     isk: number;
     iskPerHour: number | null;
+    // De dónde sale el ISK: recompensas, ESS, escalaciones vendidas y loot vendido al buyback
+    parts: { bounties: number; ess: number; escalations: number; loot: number };
     recent: { days: number; hours: number; iskPerHour: number | null };
     byPilot: { characterId: number; name: string; ticks: number; hours: number; isk: number; iskPerHour: number | null }[];
     bySystem: { systemId: number; name: string | null; security: number | null; ticks: number; hours: number; isk: number; iskPerHour: number }[];

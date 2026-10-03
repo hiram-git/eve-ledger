@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, sql, sum } from 'drizzle-orm';
 import { db } from '../db/client';
 import { assets, characters, marketPrices, names, systems, walletJournal } from '../db/schema';
+import { PVE_EXTRA_KINDS, refKindOf } from '../lib/activities';
 import { env } from '../lib/env';
 import { shipLosses } from './losses';
 import { PLEX_TYPE_ID, getQuote } from './quotes';
@@ -93,27 +94,39 @@ export async function omegaIndicator() {
 // ISK por hora de ratting. EVE no dice cuánto tiempo jugaste, pero paga las recompensas de NPC en bloques de
 // 20 minutos: cada pago `bounty_prizes` del journal es un bloque, así que bloques × 20 min ≈ tiempo ratteando
 // (por defecto, un bloque a medias cuenta entero). El ESS (`ess_escrow_transfer`) es la parte diferida de esas
-// recompensas: suma al piloto, pero no a un sistema (no lo dice)
+// recompensas: suma al piloto, pero no a un sistema (no lo dice). Además (decisión del usuario), lo que el rateo
+// da fuera de las recompensas: escalaciones vendidas y loot vendido al buyback (refKindOf); el tiempo sigue
+// saliendo de los bloques de recompensas (los sitios de escalación también los pagan)
 const TICK_MINUTES = 20;
 const BOUNTY_REFS = ['bounty_prizes', 'bounty_prize'];
 const ESS_REF = 'ess_escrow_transfer';
+const RATTING_KINDS = [...BOUNTY_REFS, ESS_REF, ...PVE_EXTRA_KINDS];
+const ratKind = refKindOf(walletJournal.refType, walletJournal.amount, walletJournal.firstPartyId);
 
 async function rattingRate(from: Date) {
   const rows = await db
     .select({
       characterId: walletJournal.characterId,
-      refType: walletJournal.refType,
+      refType: ratKind,
       amount: walletJournal.amount,
       contextId: walletJournal.contextId,
       contextIdType: walletJournal.contextIdType,
     })
     .from(walletJournal)
-    .where(and(inArray(walletJournal.refType, [...BOUNTY_REFS, ESS_REF]), gte(walletJournal.date, from)));
+    .where(and(inArray(ratKind, RATTING_KINDS), gte(walletJournal.date, from)));
   const bounty = rows.filter((r) => BOUNTY_REFS.includes(r.refType));
   const ticks = bounty.length;
   const isk = rows.reduce((n, r) => n + Math.max(0, r.amount), 0);
   const hours = (ticks * TICK_MINUTES) / 60;
-  return { rows, bounty, ticks, isk, hours, iskPerHour: hours ? isk / hours : null };
+  // De dónde sale el ISK: recompensas, ESS, escalaciones vendidas y loot vendido
+  const part = (kinds: string[]) => rows.filter((r) => kinds.includes(r.refType)).reduce((n, r) => n + Math.max(0, r.amount), 0);
+  const parts = {
+    bounties: part(BOUNTY_REFS),
+    ess: part([ESS_REF]),
+    escalations: part(['escalation_sale']),
+    loot: part(['loot_buyback']),
+  };
+  return { rows, bounty, ticks, isk, parts, hours, iskPerHour: hours ? isk / hours : null };
 }
 
 export async function rattingIndicator(days = 30) {
@@ -163,6 +176,7 @@ export async function rattingIndicator(days = 30) {
     hours: all.hours,
     isk: all.isk,
     iskPerHour: all.iskPerHour,
+    parts: all.parts,
     // Los últimos 7 días, para ver si el ritmo sube o baja
     recent: { days: 7, hours: recent.hours, iskPerHour: recent.iskPerHour },
     byPilot,

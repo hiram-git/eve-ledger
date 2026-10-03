@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, lt, min, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, walletJournal, walletTransactions } from '../db/schema';
-import { ACTIVITIES, activityOf, PLEX_TYPE_ID } from '../lib/activities';
+import { ACTIVITIES, activityOf, PLEX_TYPE_ID, refKindOf } from '../lib/activities';
 import { REPLACEMENT_DAYS, shipLosses } from './losses';
 import { marketReview } from './transactions';
 
@@ -20,7 +20,9 @@ const expenses = sql<number>`coalesce(sum(case when ${walletJournal.amount} < 0 
 
 export type Totals = { income: number; expenses: number; net: number };
 
-const activity = activityOf(walletJournal.refType, walletJournal.contextId);
+// Tipo de movimiento para el detalle: el ref_type de ESI, salvo escalaciones vendidas y loot del buyback
+const refKind = refKindOf(walletJournal.refType, walletJournal.amount, walletJournal.firstPartyId);
+const activity = activityOf(walletJournal.refType, walletJournal.contextId, refKind);
 
 const withNet = <T extends { income: number; expenses: number }>(r: T): T & { net: number } => ({
   ...r,
@@ -150,7 +152,7 @@ export async function getSummary(days: number, characterId?: number) {
     .where(allPilots)
     .groupBy(walletJournal.characterId);
 
-  const refType = walletJournal.refType;
+  const refType = refKind;
   const byRefType = await db
     .select({ refType, activity, income, expenses, count: sql<number>`count(*)` })
     .from(walletJournal)

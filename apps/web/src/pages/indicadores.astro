@@ -189,8 +189,25 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                     <span class="answer-value" title={full(r.iskPerHour)}>
                       {fmt(r.iskPerHour)}<span class="unit"> {m.perHour}</span>
                     </span>
-                    <span class="answer-sub">{m.rattingSub(hours(r.hours), r.ticks, fmt(r.isk))}</span>
+                    <span class="answer-sub">{m.rattingSub(hours(r.hours), r.ticks, fmt(r.isk).replace(' ', '\u00a0'))}</span>
                     {r.recent.iskPerHour !== null && <span class="answer-sub">{m.rattingRecent(r.recent.days, fmt(r.recent.iskPerHour))}</span>}
+                  </p>
+                  {/* De dónde sale el ISK: no solo recompensas y ESS, también escalaciones vendidas y loot del buyback */}
+                  <p class="rat-parts">
+                    {[
+                      { label: m.ratPartBounties, value: r.parts.bounties },
+                      { label: m.ratPartEss, value: r.parts.ess },
+                      { label: m.ratPartLoot, value: r.parts.loot },
+                      { label: m.ratPartEscalations, value: r.parts.escalations },
+                    ]
+                      .filter((p) => p.value >= 0.5)
+                      .map((p, i) => (
+                        <span title={full(p.value)}>
+                          {i > 0 && <span class="op" aria-hidden="true">+</span>}
+                          {i > 0 && <span class="sr-only">{m.opPlus} </span>}
+                          {p.label} <b>{fmt(p.value)}</b>
+                        </span>
+                      ))}
                   </p>
                   <table class="mini">
                     <caption class="sr-only">{m.rattingByPilot}</caption>
@@ -454,6 +471,26 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
   }
   .answer-sub {
     font-size: 13px;
+    color: var(--text-muted);
+  }
+  /* De dónde sale el ISK del ratting: sumandos en línea, la cifra en monoespaciada */
+  .rat-parts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 0;
+    margin: 4px 0 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .rat-parts > span {
+    white-space: nowrap;
+  }
+  .rat-parts b {
+    font: 500 13px var(--mono);
+    color: var(--text);
+  }
+  .rat-parts .op {
+    margin: 0 8px;
     color: var(--text-muted);
   }
   .bar {

@@ -96,7 +96,10 @@ const REF_TYPES: Record<string, Record<Lang, string>> = {
   skill_purchase: { es: 'Compra de skills', en: 'Skill purchase', de: 'Skill-Kauf' },
   insurance: { es: 'Seguros', en: 'Insurance', de: 'Versicherung' },
   kill_right_fee: { es: 'Kill rights', en: 'Kill rights', de: 'Kill-Rights' },
-  // No son ref_types de ESI: el resumen mueve a PvP la reposición y el courier de las naves perdidas
+  // No son ref_types de ESI: escalaciones vendidas (donaciones redondas de fuera) y loot vendido al buyback (PvE)
+  escalation_sale: { es: 'Escalaciones vendidas', en: 'Escalations sold', de: 'Verkaufte Eskalationen' },
+  loot_buyback: { es: 'Loot vendido (buyback)', en: 'Loot sold (buyback)', de: 'Verkaufter Loot (Buyback)' },
+  // Tampoco: el resumen mueve a PvP la reposición y el courier de las naves perdidas
   ship_replacement: { es: 'Reposición de naves perdidas', en: 'Lost ship replacement', de: 'Ersatz verlorener Schiffe' },
   ship_transport: { es: 'Courier de naves perdidas', en: 'Lost ship courier', de: 'Kurier verlorener Schiffe' },
   war_fee: { es: 'Tasas de guerra', en: 'War fees', de: 'Kriegsgebühren' },
