@@ -93,7 +93,8 @@ impl Services {
             .shell()
             .sidecar("bun")
             .map_err(|e| e.to_string())?
-            .args([script.to_string_lossy().to_string()])
+            // launch.js sale cuando se cierra la app (aunque muera sin avisar) y luego importa el script
+            .args([p.server.join("launch.js").to_string_lossy().to_string(), script.to_string_lossy().to_string()])
             .envs(env)
             .current_dir(&p.data)
             .spawn()
