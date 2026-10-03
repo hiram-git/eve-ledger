@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EVE Ledger</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Asistente del primer arranque, configuración y arranque de los servicios: una sola página, tres vistas.
+         Los textos los pone app.js según el idioma del sistema (ES, EN o DE) -->
+    <header class="brand">
+      <img src="logo.svg" alt="" width="28" height="28" />
+      <span class="wordmark">EVE LEDGER<span class="cursor">_</span></span>
+      <span class="version" data-version></span>
+    </header>
+
+    <main>
+      <!-- Configuración (primer arranque y «Configuración…») -->
+      <form id="setup" class="view" hidden novalidate>
+        <h1 data-t="setupTitle"></h1>
+        <p class="lead" data-t="setupLead"></p>
+
+        <section class="panel">
+          <h2 data-t="appTitle"></h2>
+          <ol class="steps">
+            <li>
+              <span data-t="step1"></span>
+              <button type="button" class="link" data-open="https://developers.eveonline.com/applications" data-t="openDevSite"></button>
+            </li>
+            <li data-t="step2"></li>
+            <li>
+              <span data-t="step3"></span>
+              <ul class="scopes" data-scopes></ul>
+              <button type="button" class="link" data-copy-scopes data-t="copyScopes"></button>
+            </li>
+            <li>
+              <span data-t="step4"></span>
+              <div class="copy-field">
+                <input id="callback" readonly aria-describedby="callback-hint" />
+                <button type="button" class="secondary" data-copy="#callback" data-t="copy"></button>
+              </div>
+              <p class="hint" id="callback-hint" data-t="callbackHint"></p>
+            </li>
+            <li data-t="step5"></li>
+          </ol>
+          <div class="grid">
+            <label>
+              <span data-t="clientId"></span>
+              <input name="clientId" autocomplete="off" spellcheck="false" required />
+            </label>
+            <label>
+              <span data-t="clientSecret"></span>
+              <span class="secret">
+                <input name="clientSecret" type="password" autocomplete="off" spellcheck="false" required />
+                <button type="button" class="secondary" data-reveal data-t="show"></button>
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2 data-t="prefsTitle"></h2>
+          <div class="grid">
+            <label>
+              <span data-t="pilotSlots"></span>
+              <input name="pilotSlots" type="number" min="1" max="50" inputmode="numeric" />
+              <small data-t="pilotSlotsHint"></small>
+            </label>
+            <label>
+              <span data-t="syncInterval"></span>
+              <input name="syncIntervalMin" type="number" min="0" max="1440" inputmode="numeric" />
+              <small data-t="syncIntervalHint"></small>
+            </label>
+            <label>
+              <span data-t="omegaAccounts"></span>
+              <input name="omegaAccounts" type="number" min="0" max="50" inputmode="numeric" />
+              <small data-t="omegaAccountsHint"></small>
+            </label>
+            <label>
+              <span data-t="omegaPlex"></span>
+              <input name="omegaPlexPerMonth" type="number" min="1" max="10000" inputmode="numeric" />
+              <small data-t="omegaPlexHint"></small>
+            </label>
+            <label class="wide">
+              <span data-t="esiContact"></span>
+              <input name="esiContact" autocomplete="off" spellcheck="false" />
+              <small data-t="esiContactHint"></small>
+            </label>
+          </div>
+        </section>
+
+        <details class="panel advanced">
+          <summary data-t="advancedTitle"></summary>
+          <div class="grid">
+            <label>
+              <span data-t="apiPort"></span>
+              <input name="apiPort" type="number" min="1024" max="65535" inputmode="numeric" />
+              <small data-t="apiPortHint"></small>
+            </label>
+            <label>
+              <span data-t="webPort"></span>
+              <input name="webPort" type="number" min="1024" max="65535" inputmode="numeric" />
+            </label>
+          </div>
+          <div class="enc">
+            <p><strong data-t="encTitle"></strong> <span data-t="encText"></span></p>
+            <input type="hidden" name="encKey" />
+            <button type="button" class="secondary" data-regenerate data-t="encRegenerate"></button>
+            <p class="hint warn" data-enc-changed hidden data-t="encChanged"></p>
+          </div>
+          <dl class="paths">
+            <dt data-t="configFile"></dt><dd><code data-path="configPath"></code></dd>
+            <dt data-t="dataDir"></dt><dd><code data-path="dataDir"></code> <button type="button" class="link" data-dir="data" data-t="open"></button></dd>
+            <dt data-t="logDir"></dt><dd><code data-path="logDir"></code> <button type="button" class="link" data-dir="logs" data-t="open"></button></dd>
+          </dl>
+        </details>
+
+        <div class="errors" role="alert" data-errors hidden></div>
+        <div class="actions">
+          <button type="submit" class="primary" data-save></button>
+          <button type="button" class="secondary" data-cancel hidden data-t="cancel"></button>
+        </div>
+      </form>
+
+      <!-- Arrancando los servicios / error al arrancar -->
+      <section id="starting" class="view" hidden aria-live="polite">
+        <h1 data-starting-title></h1>
+        <p class="lead" data-starting-text></p>
+        <pre class="log" data-starting-log hidden></pre>
+        <div class="actions" data-starting-actions hidden>
+          <button type="button" class="primary" data-retry data-t="retry"></button>
+          <button type="button" class="secondary" data-to-settings data-t="openSettings"></button>
+          <button type="button" class="secondary" data-dir="logs" data-t="openLogs"></button>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

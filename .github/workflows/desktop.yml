@@ -1,0 +1,76 @@
+# Instaladores de EVE Ledger de escritorio (apps/desktop) para Windows, macOS y Linux.
+# Tauri no compila de forma cruzada: cada instalador se compila en su sistema.
+# - A mano: Actions → «Instaladores de escritorio» → Run workflow (los instaladores quedan como artefactos).
+# - Con una etiqueta desktop-v* (p. ej. desktop-v0.1.0): además, un borrador de release con los instaladores.
+# Los instaladores no van firmados: Windows (SmartScreen) y macOS (Gatekeeper) avisan la primera vez (ver INSTALAR.md).
+name: Instaladores de escritorio
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['desktop-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+          - os: macos-latest # Apple Silicon (arm64)
+            name: macos
+          - os: ubuntu-22.04
+            name: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias de Tauri (Linux)
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: API y web empaquetadas + Bun como proceso auxiliar
+        working-directory: apps/desktop
+        run: |
+          bun install --frozen-lockfile
+          bun run prepare:server
+
+      - name: Compilar los instaladores
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: bunx tauri
+          tagName: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && github.ref_name || '' }}
+          releaseName: 'EVE Ledger __VERSION__'
+          releaseBody: 'Instaladores de EVE Ledger de escritorio. Guía de instalación: apps/desktop/INSTALAR.md'
+          releaseDraft: true
+
+      - name: Guardar los instaladores
+        uses: actions/upload-artifact@v4
+        with:
+          name: eve-ledger-${{ matrix.name }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+          if-no-files-found: warn
