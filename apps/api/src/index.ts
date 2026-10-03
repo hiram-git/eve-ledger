@@ -27,7 +27,7 @@ const app = new Elysia()
   .use(inventoryRoutes)
   .use(indicatorRoutes)
   .use(lossRoutes)
-  .listen(env.port);
+  .listen({ port: env.port, hostname: env.host });
 
 console.log(`EVE Ledger API en http://localhost:${app.server?.port}`);
 console.log(`Vincula un personaje: http://localhost:${app.server?.port}/auth/login`);

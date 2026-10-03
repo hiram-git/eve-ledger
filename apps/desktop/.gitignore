@@ -1,0 +1,6 @@
+node_modules/
+# Generados por scripts/prepare-server.ts (API y web empaquetadas, y Bun como proceso auxiliar)
+src-tauri/resources/server/
+src-tauri/binaries/
+src-tauri/target/
+src-tauri/gen/
