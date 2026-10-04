@@ -54,6 +54,10 @@ Menú **EVE Ledger → Configuración…** (o `Ctrl+,`, `Cmd+,` en macOS). Al gu
 - Si cambias el **puerto de la API**, cambia también la Callback URL en tu aplicación de EVE.
 - La **clave de cifrado** solo se regenera si hace falta (por ejemplo, si se filtró tu archivo de configuración). Después hay que volver a vincular los pilotos.
 
+## Actualizaciones
+
+Si instalaste EVE Ledger desde la página de releases, se actualiza solo: al arrancar y cada pocas horas busca una versión nueva, la descarga y te pregunta si **reiniciar ahora** o instalarla **al cerrar la app**. Tus pilotos, tu historial y tu configuración se conservan. También puedes buscarla en el menú: **EVE Ledger → Buscar actualizaciones…**. En Windows, el instalador se ve un momento al aplicarla.
+
 ## Dónde están tus datos
 
 En el menú: **Abrir la carpeta de datos** (tu historial, `ledger.db`) y **Abrir los registros** (`api.log` y `web.log`, por si algo falla).

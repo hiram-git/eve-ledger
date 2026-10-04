@@ -42,6 +42,28 @@ Con esa app, el puerto de la API no se puede cambiar (la Callback URL es fija); 
 
 Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) los compila en GitHub Actions. Se lanza a mano (los instaladores quedan como artefactos) o con una etiqueta `desktop-v0.1.0`, que además crea un borrador de release.
 
+## Actualizaciones automáticas
+
+La app busca una versión nueva al arrancar y cada 6 horas en la última release publicada de este repositorio (`latest.json`), la descarga en segundo plano, comprueba su firma y pregunta: **Reiniciar ahora** o **Al cerrar la app**. También en el menú: «Buscar actualizaciones…». Los datos y la configuración están en las carpetas del usuario y no se tocan. Registro en `updates.log`, en la carpeta de registros.
+
+Cada versión va firmada; la app solo acepta lo firmado con tu clave. Solo se actualizan las copias instaladas desde una release de GitHub Actions con la clave configurada: una compilación local no lleva la clave pública y no busca actualizaciones.
+
+**Una vez:**
+1. Genera el par de claves en tu equipo (te pide una contraseña):
+   ```sh
+   cd apps/desktop
+   bunx tauri signer generate -w ~/.tauri/eve-ledger.key      # Windows: -w %USERPROFILE%\.tauri\eve-ledger.key
+   ```
+2. En GitHub → Settings → Secrets and variables → Actions:
+   - **Secrets:** `TAURI_SIGNING_PRIVATE_KEY` = el contenido de `eve-ledger.key` y `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = su contraseña.
+   - **Variables:** `EVE_LEDGER_UPDATER_PUBKEY` = el contenido de `eve-ledger.key.pub`.
+3. Guarda `eve-ledger.key` y la contraseña en un sitio seguro y no la subas al repositorio. Si la pierdes, las apps instaladas ya no aceptarán versiones nuevas y habrá que reinstalar a mano con una clave nueva.
+
+**Cada versión:**
+1. Sube la versión en `src-tauri/tauri.conf.json` y `src-tauri/Cargo.toml` (la app solo se actualiza a una versión mayor).
+2. Commit, etiqueta y push: `git tag desktop-v0.1.6 && git push origin desktop-v0.1.6`.
+3. Cuando terminen los tres sistemas en Actions, revisa el borrador de la release y pulsa **Publish release**. Desde ese momento, las apps instaladas la reciben al arrancar o en menos de 6 horas.
+
 ## Notas
 
 - **Iconos:** se generan desde `icons/app-icon.png` (el emblema de `apps/web/public/favicon.svg` a 1024 px) con `bun run icons`.

@@ -4,3 +4,4 @@ src-tauri/resources/server/
 src-tauri/binaries/
 src-tauri/target/
 src-tauri/gen/
+src-tauri/tauri.updater.conf.json
