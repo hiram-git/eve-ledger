@@ -8,7 +8,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
@@ -99,6 +99,14 @@ fn strip_verbatim(path: &str) -> String {
     }
 }
 
+/// Evento con el resultado de vincular un piloto (la consulta de `/pilotos?…`: `linked=ID` o `error=…`)
+pub const AUTH_RESULT_EVENT: &str = "auth-result";
+
+/// La API escribe `[auth] result:<consulta>` al terminar el login de EVE (apps/api/src/routes/auth.ts)
+fn auth_result(output: &str) -> Option<String> {
+    output.lines().find_map(|l| l.trim().strip_prefix("[auth] result:")).map(str::to_string)
+}
+
 fn port_free(port: u16) -> bool {
     TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, port))).is_ok()
 }
@@ -169,12 +177,18 @@ impl Services {
         let log_path = p.logs.join(format!("{name}.log"));
         let exited = Arc::new(Mutex::new(None));
         let exited_task = exited.clone();
+        let app_task = app.clone();
         tauri::async_runtime::spawn(async move {
             // Se reescribe en cada arranque: lo que interesa es la sesión actual
             let mut log = OpenOptions::new().create(true).write(true).truncate(true).open(&log_path).ok();
             while let Some(event) = rx.recv().await {
                 match event {
                     CommandEvent::Stdout(bytes) | CommandEvent::Stderr(bytes) => {
+                        if name == "api" {
+                            if let Some(query) = auth_result(&String::from_utf8_lossy(&bytes)) {
+                                let _ = app_task.emit(AUTH_RESULT_EVENT, query);
+                            }
+                        }
                         if let Some(f) = log.as_mut() {
                             let _ = f.write_all(&bytes);
                             if !bytes.ends_with(b"\n") {
@@ -232,7 +246,7 @@ impl Services {
 
 #[cfg(test)]
 mod tests {
-    use super::{install_server, strip_verbatim};
+    use super::{auth_result, install_server, strip_verbatim};
     use std::fs;
 
     #[test]
@@ -258,6 +272,13 @@ mod tests {
         // Otra versión: carpeta nueva
         assert_ne!(install_server(&src, &root, "0.1.2").unwrap(), dest);
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn lee_el_resultado_del_login_en_la_salida_de_la_api() {
+        assert_eq!(auth_result("Listening\n[auth] result:linked=9001\n"), Some("linked=9001".into()));
+        assert_eq!(auth_result("[auth] result:error=sso&detail=x%0Ay"), Some("error=sso&detail=x%0Ay".into()));
+        assert_eq!(auth_result("[auth] sync inicial de X: 3 movimientos"), None);
     }
 
     #[test]

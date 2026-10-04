@@ -41,7 +41,7 @@ En el asistente, además del Client ID y la Secret Key, puedes ajustar:
 - **Cuentas en Omega** y **PLEX por mes de Omega:** para el indicador del Omega.
 - **Contacto para ESI** (opcional): tu nombre en EVE o un email.
 
-Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vincular piloto** e inicia sesión en EVE con cada uno de tus personajes. El primer sync tarda unos segundos por piloto.
+Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vincular piloto**: el login de EVE se abre en tu navegador. Inicia sesión allí y elige el personaje; al terminar, la ventana del ledger muestra el piloto vinculado (la pestaña del navegador se puede cerrar). Repite con cada uno de tus personajes. El primer sync tarda unos segundos por piloto.
 
 > ESI solo guarda unos 30 días del wallet. EVE Ledger acumula el historial desde el primer sync: cuanto antes lo instales, más historial tendrás. El programa tiene que estar abierto para sincronizar.
 

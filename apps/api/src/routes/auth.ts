@@ -10,8 +10,14 @@ import { syncCharacter } from '../services/sync';
 const pendingStates = new Map<string, number>();
 const STATE_TTL_MS = 10 * 60_000;
 
-// El resultado se muestra en el dashboard (apps/web/src/pages/pilotos.astro), con el tema del proyecto
-const toPilots = (params: Record<string, string>) => `${env.webUrl}/pilotos?${new URLSearchParams(params)}`;
+// El resultado se muestra en el dashboard (apps/web/src/pages/pilotos.astro), con el tema del proyecto.
+// La app de escritorio abre el login en el navegador del sistema y lee esta línea de la salida de la API
+// para llevar su ventana al mismo resultado (apps/desktop/src-tauri/src/services.rs)
+const toPilots = (params: Record<string, string>) => {
+  const query = new URLSearchParams(params).toString();
+  console.log(`[auth] result:${query}`);
+  return `${env.webUrl}/pilotos?${query}`;
+};
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   .get('/login', ({ redirect }) => {
