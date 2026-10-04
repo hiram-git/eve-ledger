@@ -8,6 +8,8 @@ export const characters = sqliteTable('characters', {
   ownerHash: text('owner_hash').notNull(), // cambia si el personaje se transfiere de cuenta
   scopes: text('scopes').notNull(),
   refreshToken: text('refresh_token').notNull(), // cifrado AES-GCM
+  // Cómo se vinculó (y cómo se renueva el token): con el Client Secret o con PKCE (src/lib/sso.ts)
+  authMethod: text('auth_method', { enum: ['secret', 'pkce'] }).notNull().default('secret'),
   accessToken: text('access_token'), // cifrado AES-GCM
   tokenExpiresAt: ts('token_expires_at'),
   lastSyncAt: ts('last_sync_at'),

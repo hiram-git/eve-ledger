@@ -14,7 +14,8 @@ function required(name: string): string {
 
 export const env = {
   clientId: required('EVE_CLIENT_ID'),
-  clientSecret: required('EVE_CLIENT_SECRET'),
+  // Opcional: sin secreto, el login de EVE usa PKCE (src/lib/sso.ts)
+  clientSecret: Bun.env.EVE_CLIENT_SECRET?.trim() ?? '',
   callbackUrl: required('EVE_CALLBACK_URL'),
   encKey: required('ENC_KEY'),
   esiCompatDate: Bun.env.ESI_COMPAT_DATE ?? '2025-12-16',
@@ -24,6 +25,9 @@ export const env = {
   host: Bun.env.HOST || '127.0.0.1',
   // Dashboard (apps/web): el navegador vuelve ahí tras el login de EVE
   webUrl: (Bun.env.WEB_URL ?? 'http://localhost:4321').replace(/\/$/, ''),
+  // App de escritorio: el login se abrió en el navegador del sistema; vuelve a ${WEB_URL}/vinculado (una página
+  // que dice el resultado y se intenta cerrar) en vez de a Pilotos, que ya se ve en la ventana de la app
+  authDonePage: Bun.env.AUTH_DONE_PAGE === '1',
   // Minutos entre syncs automáticos de todos los personajes (0 = desactivado)
   syncIntervalMin: intOrDefault('SYNC_INTERVAL_MIN', 60),
   // Indicador «Omega de todas las cuentas»: cuántas cuentas y PLEX por mes de Omega de cada una

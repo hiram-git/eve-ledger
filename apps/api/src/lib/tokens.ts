@@ -15,7 +15,7 @@ export async function getAccessToken(characterId: number): Promise<string> {
     return decrypt(ch.accessToken);
   }
 
-  const tokens = await refreshAccessToken(await decrypt(ch.refreshToken));
+  const tokens = await refreshAccessToken(await decrypt(ch.refreshToken), ch.authMethod);
   const identity = await verifyAccessToken(tokens.access_token);
   if (identity.ownerHash !== ch.ownerHash) {
     throw new Error(`El personaje ${ch.name} cambió de dueño; vuelve a vincularlo`);

@@ -1,0 +1,93 @@
+---
+// Vuelta del login de EVE cuando se abrió en el navegador del sistema (app de escritorio, AUTH_DONE_PAGE en la API):
+// no carga el dashboard, que ya se ve en la ventana de la app. Intenta cerrar la pestaña; el navegador solo lo
+// permite si la abrió un script, así que si sigue abierta dice que se puede cerrar
+import '@fontsource-variable/inter';
+import '../styles/theme.css';
+import Icon from '../components/Icon.astro';
+import { getPilots } from '../lib/api';
+import { getRequestLang, t } from '../lib/i18n';
+
+const lang = getRequestLang(Astro);
+const m = t(lang);
+const q = Astro.url.searchParams;
+
+const linkedId = Number(q.get('linked') ?? 0);
+const name = linkedId ? ((await getPilots().catch(() => [])).find((p) => p.id === linkedId)?.name ?? null) : null;
+const ok = linkedId > 0;
+const LOGIN_ERRORS: Record<string, string> = { denied: m.loginDenied, state: m.loginState, sso: m.loginSso };
+const reason = ok ? null : (LOGIN_ERRORS[q.get('error') ?? ''] ?? m.loginGeneric);
+const detail = ok ? null : q.get('detail');
+const title = ok ? m.doneTitle : m.doneFailedTitle;
+---
+
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070c13" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title} · EVE Ledger</title>
+  </head>
+  <body>
+    <main class="done">
+      <section class={`panel ${ok ? 'ok' : 'failed'}`} role="status">
+        <Icon name={ok ? 'check' : 'alert'} class="done-icon" />
+        <h1>{title}</h1>
+        {ok && name && <p class="who">{m.doneLinked(name)}</p>}
+        {reason && <p class="who">{reason}</p>}
+        {detail && <p class="detail">{m.detail} {detail}</p>}
+        <p class="close">{ok ? m.doneClose : m.doneRetry}</p>
+      </section>
+    </main>
+    {ok && <script is:inline>setTimeout(() => window.close(), 1500);</script>}
+  </body>
+</html>
+
+<style>
+  .done {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .panel {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    width: min(440px, 100%);
+    padding: 32px 24px;
+    text-align: center;
+  }
+  :global(.done-icon) {
+    width: 32px;
+    height: 32px;
+  }
+  .ok :global(.done-icon) {
+    color: var(--positive);
+  }
+  .failed :global(.done-icon) {
+    color: var(--warning);
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+  .who {
+    color: var(--text-secondary);
+  }
+  .detail {
+    font-size: 13px;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+  }
+  .close {
+    margin-top: 6px;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+</style>

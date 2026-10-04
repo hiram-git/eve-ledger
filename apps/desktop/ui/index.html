@@ -23,6 +23,12 @@
 
         <section class="panel">
           <h2 data-t="appTitle"></h2>
+          <!-- Instalador compilado con EVE_LEDGER_CLIENT_ID: no hace falta crear una app de EVE -->
+          <div class="bundled" data-bundled hidden>
+            <p data-t="bundledText"></p>
+            <button type="button" class="link" data-own-app data-t="ownApp"></button>
+          </div>
+          <div data-own>
           <ol class="steps">
             <li>
               <span data-t="step1"></span>
@@ -52,10 +58,13 @@
             <label>
               <span data-t="clientSecret"></span>
               <span class="secret">
-                <input name="clientSecret" type="password" autocomplete="off" spellcheck="false" required />
+                <input name="clientSecret" type="password" autocomplete="off" spellcheck="false" />
                 <button type="button" class="secondary" data-reveal data-t="show"></button>
               </span>
+              <small data-t="clientSecretHint"></small>
             </label>
+          </div>
+          <p class="hint warn" data-secret-removed hidden data-t="secretRemoved"></p>
           </div>
         </section>
 

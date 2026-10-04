@@ -27,6 +27,19 @@ bun run tauri dev        # o: bun run tauri build  → src-tauri/target/release/
 
 `prepare:server` hay que correrlo en cada sistema para el que se compila (copia el Bun de esa máquina como sidecar) y cada vez que cambian `apps/api` o `apps/web`.
 
+### Una app de EVE para toda la corp (opcional)
+
+Sin secreto, el login de EVE usa PKCE, así que el Client ID de una app de EVE se puede incluir en el instalador y quien lo instala no tiene que crear la suya (el asistente lo dice y deja usar una propia):
+
+1. Crea una app en <https://developers.eveonline.com/applications> con los cuatro scopes y la Callback URL `http://127.0.0.1:47300/auth/callback` (el puerto por defecto: cada uno la abre en su propio equipo). La Secret Key no hace falta.
+2. Compila con su Client ID en `EVE_LEDGER_CLIENT_ID` (es público: va en la URL del login):
+   ```sh
+   EVE_LEDGER_CLIENT_ID=tu-client-id bun run tauri build          # PowerShell: $env:EVE_LEDGER_CLIENT_ID="tu-client-id"; bun run tauri build
+   ```
+   En GitHub Actions, crea la variable del repositorio `EVE_LEDGER_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables).
+
+Con esa app, el puerto de la API no se puede cambiar (la Callback URL es fija); quien quiera otro puerto usa su propia app.
+
 Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) los compila en GitHub Actions. Se lanza a mano (los instaladores quedan como artefactos) o con una etiqueta `desktop-v0.1.0`, que además crea un borrador de release.
 
 ## Notas
@@ -34,4 +47,4 @@ Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/deskt
 - **Iconos:** se generan desde `icons/app-icon.png` (el emblema de `apps/web/public/favicon.svg` a 1024 px) con `bun run icons`.
 - **Versión:** en `src-tauri/tauri.conf.json` y `src-tauri/Cargo.toml`.
 - **Firma de código:** no hay (Windows y macOS avisan; ver INSTALAR.md). Para firmar, ver la [guía de Tauri](https://v2.tauri.app/distribute/sign/).
-- **Tests de la configuración:** `cd src-tauri && cargo test`.
+- **Tests de la configuración:** `cd src-tauri && cargo test` (con `EVE_LEDGER_CLIENT_ID=x` también prueba la app incluida).

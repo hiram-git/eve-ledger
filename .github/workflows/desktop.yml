@@ -55,6 +55,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Opcional: Client ID de una app de EVE para toda la corp (variable del repositorio; ver apps/desktop/README.md)
+          EVE_LEDGER_CLIENT_ID: ${{ vars.EVE_LEDGER_CLIENT_ID }}
         with:
           projectPath: apps/desktop
           tauriScript: bunx tauri

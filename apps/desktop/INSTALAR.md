@@ -20,6 +20,8 @@ Los instaladores **no están firmados** (un certificado cuesta dinero), así que
 
 ## 2. Crea tu aplicación de EVE (una vez, dos minutos)
 
+Si el asistente dice «Este instalador ya trae una aplicación de EVE», sáltate este paso.
+
 EVE Ledger habla con EVE a través de una aplicación tuya en el portal de desarrolladores de CCP. Es gratis y solo la usas tú. Al abrir EVE Ledger por primera vez, el asistente te lo explica paso a paso:
 
 1. Entra en <https://developers.eveonline.com/applications> con tu cuenta de EVE y crea una aplicación.
@@ -30,18 +32,18 @@ EVE Ledger habla con EVE a través de una aplicación tuya en el portal de desar
    - `esi-killmails.read_killmails.v1`
    - `esi-contracts.read_character_contracts.v1`
 4. Como **Callback URL**, pega exactamente la que te muestra el asistente: `http://127.0.0.1:47300/auth/callback` (cambia si cambias el puerto de la API).
-5. Crea la aplicación y copia su **Client ID** y su **Secret Key** en el asistente.
+5. Crea la aplicación y copia su **Client ID** en el asistente. La **Secret Key** es opcional: sin ella, EVE Ledger inicia sesión con PKCE, el método para apps de escritorio que no necesita secreto. Si la pones, solo se guarda en tu equipo; si después la quitas, los pilotos que vinculaste con ella hay que revincularlos.
 
 ## 3. Configura y vincula tus pilotos
 
-En el asistente, además del Client ID y la Secret Key, puedes ajustar:
+En el asistente, además de la aplicación de EVE, puedes ajustar:
 
 - **Pilotos que vas a vincular:** las plazas de la página de pilotos.
 - **Sincronizar cada (minutos):** 60 por defecto; 0 = solo a mano.
 - **Cuentas en Omega** y **PLEX por mes de Omega:** para el indicador del Omega.
 - **Contacto para ESI** (opcional): tu nombre en EVE o un email.
 
-Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vincular piloto**: el login de EVE se abre en tu navegador. Inicia sesión allí y elige el personaje; al terminar, la ventana del ledger muestra el piloto vinculado (la pestaña del navegador se puede cerrar). Repite con cada uno de tus personajes. El primer sync tarda unos segundos por piloto.
+Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vincular piloto**: el login de EVE se abre en tu navegador. Inicia sesión allí y elige el personaje; al terminar, el navegador dice «Piloto vinculado · Puedes cerrar esta página» y la ventana del ledger muestra el piloto en Pilotos. Repite con cada uno de tus personajes. El primer sync tarda unos segundos por piloto.
 
 > ESI solo guarda unos 30 días del wallet. EVE Ledger acumula el historial desde el primer sync: cuanto antes lo instales, más historial tendrás. El programa tiene que estar abierto para sincronizar.
 
@@ -67,7 +69,7 @@ Para hacer una copia de seguridad, cierra el programa y copia `ledger.db`. Desin
 ## Privacidad
 
 - El dashboard y la API solo escuchan en tu equipo (`127.0.0.1`): nadie de tu red local puede verlos.
-- Los tokens de EVE van cifrados (AES-GCM) con la clave de tu `ledger.env`. Ese archivo también lleva la Secret Key de tu aplicación de EVE: no lo compartas.
+- Los tokens de EVE van cifrados (AES-GCM) con la clave de tu `ledger.env`. Si pusiste la Secret Key de tu aplicación de EVE, también va en ese archivo: no lo compartas.
 - Nadie más (tampoco quien te pasó el instalador) ve tus datos.
 
 *EVE Online y sus marcas son de CCP hf. EVE Ledger no está afiliado a CCP.*

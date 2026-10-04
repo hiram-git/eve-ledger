@@ -36,6 +36,8 @@ struct StateView {
     configured: bool,
     config: Config,
     callback_url: String,
+    /// Client ID de la app de EVE que trae el instalador, si la trae
+    bundled_client_id: Option<String>,
     config_path: String,
     data_dir: String,
     log_dir: String,
@@ -92,6 +94,7 @@ fn get_state(app: AppHandle) -> Result<StateView, String> {
     Ok(StateView {
         configured: saved.as_ref().is_some_and(|c| config::validate(c).is_empty()),
         callback_url: config::callback_url(cfg.api_port),
+        bundled_client_id: config::bundled_client_id().map(str::to_string),
         config: cfg,
         config_path: config_path(&app)?.to_string_lossy().into(),
         data_dir: p.data.to_string_lossy().into(),
