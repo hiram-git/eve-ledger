@@ -658,6 +658,9 @@ footer .footer-brand {
   letter-spacing: 0.04em;
   color: #a3baca;
 }
+footer .footer-version {
+  color: #6f8a9c;
+}
 
 /* ───── Responsive ───── */
 @media (max-width: 1040px) {

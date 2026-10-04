@@ -147,7 +147,7 @@ impl Services {
 
         let launcher = server.join("launch.js");
         let api = self.spawn(app, "api", &launcher, &server.join("api").join("api.js"), api_env, &p)?;
-        let web = self.spawn(app, "web", &launcher, &server.join("web").join("server").join("entry.js"), cfg.web_env(), &p)?;
+        let web = self.spawn(app, "web", &launcher, &server.join("web").join("server").join("entry.js"), cfg.web_env(&version), &p)?;
         let mut running = self.running.lock().unwrap();
         running.push(api);
         running.push(web);
