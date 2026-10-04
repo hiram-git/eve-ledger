@@ -3,6 +3,9 @@
 # - A mano: Actions → «Instaladores de escritorio» → Run workflow (los instaladores quedan como artefactos).
 # - Con una etiqueta desktop-v* (p. ej. desktop-v0.1.0): además, un borrador de release con los instaladores.
 # Los instaladores no van firmados: Windows (SmartScreen) y macOS (Gatekeeper) avisan la primera vez (ver INSTALAR.md).
+# Actualizaciones automáticas: si el repositorio tiene el secreto TAURI_SIGNING_PRIVATE_KEY (y su contraseña) y la
+# variable EVE_LEDGER_UPDATER_PUBKEY, cada versión se firma y la release lleva latest.json; al publicar el borrador,
+# las apps instaladas desde estas releases se actualizan solas (ver apps/desktop/README.md).
 name: Instaladores de escritorio
 
 on:
@@ -26,6 +29,8 @@ jobs:
           - os: ubuntu-22.04
             name: linux
     runs-on: ${{ matrix.os }}
+    env:
+      UPDATER: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && vars.EVE_LEDGER_UPDATER_PUBKEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,18 +56,31 @@ jobs:
           bun install --frozen-lockfile
           bun run prepare:server
 
+      - name: Configuración del actualizador (clave pública y artefactos firmados)
+        if: env.UPDATER == 'true'
+        working-directory: apps/desktop
+        env:
+          PUBKEY: ${{ vars.EVE_LEDGER_UPDATER_PUBKEY }}
+        run: >
+          bun -e "await Bun.write('src-tauri/tauri.updater.conf.json', JSON.stringify({
+          bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.PUBKEY.trim() } } }))"
+
       - name: Compilar los instaladores
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Opcional: Client ID de una app de EVE para toda la corp (variable del repositorio; ver apps/desktop/README.md)
           EVE_LEDGER_CLIENT_ID: ${{ vars.EVE_LEDGER_CLIENT_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tauriScript: bunx tauri
+          args: ${{ env.UPDATER == 'true' && '--config src-tauri/tauri.updater.conf.json' || '' }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && github.ref_name || '' }}
           releaseName: 'EVE Ledger __VERSION__'
           releaseBody: 'Instaladores de EVE Ledger de escritorio. Guía de instalación: apps/desktop/INSTALAR.md'
+          # Borrador: las apps instaladas se actualizan cuando lo publicas (cuando estén los tres sistemas)
           releaseDraft: true
 
       - name: Guardar los instaladores

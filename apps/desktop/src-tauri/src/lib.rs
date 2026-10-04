@@ -6,6 +6,7 @@
 
 mod config;
 mod services;
+mod updates;
 
 use config::Config;
 use serde::Serialize;
@@ -230,6 +231,7 @@ fn menu_text(key: &str) -> &'static str {
         ("en", "settings") => "Settings…",
         ("en", "settingsTitle") => "EVE Ledger · Settings",
         ("en", "reload") => "Reload",
+        ("en", "updates") => "Check for updates…",
         ("en", "data") => "Open data folder",
         ("en", "logs") => "Open logs",
         ("en", "quit") => "Quit",
@@ -239,6 +241,7 @@ fn menu_text(key: &str) -> &'static str {
         ("de", "settings") => "Einstellungen…",
         ("de", "settingsTitle") => "EVE Ledger · Einstellungen",
         ("de", "reload") => "Neu laden",
+        ("de", "updates") => "Nach Updates suchen…",
         ("de", "data") => "Datenordner öffnen",
         ("de", "logs") => "Protokolle öffnen",
         ("de", "quit") => "Beenden",
@@ -248,6 +251,7 @@ fn menu_text(key: &str) -> &'static str {
         (_, "settings") => "Configuración…",
         (_, "settingsTitle") => "EVE Ledger · Configuración",
         (_, "reload") => "Recargar",
+        (_, "updates") => "Buscar actualizaciones…",
         (_, "data") => "Abrir la carpeta de datos",
         (_, "logs") => "Abrir los registros",
         (_, "quit") => "Salir",
@@ -269,7 +273,10 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Services::default())
+        .manage(updates::Pending::default())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             get_state,
@@ -282,11 +289,15 @@ pub fn run() {
         ])
         .setup(|app| {
             let handle = app.handle();
+            let mut ledger_menu = SubmenuBuilder::new(handle, menu_text("menu"))
+                .item(&MenuItemBuilder::with_id("settings", menu_text("settings")).accelerator("CmdOrCtrl+,").build(handle)?)
+                .item(&MenuItemBuilder::with_id("reload", menu_text("reload")).accelerator("CmdOrCtrl+R").build(handle)?);
+            if updates::enabled(handle) {
+                ledger_menu = ledger_menu.item(&MenuItemBuilder::with_id("updates", menu_text("updates")).build(handle)?);
+            }
             let menu = MenuBuilder::new(handle)
                 .item(
-                    &SubmenuBuilder::new(handle, menu_text("menu"))
-                        .item(&MenuItemBuilder::with_id("settings", menu_text("settings")).accelerator("CmdOrCtrl+,").build(handle)?)
-                        .item(&MenuItemBuilder::with_id("reload", menu_text("reload")).accelerator("CmdOrCtrl+R").build(handle)?)
+                    &ledger_menu
                         .separator()
                         .item(&MenuItemBuilder::with_id("data", menu_text("data")).build(handle)?)
                         .item(&MenuItemBuilder::with_id("logs", menu_text("logs")).build(handle)?)
@@ -314,6 +325,12 @@ pub fn run() {
                     if let Some(w) = app.get_webview_window("main") {
                         let _ = w.eval("location.reload()");
                     }
+                }
+                "updates" => {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = updates::check(&app, true).await;
+                    });
                 }
                 "data" => {
                     let _ = open_dir(app.clone(), "data".into());
@@ -349,6 +366,7 @@ pub fn run() {
                 Some(cfg) if config::validate(&cfg).is_empty() => launch(handle, cfg),
                 _ => set_status(handle, "setup", None),
             }
+            updates::start(handle);
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -357,6 +375,8 @@ pub fn run() {
     app.run(|app, event| {
         if let RunEvent::Exit = event {
             app.state::<Services>().stop();
+            // Una actualización descargada que se dejó «al cerrar la app»
+            updates::install(app, false);
         }
     });
 }
