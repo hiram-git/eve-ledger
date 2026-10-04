@@ -16,7 +16,7 @@ const STATE_TTL_MS = 10 * 60_000;
 const toPilots = (params: Record<string, string>) => {
   const query = new URLSearchParams(params).toString();
   console.log(`[auth] result:${query}`);
-  return `${env.webUrl}/pilotos?${query}`;
+  return `${env.webUrl}/${env.authDonePage ? 'vinculado' : 'pilotos'}?${query}`;
 };
 
 export const authRoutes = new Elysia({ prefix: '/auth' })

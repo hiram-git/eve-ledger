@@ -18,6 +18,14 @@ export function getLang(astro: Pick<AstroGlobal, 'cookies'>): Lang {
   return isLang(v) ? v : DEFAULT_LANG;
 }
 
+// Idioma para una página que se abre en el navegador del sistema (sin la cookie del dashboard): el del navegador
+export function getRequestLang(astro: Pick<AstroGlobal, 'cookies' | 'request'>): Lang {
+  const v = astro.cookies.get(LANG_COOKIE)?.value;
+  if (isLang(v)) return v;
+  const accepted = (astro.request.headers.get('accept-language') ?? '').split(',').map((l) => l.trim().slice(0, 2).toLowerCase());
+  return accepted.find(isLang) ?? DEFAULT_LANG;
+}
+
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const es = {
@@ -429,6 +437,12 @@ const es = {
   loginState: 'El enlace de inicio de sesión caducó (dura 10 minutos) o ya se había usado.',
   loginSso: 'EVE no aceptó el inicio de sesión.',
   loginGeneric: 'El inicio de sesión con EVE falló.',
+  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  doneTitle: "Piloto vinculado",
+  doneLinked: (name: string) => `${name} ya está en EVE Ledger.`,
+  doneClose: "Puedes cerrar esta página.",
+  doneFailedTitle: "No se vinculó ningún piloto",
+  doneRetry: "Vuelve a EVE Ledger para intentarlo de nuevo. Puedes cerrar esta página.",
   detail: 'Detalle:',
   retry: 'Volver a intentarlo',
   linkedOn: 'Vinculado',
@@ -865,6 +879,12 @@ const en: Messages = {
   loginState: 'The login link expired (it lasts 10 minutes) or had already been used.',
   loginSso: 'EVE did not accept the login.',
   loginGeneric: 'The EVE login failed.',
+  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  doneTitle: "Pilot linked",
+  doneLinked: (name) => `${name} is now in EVE Ledger.`,
+  doneClose: "You can close this page.",
+  doneFailedTitle: "No pilot was linked",
+  doneRetry: "Go back to EVE Ledger to try again. You can close this page.",
   detail: 'Details:',
   retry: 'Try again',
   linkedOn: 'Linked',
@@ -1303,6 +1323,12 @@ const de: Messages = {
   loginState: 'Der Login-Link ist abgelaufen (gültig 10 Minuten) oder wurde bereits verwendet.',
   loginSso: 'EVE hat den Login nicht akzeptiert.',
   loginGeneric: 'Der EVE-Login ist fehlgeschlagen.',
+  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  doneTitle: "Pilot verknüpft",
+  doneLinked: (name) => `${name} ist jetzt in EVE Ledger.`,
+  doneClose: "Du kannst diese Seite schließen.",
+  doneFailedTitle: "Es wurde kein Pilot verknüpft",
+  doneRetry: "Geh zurück zu EVE Ledger, um es erneut zu versuchen. Du kannst diese Seite schließen.",
   detail: 'Details:',
   retry: 'Erneut versuchen',
   linkedOn: 'Verknüpft',

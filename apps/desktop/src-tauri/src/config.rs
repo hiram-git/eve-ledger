@@ -159,6 +159,8 @@ impl Config {
             ("PORT".into(), self.api_port.to_string()),
             ("HOST".into(), "127.0.0.1".into()),
             ("WEB_URL".into(), self.web_url()),
+            // El login va al navegador del sistema (lib.rs): al volver, una página que se cierra, no el dashboard
+            ("AUTH_DONE_PAGE".into(), "1".into()),
             ("SYNC_INTERVAL_MIN".into(), self.sync_interval_min.to_string()),
             ("OMEGA_ACCOUNTS".into(), self.omega_accounts.to_string()),
             ("OMEGA_PLEX_PER_MONTH".into(), self.omega_plex_per_month.to_string()),
@@ -255,6 +257,7 @@ mod tests {
         let env: BTreeMap<_, _> = valid().api_env("0.1.0").into_iter().collect();
         assert_eq!(env["EVE_CALLBACK_URL"], format!("http://127.0.0.1:{DEFAULT_API_PORT}/auth/callback"));
         assert_eq!(env["HOST"], "127.0.0.1");
+        assert_eq!(env["AUTH_DONE_PAGE"], "1");
         assert_eq!(env["ESI_USER_AGENT"], "eve-ledger-desktop/0.1.0");
         assert_eq!(env["WEB_URL"], format!("http://127.0.0.1:{DEFAULT_WEB_PORT}"));
     }
