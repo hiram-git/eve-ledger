@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 /// Estado de los servicios para la interfaz: starting | ready | error (con el motivo) | setup
@@ -166,6 +166,58 @@ fn show_settings(app: &AppHandle) {
         .build();
 }
 
+/// Qué se abre dentro de la ventana: el asistente, el dashboard y la API (todo en 127.0.0.1).
+/// El login de EVE (`/auth/login`, «Vincular piloto» y «Revincular») y cualquier sitio de fuera van al navegador
+/// del sistema: ahí el usuario tiene su sesión de EVE y su gestor de contraseñas (RFC 8252), y la ventana de
+/// la app no navega a páginas que no son suyas. La callback vuelve a la API local, que avisa a la app (AUTH_RESULT_EVENT)
+fn on_navigation(app: &AppHandle, url: &Url) -> bool {
+    if !matches!(url.scheme(), "http" | "https") {
+        return true;
+    }
+    let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "tauri.localhost"));
+    let login = local && url.path() == "/auth/login";
+    if local && !login {
+        return true;
+    }
+    let _ = app.opener().open_url(url.as_str(), None::<&str>);
+    if login {
+        // Fuera del manejador de navegación, que no debe tocar la misma vista
+        let app = app.clone();
+        std::thread::spawn(move || {
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.eval(&login_notice_script());
+            }
+        });
+    }
+    false
+}
+
+/// Aviso en el dashboard mientras el login de EVE está en el navegador (el dashboard no tiene comandos de Tauri:
+/// el aviso se inyecta desde aquí y desaparece al navegar)
+fn login_notice_script() -> String {
+    let text = serde_json::to_string(menu_text("loginNotice")).unwrap_or_default();
+    let close = serde_json::to_string(menu_text("close")).unwrap_or_default();
+    format!(
+        r#"(() => {{
+  document.getElementById('desktop-login-notice')?.remove();
+  const box = document.createElement('div');
+  box.id = 'desktop-login-notice';
+  box.setAttribute('role', 'status');
+  box.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:1000;max-width:min(560px,calc(100vw - 32px));display:flex;gap:12px;align-items:center;padding:12px 16px;border:1px solid var(--line-strong, #2b3a4a);border-radius:var(--radius, 8px);background:var(--surface-raised, #111a24);color:var(--text-primary, #e6edf3);font:14px/1.45 var(--font, system-ui, sans-serif);box-shadow:0 8px 24px rgba(0,0,0,.4)';
+  const p = document.createElement('span');
+  p.textContent = {text};
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = '×';
+  b.setAttribute('aria-label', {close});
+  b.style.cssText = 'min-width:40px;min-height:40px;border:0;background:none;color:inherit;font-size:20px;cursor:pointer';
+  b.onclick = () => box.remove();
+  box.append(p, b);
+  document.body.append(box);
+}})()"#
+    )
+}
+
 /// Textos del menú según el idioma del sistema (la interfaz de la web tiene su propio selector ES/EN/DE)
 fn menu_text(key: &str) -> &'static str {
     let lang = sys_locale::get_locale().unwrap_or_default().to_lowercase();
@@ -178,6 +230,8 @@ fn menu_text(key: &str) -> &'static str {
         ("en", "data") => "Open data folder",
         ("en", "logs") => "Open logs",
         ("en", "quit") => "Quit",
+        ("en", "loginNotice") => "EVE login opened in your browser. When you finish there, this window shows the linked pilot (you can close that tab).",
+        ("en", "close") => "Close",
         ("de", "menu") => "EVE Ledger",
         ("de", "settings") => "Einstellungen…",
         ("de", "settingsTitle") => "EVE Ledger · Einstellungen",
@@ -185,6 +239,8 @@ fn menu_text(key: &str) -> &'static str {
         ("de", "data") => "Datenordner öffnen",
         ("de", "logs") => "Protokolle öffnen",
         ("de", "quit") => "Beenden",
+        ("de", "loginNotice") => "Der EVE-Login wurde in deinem Browser geöffnet. Wenn du dort fertig bist, zeigt dieses Fenster den verknüpften Piloten (den Tab kannst du schließen).",
+        ("de", "close") => "Schließen",
         (_, "menu") => "EVE Ledger",
         (_, "settings") => "Configuración…",
         (_, "settingsTitle") => "EVE Ledger · Configuración",
@@ -192,6 +248,8 @@ fn menu_text(key: &str) -> &'static str {
         (_, "data") => "Abrir la carpeta de datos",
         (_, "logs") => "Abrir los registros",
         (_, "quit") => "Salir",
+        (_, "loginNotice") => "Se abrió el login de EVE en tu navegador. Al terminar allí, esta ventana muestra el piloto vinculado (puedes cerrar esa pestaña).",
+        (_, "close") => "Cerrar",
         _ => "",
     }
 }
@@ -264,11 +322,25 @@ pub fn run() {
                 _ => {}
             });
 
+            let nav = handle.clone();
             WebviewWindowBuilder::new(handle, "main", WebviewUrl::App("index.html".into()))
+                .on_navigation(move |url| on_navigation(&nav, url))
                 .title("EVE Ledger")
                 .inner_size(1320.0, 900.0)
                 .min_inner_size(380.0, 560.0)
                 .build()?;
+
+            // La API terminó un login de EVE (en el navegador): la ventana muestra el resultado en Pilotos
+            let linked = handle.clone();
+            app.listen(services::AUTH_RESULT_EVENT, move |event| {
+                let query: String = serde_json::from_str(event.payload()).unwrap_or_default();
+                let (Some(cfg), Some(main)) = (load_config(&linked), linked.get_webview_window("main")) else { return };
+                if let Ok(url) = Url::parse(&format!("{}/pilotos?{query}", cfg.web_url())) {
+                    let _ = main.navigate(url);
+                    let _ = main.unminimize();
+                    let _ = main.set_focus();
+                }
+            });
 
             match load_config(handle) {
                 Some(cfg) if config::validate(&cfg).is_empty() => launch(handle, cfg),
