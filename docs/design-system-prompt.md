@@ -2,7 +2,7 @@
 
 Prompt autocontenido para diseñar pantallas nuevas (o una versión para corporaciones) con el mismo sistema visual que el dashboard actual. Cópialo entero desde la línea siguiente, en Claude u otra herramienta de diseño, y completa la última sección con lo que quieres diseñar.
 
-Fuente de verdad: `apps/web/src/styles/theme.css`, `PRODUCT.md` y las reglas de diseño de `CLAUDE.md`. Si cambian, actualiza este archivo.
+Fuente de verdad: `apps/web/src/styles/theme.css`, `PRODUCT.md` y las reglas de diseño de `CLAUDE.md`. Si cambian, actualiza este archivo. Versión en inglés: `design-system-prompt.en.md` (mantener las dos al día).
 
 ---
 
