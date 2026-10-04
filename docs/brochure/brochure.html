@@ -46,11 +46,11 @@ li::before { content: ''; flex: none; width: 16px; height: 16px; border: 3px sol
 .box::before, .box::after { content: ''; position: absolute; width: 18px; height: 18px; }
 .box::before { top: -2px; left: -2px; border-top: 2px solid var(--corner); border-left: 2px solid var(--corner); border-top-left-radius: 18px; }
 .box::after { bottom: -2px; right: -2px; border-bottom: 2px solid var(--corner); border-right: 2px solid var(--corner); border-bottom-right-radius: 18px; }
-.box svg { width: 72px; height: 72px; fill: var(--text); flex: none; }
+.box svg { width: 72px; height: 72px; flex: none; fill: none; stroke: var(--cyan); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .box .t1 { font-size: 30px; font-weight: 700; }
 .box .t1 b { color: var(--cyan); }
 .box .t2 { font: 500 27px var(--mono); color: var(--cyan); margin-top: 2px; }
-.box .t3 { font-size: 21px; color: var(--text-secondary); margin-top: 6px; }
+.box .t3 { font-size: 24px; color: var(--text-secondary); margin-top: 4px; }
 .foot { position: absolute; left: 96px; width: 880px; bottom: 26px; font-size: 19px; line-height: 1.35; color: var(--text-muted); }
 /* capturas */
 .shots { position: absolute; left: 1000px; top: 0; right: 0; bottom: 0; }
@@ -78,11 +78,10 @@ li::before { content: ''; flex: none; width: 16px; height: 16px; border: 3px sol
   <h1 data-t="headline"></h1>
   <ul data-t="bullets"></ul>
   <div class="box">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="mon"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
     <div>
       <div class="t1" data-t="box1"></div>
-      <div class="t2">github.com/hiram-git/eve-ledger</div>
-      <div class="t3" data-t="box3"></div>
+            <div class="t3" data-t="box3"></div>
     </div>
   </div>
 </div>
@@ -99,7 +98,7 @@ const T = {
     tagline: 'Contabilidad de tus pilotos de EVE Online',
     headline: '¿Ganas o pierdes ISK?<br>Tus pilotos, <em>una economía</em>.',
     bullets: ['Wallets e inventario de todos tus personajes, consolidados', 'Neto por actividad: PvE, PvP, trading y logística', 'Naves perdidas: lo que te costaron de verdad', 'ISK/h de ratting, Omega de todas las cuentas y comisiones', '100 % local: tus tokens y tu historial no salen de tu PC'],
-    box1: 'Gratis y de código abierto en <b>GitHub</b>',
+    box1: 'App de escritorio, <b>gratis</b>',
     box3: 'Windows · macOS · Linux · Español / English / Deutsch',
     foot: 'EVE Online y todo lo relacionado son marcas de CCP hf. EVE Ledger es una herramienta de terceros, no afiliada a CCP. Capturas con datos de demostración.',
   },
@@ -107,7 +106,7 @@ const T = {
     tagline: 'A ledger for your EVE Online pilots',
     headline: 'Making or losing ISK?<br>Your pilots, <em>one economy</em>.',
     bullets: ['Wallets and assets of all your characters, consolidated', 'Net by activity: PvE, PvP, trading, logistics', 'Lost ships: what they really cost you', 'Ratting ISK/h, Omega for all accounts, fees & taxes', '100% local: your tokens and history never leave your PC'],
-    box1: 'Free & open source on <b>GitHub</b>',
+    box1: 'Desktop app, <b>free</b>',
     box3: 'Windows · macOS · Linux · Español / English / Deutsch',
     foot: 'EVE Online and all related marks are trademarks of CCP hf. EVE Ledger is a third-party tool, not affiliated with CCP. Screenshots: demo data.',
   },
