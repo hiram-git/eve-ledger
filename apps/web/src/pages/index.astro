@@ -31,7 +31,7 @@ import {
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { ago, isk, iskFull, longDate, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { withInventory } from '../lib/inventory-pref';
 import { ASSETS_SCOPE, CONTRACTS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
@@ -175,7 +175,8 @@ const healthShown = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id
 const staleNetPilots = !selected
   ? (summary?.characters ?? []).filter((c) => c.lastSyncAt && c.net !== 0 && pilotStates.get(c.id) && pilotStates.get(c.id)!.kind !== 'ok')
   : [];
-const staleNet = staleNetPilots.reduce((n, c) => n + c.net, 0);
+// Sin lo movido con tus otros pilotos: eso no sale del consolidado, solo cambia de wallet
+const staleNet = staleNetPilots.reduce((n, c) => n + c.net - (c.internalReceived - c.internalSent), 0);
 const staleNetOldest = staleNetPilots.map((c) => c.lastSyncAt!).sort()[0];
 // «hace 3 d» no se parte en dos líneas
 const nbsp = (text: string) => text.replace(/ /g, '\u00a0');
@@ -297,12 +298,17 @@ const pilotTotals = (summary?.characters ?? []).reduce(
     expenses: t.expenses + c.expenses,
     net: t.net + c.net,
     between: t.between + c.internalReceived - c.internalSent,
+    opening: t.opening + (c.openingBalance ?? 0),
   }),
-  { balance: 0, inventory: 0, income: 0, expenses: 0, net: 0, between: 0 },
+  { balance: 0, inventory: 0, income: 0, expenses: 0, net: 0, between: 0, opening: 0 },
 );
-// Entre tus pilotos (recibido − enviado): fuera del neto, explica el saldo de un alter que gasta ISK del main
+// Entre tus pilotos (recibido − enviado): en el neto de cada piloto (es lo que cambió su wallet), 0 en el Total
 const between = (c: { internalReceived: number; internalSent: number }) => c.internalReceived - c.internalSent;
 const betweenText = (v: number) => (Math.abs(v) < 0.5 ? '0' : fmt(v, { sign: true }));
+// Saldo anterior + neto = saldo; si no cuadra (movimientos que ESI ya no daba al primer sync), la nota lo dice
+const gapOf = (c: { openingBalance: number | null; balance: number | null; net: number }) =>
+  c.openingBalance === null || c.balance === null ? 0 : c.balance - c.openingBalance - c.net;
+const reconcileGaps = (summary?.characters ?? []).filter((c) => c.lastSyncAt && Math.abs(gapOf(c)) >= 1);
 // En la vista de un piloto la fila Total sigue siendo el consolidado: la etiqueta lo dice
 const withData = (summary?.characters ?? []).filter((c) => c.lastSyncAt).length;
 const totalLabel = selected ? m.pilotsTotalAll : m.pilotsTotal(summary?.characters.length ?? 0, withData);
@@ -890,10 +896,12 @@ const worthNote =
                   <thead>
                     <tr>
                       <th>{m.pilot}</th>
+                      {/* Saldo anterior + (ingresos − gastos + entre tus pilotos = neto) = saldo */}
+                      <th class="opening">{m.openingBalance}</th>
                       <th>{m.income}</th>
                       <th>{m.expenses}</th>
-                      <th>{m.net}</th>
                       <th>{m.betweenPilots}</th>
+                      <th>{m.net}</th>
                       {/* Del período (arriba) a «ahora»: saldo, inventario y último sync, tras una línea */}
                       <th class="now-start">{m.balance}</th>
                       {withInv && <th>{m.inventory}</th>}
@@ -916,13 +924,23 @@ const worthNote =
                             {c.name}
                           </span>
                         </td>
+                        <td
+                          class="opening"
+                          title={
+                            c.openingBalance === null || !c.openingAt
+                              ? undefined
+                              : `${full(c.openingBalance)} · ${c.openingPartial ? m.openingPartialTitle(longDate(c.openingAt, lang)) : m.openingTitle(longDate(c.openingAt, lang))}`
+                          }
+                        >
+                          {c.openingBalance === null ? '—' : fmt(c.openingBalance)}
+                        </td>
                         <td title={c.lastSyncAt ? full(c.income) : undefined}>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
                         <td title={c.lastSyncAt ? full(out(c.expenses)) : undefined}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</td>
-                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
-                          {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
-                        </td>
                         <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
                           {c.lastSyncAt ? betweenText(between(c)) : '—'}
+                        </td>
+                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
+                          {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
                         </td>
                         <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
                           {c.balance === null ? '—' : fmt(c.balance)}
@@ -942,12 +960,13 @@ const worthNote =
                   <tfoot>
                     <tr>
                       <th scope="row">{totalLabel}</th>
+                      <td class="opening" title={full(pilotTotals.opening)}>{fmt(pilotTotals.opening)}</td>
                       <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
                       <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
+                      <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
                       <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
                         {fmt(pilotTotals.net, { sign: true })}
                       </td>
-                      <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
                       <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
                       {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
                       <td />
@@ -997,6 +1016,10 @@ const worthNote =
                           </dd>
                         </div>
                         <div class="minor">
+                          <dt>{m.openingBalance}</dt>
+                          <dd>{c.openingBalance === null ? '—' : fmt(c.openingBalance)}</dd>
+                        </div>
+                        <div class="minor">
                           <dt>{m.balance}</dt>
                           <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
                         </div>
@@ -1033,6 +1056,10 @@ const worthNote =
                       <dd>{betweenText(pilotTotals.between)}</dd>
                     </div>
                     <div class="minor">
+                      <dt>{m.openingBalance}</dt>
+                      <dd>{fmt(pilotTotals.opening)}</dd>
+                    </div>
+                    <div class="minor">
                       <dt>{m.balance}</dt>
                       <dd>{fmt(pilotTotals.balance)}</dd>
                     </div>
@@ -1058,6 +1085,10 @@ const worthNote =
                   )}
                 </p>
                 <p>{m.betweenPilotsNote}</p>
+                <p>
+                  {m.reconcileNote}
+                  {reconcileGaps.length > 0 && m.reconcileGap(reconcileGaps.map((c) => m.reconcileItem(c.name, fmt(gapOf(c), { sign: true }))).join(', '))}
+                </p>
                 <p>
                   {withInv ? (
                     <>
@@ -2124,6 +2155,10 @@ const worthNote =
   /* Entre tus pilotos: con signo pero sin verde/rojo (no es ganancia ni pérdida, solo ISK que cambia de wallet) */
   .pilots td.between {
     color: var(--text-secondary);
+  }
+  /* Saldo anterior: antes del período, separado de los flujos del período por una línea */
+  .pilots .opening {
+    border-right: 1px solid var(--line);
   }
   .pilots td:first-child {
     padding-left: 22px;
