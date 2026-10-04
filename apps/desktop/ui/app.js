@@ -16,6 +16,7 @@ const T = {
       'EVE Ledger corre solo en tu equipo: guarda los tokens de EVE cifrados con una clave que se genera aquí y no envía nada a nadie salvo las llamadas a ESI. Para conectarse con EVE necesita una aplicación tuya en el portal de desarrolladores de CCP (gratis, dos minutos).',
     settingsLead: 'Los cambios se guardan en tu archivo de configuración y reinician el ledger.',
     appTitle: 'Tu aplicación de EVE',
+    appTitleBundled: 'Aplicación de EVE',
     step1: 'Entra en el portal de desarrolladores de EVE con tu cuenta y crea una aplicación.',
     openDevSite: 'Abrir developers.eveonline.com',
     step2: 'Ponle cualquier nombre (por ejemplo «EVE Ledger») y elige «Authentication & API Access».',
@@ -23,9 +24,14 @@ const T = {
     copyScopes: 'Copiar los permisos',
     step4: 'Como «Callback URL», pega exactamente esta:',
     callbackHint: 'Si cambias el puerto de la API en «Avanzado», cambia también la URL en tu aplicación de EVE.',
-    step5: 'Crea la aplicación y copia aquí su «Client ID» y su «Secret Key».',
+    step5: "Crea la aplicación y copia aquí su «Client ID». La «Secret Key» es opcional.",
     clientId: 'Client ID',
-    clientSecret: 'Secret Key',
+    clientSecret: "Secret Key (opcional)",
+    clientSecretHint: "Sin ella, el ledger inicia sesión en EVE con PKCE, sin secreto. Si la pones, solo se guarda en este equipo.",
+    secretRemoved: "Sin la Secret Key, los pilotos que vinculaste con ella tendrán que volver a vincularse.",
+    bundledText: "Este instalador ya trae una aplicación de EVE: no tienes que crear la tuya. Guarda y vincula tus pilotos.",
+    ownApp: "Usar mi propia aplicación de EVE",
+    setupLeadBundled: "EVE Ledger corre solo en tu equipo: guarda los tokens de EVE cifrados con una clave que se genera aquí y no envía nada a nadie salvo las llamadas a ESI.",
     show: 'Ver',
     hide: 'Ocultar',
     copy: 'Copiar',
@@ -60,7 +66,7 @@ const T = {
     cancel: 'Cancelar',
     errorsTitle: 'Revisa estos campos:',
     err_clientId: 'Falta el Client ID de tu aplicación de EVE.',
-    err_clientSecret: 'Falta la Secret Key de tu aplicación de EVE.',
+    err_bundledPort: "La aplicación de EVE del instalador solo funciona con el puerto 47300 de la API. Para usar otro, crea tu propia aplicación.",
     err_encKey: 'La clave de cifrado no es válida: regenérala en «Avanzado».',
     err_ports: 'Los puertos tienen que ser distintos y mayores que 1023.',
     err_numbers: 'Los pilotos y los PLEX por mes tienen que ser al menos 1.',
@@ -82,6 +88,7 @@ const T = {
       'EVE Ledger runs only on your computer: it stores your EVE tokens encrypted with a key generated here and sends nothing anywhere except ESI calls. To talk to EVE it needs your own application on CCP’s developer portal (free, two minutes).',
     settingsLead: 'Changes are saved to your settings file and restart the ledger.',
     appTitle: 'Your EVE application',
+    appTitleBundled: 'EVE application',
     step1: 'Sign in to the EVE developer portal with your account and create an application.',
     openDevSite: 'Open developers.eveonline.com',
     step2: 'Give it any name (for example “EVE Ledger”) and choose “Authentication & API Access”.',
@@ -89,9 +96,14 @@ const T = {
     copyScopes: 'Copy the permissions',
     step4: 'As “Callback URL”, paste exactly this one:',
     callbackHint: 'If you change the API port under “Advanced”, change the URL in your EVE application too.',
-    step5: 'Create the application and paste its “Client ID” and “Secret Key” here.',
+    step5: "Create the application and paste its “Client ID” here. The “Secret Key” is optional.",
     clientId: 'Client ID',
-    clientSecret: 'Secret Key',
+    clientSecret: "Secret Key (optional)",
+    clientSecretHint: "Without it, the ledger signs in to EVE with PKCE, no secret needed. If you add it, it is only stored on this computer.",
+    secretRemoved: "Without the Secret Key, pilots you linked with it will have to be linked again.",
+    bundledText: "This installer already includes an EVE application: you don’t need to create your own. Save and link your pilots.",
+    ownApp: "Use my own EVE application",
+    setupLeadBundled: "EVE Ledger runs only on your computer: it stores your EVE tokens encrypted with a key generated here and sends nothing to anyone except the ESI calls.",
     show: 'Show',
     hide: 'Hide',
     copy: 'Copy',
@@ -126,7 +138,7 @@ const T = {
     cancel: 'Cancel',
     errorsTitle: 'Check these fields:',
     err_clientId: 'Your EVE application’s Client ID is missing.',
-    err_clientSecret: 'Your EVE application’s Secret Key is missing.',
+    err_bundledPort: "The installer’s EVE application only works with API port 47300. To use another one, create your own application.",
     err_encKey: 'The encryption key is not valid: regenerate it under “Advanced”.',
     err_ports: 'Ports must be different and greater than 1023.',
     err_numbers: 'Pilots and PLEX per month must be at least 1.',
@@ -148,6 +160,7 @@ const T = {
       'EVE Ledger läuft nur auf deinem Rechner: Es speichert deine EVE-Tokens verschlüsselt mit einem hier erzeugten Schlüssel und sendet nichts außer ESI-Aufrufen. Um mit EVE zu sprechen, braucht es deine eigene Anwendung im Entwicklerportal von CCP (kostenlos, zwei Minuten).',
     settingsLead: 'Änderungen werden in deiner Einstellungsdatei gespeichert und starten den Ledger neu.',
     appTitle: 'Deine EVE-Anwendung',
+    appTitleBundled: 'EVE-Anwendung',
     step1: 'Melde dich im EVE-Entwicklerportal an und erstelle eine Anwendung.',
     openDevSite: 'developers.eveonline.com öffnen',
     step2: 'Gib ihr einen beliebigen Namen (z. B. „EVE Ledger“) und wähle „Authentication & API Access“.',
@@ -155,9 +168,14 @@ const T = {
     copyScopes: 'Berechtigungen kopieren',
     step4: 'Als „Callback URL“ genau diese einfügen:',
     callbackHint: 'Wenn du den API-Port unter „Erweitert“ änderst, ändere auch die URL in deiner EVE-Anwendung.',
-    step5: 'Erstelle die Anwendung und füge hier „Client ID“ und „Secret Key“ ein.',
+    step5: "Erstelle die Anwendung und füge hier ihre „Client ID“ ein. Der „Secret Key“ ist optional.",
     clientId: 'Client ID',
-    clientSecret: 'Secret Key',
+    clientSecret: "Secret Key (optional)",
+    clientSecretHint: "Ohne ihn meldet sich der Ledger per PKCE bei EVE an, ganz ohne Geheimnis. Wenn du ihn einträgst, bleibt er nur auf diesem Rechner.",
+    secretRemoved: "Ohne den Secret Key müssen Piloten, die du damit verknüpft hast, neu verknüpft werden.",
+    bundledText: "Dieser Installer bringt bereits eine EVE-Anwendung mit: Du musst keine eigene erstellen. Speichern und Piloten verknüpfen.",
+    ownApp: "Eigene EVE-Anwendung verwenden",
+    setupLeadBundled: "EVE Ledger läuft nur auf deinem Rechner: Er speichert deine EVE-Tokens verschlüsselt mit einem hier erzeugten Schlüssel und sendet nichts an andere außer den ESI-Aufrufen.",
     show: 'Zeigen',
     hide: 'Verbergen',
     copy: 'Kopieren',
@@ -192,7 +210,7 @@ const T = {
     cancel: 'Abbrechen',
     errorsTitle: 'Prüfe diese Felder:',
     err_clientId: 'Die Client ID deiner EVE-Anwendung fehlt.',
-    err_clientSecret: 'Der Secret Key deiner EVE-Anwendung fehlt.',
+    err_bundledPort: "Die EVE-Anwendung des Installers funktioniert nur mit API-Port 47300. Für einen anderen Port erstelle deine eigene Anwendung.",
     err_encKey: 'Der Verschlüsselungsschlüssel ist ungültig: unter „Erweitert“ neu erzeugen.',
     err_ports: 'Die Ports müssen verschieden und größer als 1023 sein.',
     err_numbers: 'Piloten und PLEX pro Monat müssen mindestens 1 sein.',
@@ -226,6 +244,7 @@ const tauri = preview
             configured: location.search.includes('configured'),
             config: { clientId: '', clientSecret: '', encKey: 'x'.repeat(43) + '=', esiContact: '', syncIntervalMin: 60, pilotSlots: 5, omegaAccounts: 5, omegaPlexPerMonth: 500, apiPort: 47300, webPort: 47321 },
             callbackUrl: 'http://127.0.0.1:47300/auth/callback',
+            bundledClientId: location.search.includes('bundled') ? '' : null,
             configPath: '~/.config/net.eveledger.desktop/ledger.env',
             dataDir: '~/.local/share/net.eveledger.desktop',
             logDir: '~/.local/share/net.eveledger.desktop/logs',
@@ -236,7 +255,7 @@ const tauri = preview
           };
         if (cmd === 'callback_url_for') return `http://127.0.0.1:${args.port}/auth/callback`;
         if (cmd === 'new_enc_key') return 'y'.repeat(43) + '=';
-        if (cmd === 'save_config') return args.config.clientId ? [] : ['clientId', 'clientSecret'];
+        if (cmd === 'save_config') return args.config.clientId ? [] : ['clientId'];
         return null;
       },
       listen: async () => {},
@@ -298,7 +317,7 @@ function readForm() {
   };
 }
 
-const FIELD_OF = { clientId: 'clientId', clientSecret: 'clientSecret', ports: 'apiPort', numbers: 'pilotSlots' };
+const FIELD_OF = { clientId: 'clientId', ports: 'apiPort', bundledPort: 'apiPort', numbers: 'pilotSlots' };
 
 function showErrors(errors) {
   const box = $('[data-errors]');
@@ -310,7 +329,7 @@ function showErrors(errors) {
   box.innerHTML = `<p>${t.errorsTitle}</p><ul>${errors.map((e) => `<li>${t['err_' + e] ?? e}</li>`).join('')}</ul>`;
   box.hidden = false;
   for (const e of errors) form.elements.namedItem(FIELD_OF[e] ?? '')?.setAttribute('aria-invalid', 'true');
-  if (errors.includes('encKey') || errors.includes('ports')) $('.advanced').open = true;
+  if (errors.some((e) => ['encKey', 'ports', 'bundledPort'].includes(e))) $('.advanced').open = true;
   form.elements.namedItem(FIELD_OF[errors[0]] ?? '')?.focus();
 }
 
@@ -349,7 +368,12 @@ async function init() {
   const settingsWindow = tauri.label === 'settings';
   const firstRun = !state.configured;
   $('h1', form).textContent = firstRun ? t.setupTitle : t.settingsTitle;
-  $('.lead', form).textContent = firstRun ? t.setupLead : t.settingsLead;
+  // Con la app de EVE del instalador, los pasos para crear una propia quedan detrás de «Usar mi propia aplicación»
+  const usingBundled = state.bundledClientId != null && state.config.clientId === state.bundledClientId;
+  $('[data-bundled]').hidden = !usingBundled;
+  $('[data-own]').hidden = usingBundled;
+  $('[data-t="appTitle"]').textContent = usingBundled ? t.appTitleBundled : t.appTitle;
+  $('.lead', form).textContent = firstRun ? (usingBundled ? t.setupLeadBundled : t.setupLead) : t.settingsLead;
   $('[data-save]').textContent = firstRun ? t.saveFirst : t.save;
   $('[data-cancel]').hidden = !settingsWindow && firstRun;
   document.title = firstRun ? `EVE Ledger · ${t.setupTitle}` : `EVE Ledger · ${t.settingsTitle}`;
@@ -391,6 +415,19 @@ form.addEventListener('submit', async (e) => {
 });
 
 form.elements.apiPort.addEventListener('input', updateCallback);
+
+// Quitar la Secret Key: los pilotos vinculados con ella ya no pueden renovar su token
+form.elements.clientSecret.addEventListener('input', (e) => {
+  $('[data-secret-removed]').hidden = !(state.configured && state.config.clientSecret && !e.currentTarget.value.trim());
+});
+
+$('[data-own-app]').addEventListener('click', () => {
+  $('[data-bundled]').hidden = true;
+  $('[data-own]').hidden = false;
+  $('[data-t="appTitle"]').textContent = t.appTitle;
+  form.elements.clientId.value = '';
+  form.elements.clientId.focus();
+});
 
 $('[data-reveal]').addEventListener('click', (e) => {
   const input = form.elements.clientSecret;

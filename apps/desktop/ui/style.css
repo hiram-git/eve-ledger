@@ -137,6 +137,24 @@ h2 {
   color: var(--text);
 }
 
+.bundled {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+
+.bundled button.link {
+  min-height: 40px;
+  padding-left: 0;
+}
+
+.bundled p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

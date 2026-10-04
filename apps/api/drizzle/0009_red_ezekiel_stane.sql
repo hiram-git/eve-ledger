@@ -1,0 +1,1 @@
+ALTER TABLE `characters` ADD `auth_method` text DEFAULT 'secret' NOT NULL;

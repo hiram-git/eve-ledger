@@ -11,8 +11,9 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    /// App registrada en https://developers.eveonline.com (una por usuario)
+    /// App registrada en https://developers.eveonline.com: la del usuario o la que trae el instalador
     pub client_id: String,
+    /// Opcional: sin ella, el login de EVE usa PKCE (apps/api/src/lib/sso.ts)
     pub client_secret: String,
     /// 32 bytes en base64: cifra los tokens de EVE. Cambiarla obliga a revincular los pilotos
     pub enc_key: String,
@@ -30,10 +31,16 @@ pub struct Config {
 pub const DEFAULT_API_PORT: u16 = 47300;
 pub const DEFAULT_WEB_PORT: u16 = 47321;
 
+/// Client ID de una app de EVE incluido al compilar (variable `EVE_LEDGER_CLIENT_ID`): quien instala no tiene que
+/// crear la suya. Va sin secreto (login con PKCE) y su Callback URL es la del puerto de la API por defecto
+pub fn bundled_client_id() -> Option<&'static str> {
+    option_env!("EVE_LEDGER_CLIENT_ID").map(str::trim).filter(|s| !s.is_empty())
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
-            client_id: String::new(),
+            client_id: bundled_client_id().unwrap_or_default().into(),
             client_secret: String::new(),
             enc_key: generate_enc_key(),
             esi_contact: String::new(),
@@ -65,9 +72,6 @@ pub fn validate(c: &Config) -> Vec<&'static str> {
     if c.client_id.trim().is_empty() {
         errors.push("clientId");
     }
-    if c.client_secret.trim().is_empty() {
-        errors.push("clientSecret");
-    }
     if STANDARD.decode(c.enc_key.trim()).map(|k| k.len()) != Ok(32) {
         errors.push("encKey");
     }
@@ -76,6 +80,10 @@ pub fn validate(c: &Config) -> Vec<&'static str> {
     }
     if c.pilot_slots == 0 || c.omega_plex_per_month == 0 {
         errors.push("numbers");
+    }
+    // La app de EVE del instalador solo conoce la Callback URL del puerto por defecto
+    if bundled_client_id() == Some(c.client_id.trim()) && c.api_port != DEFAULT_API_PORT {
+        errors.push("bundledPort");
     }
     errors
 }
@@ -96,7 +104,7 @@ impl Config {
         let n = |k: &str, def: u32| m.get(k).and_then(|v| v.parse().ok()).unwrap_or(def);
         let p = |k: &str, def: u16| m.get(k).and_then(|v| v.parse().ok()).unwrap_or(def);
         Config {
-            client_id: s("EVE_CLIENT_ID"),
+            client_id: m.get("EVE_CLIENT_ID").cloned().filter(|v| !v.is_empty()).unwrap_or(d.client_id),
             client_secret: s("EVE_CLIENT_SECRET"),
             enc_key: m.get("ENC_KEY").cloned().filter(|v| !v.is_empty()).unwrap_or(d.enc_key),
             esi_contact: s("ESI_CONTACT"),
@@ -113,6 +121,7 @@ impl Config {
         format!(
             "# EVE Ledger: configuración (la escribe la app; se puede editar desde «Configuración…»)\n\
              # App de EVE (https://developers.eveonline.com). Callback: {callback}\n\
+             # La Secret Key es opcional: sin ella, el login usa PKCE\n\
              EVE_CLIENT_ID={}\nEVE_CLIENT_SECRET={}\n\
              # Cifra los tokens de EVE. Si cambia, hay que revincular los pilotos\n\
              ENC_KEY={}\n\
@@ -197,7 +206,6 @@ mod tests {
     fn valid() -> Config {
         Config {
             client_id: "abc".into(),
-            client_secret: "s3cr3t".into(),
             ..Config::default()
         }
     }
@@ -212,6 +220,7 @@ mod tests {
     fn ida_y_vuelta_por_el_archivo() {
         let mut c = valid();
         c.esi_contact = "Piloto Uno".into();
+        c.client_secret = "s3cr3t".into();
         c.sync_interval_min = 0;
         c.api_port = 48000;
         assert_eq!(Config::from_map(&parse(&c.to_env())), c);
@@ -219,13 +228,26 @@ mod tests {
 
     #[test]
     fn valida_lo_obligatorio() {
+        // La Secret Key es opcional (PKCE)
         assert!(validate(&valid()).is_empty());
-        let c = Config::default();
-        assert_eq!(validate(&c), vec!["clientId", "clientSecret"]);
+        assert!(validate(&Config { client_secret: "s3cr3t".into(), ..valid() }).is_empty());
+        let c = Config { client_id: String::new(), ..Config::default() };
+        assert_eq!(validate(&c), vec!["clientId"]);
         let mut c = valid();
         c.enc_key = "corta".into();
         c.web_port = c.api_port;
         assert_eq!(validate(&c), vec!["encKey", "ports"]);
+    }
+
+    #[test]
+    fn la_app_del_instalador_exige_el_puerto_por_defecto() {
+        // Solo se comprueba si se compiló con EVE_LEDGER_CLIENT_ID
+        if let Some(id) = bundled_client_id() {
+            assert_eq!(Config::default().client_id, id);
+            assert!(validate(&Config::default()).is_empty());
+            assert_eq!(validate(&Config { api_port: 48000, ..Config::default() }), vec!["bundledPort"]);
+            assert!(validate(&Config { api_port: 48000, client_id: "mia".into(), ..Config::default() }).is_empty());
+        }
     }
 
     #[test]

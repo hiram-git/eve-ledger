@@ -14,7 +14,8 @@ function required(name: string): string {
 
 export const env = {
   clientId: required('EVE_CLIENT_ID'),
-  clientSecret: required('EVE_CLIENT_SECRET'),
+  // Opcional: sin secreto, el login de EVE usa PKCE (src/lib/sso.ts)
+  clientSecret: Bun.env.EVE_CLIENT_SECRET?.trim() ?? '',
   callbackUrl: required('EVE_CALLBACK_URL'),
   encKey: required('ENC_KEY'),
   esiCompatDate: Bun.env.ESI_COMPAT_DATE ?? '2025-12-16',

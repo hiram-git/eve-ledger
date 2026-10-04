@@ -3,11 +3,11 @@ import { db } from '../db/client';
 import { characters } from '../db/schema';
 import { encrypt } from '../lib/crypto';
 import { env } from '../lib/env';
-import { buildAuthorizeUrl, exchangeCode, verifyAccessToken } from '../lib/sso';
+import { buildAuthorizeUrl, exchangeCode, loginMethod, newPkce, verifyAccessToken } from '../lib/sso';
 import { syncCharacter } from '../services/sync';
 
-// Estados pendientes en memoria (app local, un solo usuario)
-const pendingStates = new Map<string, number>();
+// Estados pendientes en memoria (app local, un solo usuario), con el verificador de PKCE si el login lo usa
+const pendingStates = new Map<string, { exp: number; verifier?: string }>();
 const STATE_TTL_MS = 10 * 60_000;
 
 // El resultado se muestra en el dashboard (apps/web/src/pages/pilotos.astro), con el tema del proyecto.
@@ -20,13 +20,14 @@ const toPilots = (params: Record<string, string>) => {
 };
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
-  .get('/login', ({ redirect }) => {
+  .get('/login', async ({ redirect }) => {
     const now = Date.now();
-    for (const [s, exp] of pendingStates) if (exp < now) pendingStates.delete(s);
+    for (const [s, { exp }] of pendingStates) if (exp < now) pendingStates.delete(s);
 
     const state = crypto.randomUUID();
-    pendingStates.set(state, now + STATE_TTL_MS);
-    return redirect(buildAuthorizeUrl(state));
+    const pkce = loginMethod() === 'pkce' ? await newPkce() : undefined;
+    pendingStates.set(state, { exp: now + STATE_TTL_MS, verifier: pkce?.verifier });
+    return redirect(buildAuthorizeUrl(state, pkce?.challenge));
   })
   .get(
     '/callback',
@@ -34,13 +35,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       // El usuario canceló en la pantalla de EVE (o EVE devolvió un error)
       if (!query.code) return redirect(toPilots({ error: 'denied' }));
 
-      const exp = query.state ? pendingStates.get(query.state) : undefined;
+      const pending = query.state ? pendingStates.get(query.state) : undefined;
       if (query.state) pendingStates.delete(query.state);
-      if (!exp || exp < Date.now()) return redirect(toPilots({ error: 'state' }));
+      if (!pending || pending.exp < Date.now()) return redirect(toPilots({ error: 'state' }));
 
       let characterId: number;
       try {
-        const tokens = await exchangeCode(query.code);
+        const tokens = await exchangeCode(query.code, pending.verifier);
         const id = await verifyAccessToken(tokens.access_token);
         characterId = id.characterId;
 
@@ -48,6 +49,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           name: id.name,
           ownerHash: id.ownerHash,
           scopes: id.scopes.join(' '),
+          authMethod: pending.verifier ? ('pkce' as const) : ('secret' as const),
           refreshToken: await encrypt(tokens.refresh_token),
           accessToken: await encrypt(tokens.access_token),
           tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
