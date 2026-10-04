@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, min, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lt, min, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, walletJournal, walletTransactions } from '../db/schema';
 import { ACTIVITIES, activityOf, PLEX_TYPE_ID, refKindOf } from '../lib/activities';
@@ -94,6 +94,27 @@ async function plexTraded(from: Date, characterId?: number) {
 // characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos siguen
 // sin contar (mover ISK no es ganarlo); la lista de pilotos se devuelve siempre completa.
 // Saldo = el balance del último movimiento sincronizado del personaje
+// Saldo anterior: el balance con el que el piloto entró en el período (el de su último movimiento antes de
+// `from`). Si su historial empieza dentro del período, el balance de su primer movimiento menos ese movimiento,
+// y `partial` lo dice. Saldo anterior + neto del wallet = saldo, salvo movimientos que ESI ya no daba
+export async function openingBalance(characterId: number, from: Date) {
+  const [before] = await db
+    .select({ balance: walletJournal.balance, date: walletJournal.date })
+    .from(walletJournal)
+    .where(and(eq(walletJournal.characterId, characterId), lt(walletJournal.date, from)))
+    .orderBy(desc(walletJournal.date), desc(walletJournal.journalId))
+    .limit(1);
+  if (before?.balance != null) return { balance: before.balance, at: before.date, partial: false };
+  const [first] = await db
+    .select({ balance: walletJournal.balance, amount: walletJournal.amount, date: walletJournal.date })
+    .from(walletJournal)
+    .where(and(eq(walletJournal.characterId, characterId), gte(walletJournal.date, from)))
+    .orderBy(asc(walletJournal.date), asc(walletJournal.journalId))
+    .limit(1);
+  if (first?.balance != null) return { balance: first.balance - first.amount, at: first.date, partial: true };
+  return { balance: null, at: null, partial: true };
+}
+
 export async function lastBalance(characterId: number) {
   const [last] = await db
     .select({ balance: walletJournal.balance, date: walletJournal.date })
@@ -139,38 +160,69 @@ export async function getSummary(days: number, characterId?: number) {
   // El período anterior solo es comparable si el historial lo cubre entero
   const previousComplete = !!firstEntryAt && firstEntryAt <= previousFrom;
 
-  // Movido entre tus pilotos, por piloto: quién envió y quién recibió cada transferencia. ESI da el mismo id a
-  // los dos lados y basta uno para saberlo (el signo dice quién paga; la otra parte es el otro piloto), así que
-  // también cuadra con movimientos de antes de que el journal guardara los dos lados (migración 0007)
+  // Movido entre tus pilotos (desde el período anterior, para la comparación): quién envió y quién recibió cada
+  // transferencia. ESI da el mismo id a los dos lados y basta uno para saberlo (el signo dice quién paga; la otra
+  // parte es el otro piloto), así que cuadra también con movimientos de antes de que el journal guardara los dos
+  // lados (migración 0007). En el consolidado se anulan; en el neto de cada piloto cuentan (decisión del usuario:
+  // el neto de un piloto es lo que cambió su wallet, y saldo anterior + neto = saldo)
   const internalRows = await db
     .select({
       journalId: walletJournal.journalId,
       characterId: walletJournal.characterId,
       amount: walletJournal.amount,
+      date: walletJournal.date,
       firstPartyId: walletJournal.firstPartyId,
       secondPartyId: walletJournal.secondPartyId,
     })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), eq(isInternal, 1)));
-  const transfers = new Map<number, { from: number; to: number; amount: number }>();
+    .where(and(gte(walletJournal.date, previousFrom), eq(isInternal, 1)));
+  const transfers = new Map<number, { from: number; to: number; amount: number; date: Date }>();
   for (const r of internalRows) {
     if (transfers.has(r.journalId) || !r.amount) continue;
     const other = r.firstPartyId === r.characterId ? r.secondPartyId! : r.firstPartyId!;
     const [sender, receiver] = r.amount < 0 ? [r.characterId, other] : [other, r.characterId];
-    transfers.set(r.journalId, { from: sender, to: receiver, amount: Math.abs(r.amount) });
+    transfers.set(r.journalId, { from: sender, to: receiver, amount: Math.abs(r.amount), date: r.date });
   }
+  // Recibido y enviado por un piloto (o movido entre todos) entre dos instantes
+  const internalBetween = (id: number | undefined, a: Date, b?: Date) => {
+    let received = 0;
+    let sent = 0;
+    for (const t of transfers.values()) {
+      if (t.date < a || (b && t.date >= b)) continue;
+      if (id === undefined) received += t.amount;
+      else {
+        if (t.to === id) received += t.amount;
+        if (t.from === id) sent += t.amount;
+      }
+    }
+    return id === undefined ? { received, sent: received } : { received, sent };
+  };
+  const internal = internalBetween(characterId, from);
   const internalByCharacter = new Map<number, { received: number; sent: number }>();
-  const internalOf = (id: number) => internalByCharacter.get(id) ?? internalByCharacter.set(id, { received: 0, sent: 0 }).get(id)!;
-  let movedBetween = 0;
   for (const t of transfers.values()) {
-    internalOf(t.from).sent += t.amount;
-    internalOf(t.to).received += t.amount;
-    movedBetween += t.amount;
+    if (t.date < from) continue;
+    const s = internalByCharacter.get(t.from) ?? { received: 0, sent: 0 };
+    s.sent += t.amount;
+    internalByCharacter.set(t.from, s);
+    const r = internalByCharacter.get(t.to) ?? { received: 0, sent: 0 };
+    r.received += t.amount;
+    internalByCharacter.set(t.to, r);
   }
-  // En la vista de un piloto, lo suyo; en el consolidado, lo recibido y lo enviado son lo mismo
-  const internal = characterId
-    ? (internalByCharacter.get(characterId) ?? { received: 0, sent: 0 })
-    : { received: movedBetween, sent: movedBetween };
+  // Vista de un piloto: su neto, «Hoy», el período anterior y cada día incluyen lo movido con tus otros pilotos
+  const internalDay = new Map<string, number>();
+  if (characterId) {
+    totals.net += internal.received - internal.sent;
+    const t = internalBetween(characterId, todayStart);
+    today.net += t.received - t.sent;
+    const p = internalBetween(characterId, previousFrom, from);
+    previous.net += p.received - p.sent;
+    for (const x of transfers.values()) {
+      if (x.date < from) continue;
+      const d = isoDay(x.date);
+      const signed = (x.to === characterId ? x.amount : 0) - (x.from === characterId ? x.amount : 0);
+      if (signed) internalDay.set(d, (internalDay.get(d) ?? 0) + signed);
+    }
+  }
 
   const byCharacter = await db
     .select({ characterId: walletJournal.characterId, income, expenses })
@@ -261,7 +313,10 @@ export async function getSummary(days: number, characterId?: number) {
   const daily = Array.from({ length: days }, (_, i) => {
     const d = isoDay(new Date(from.getTime() + i * DAY_MS));
     // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos: el gráfico lo señala
-    return withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0, accounts: dailyMap.get(d)?.accounts ?? 0 });
+    const row = withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0, accounts: dailyMap.get(d)?.accounts ?? 0 });
+    // Vista de un piloto: el neto del día incluye lo movido con tus otros pilotos (las barras siguen siendo juego)
+    const internal = internalDay.get(d) ?? 0;
+    return { ...row, internal, net: row.net + internal };
   });
 
   // Saldo = el balance del último movimiento sincronizado de cada personaje
@@ -270,18 +325,29 @@ export async function getSummary(days: number, characterId?: number) {
   const perCharacter = await Promise.all(
     chars.map(async (c) => {
       const last = await lastBalance(c.id);
+      const opening = await openingBalance(c.id, from);
       const agg = charMap.get(c.id);
-      return withNet({
+      const internalReceived = internalByCharacter.get(c.id)?.received ?? 0;
+      const internalSent = internalByCharacter.get(c.id)?.sent ?? 0;
+      const income = agg?.income ?? 0;
+      const expenses = agg?.expenses ?? 0;
+      return {
         id: c.id,
         name: c.name,
         lastSyncAt: c.lastSyncAt,
         balance: last?.balance ?? null,
         balanceAt: last?.date ?? null,
-        income: agg?.income ?? 0,
-        expenses: agg?.expenses ?? 0,
-        internalReceived: internalByCharacter.get(c.id)?.received ?? 0,
-        internalSent: internalByCharacter.get(c.id)?.sent ?? 0,
-      });
+        openingBalance: opening.balance,
+        openingAt: opening.at,
+        openingPartial: opening.partial,
+        income,
+        expenses,
+        internalReceived,
+        internalSent,
+        // El neto de un piloto es lo que cambió su wallet: juego más lo movido con tus otros pilotos
+        // (en la suma de todos se anula, así que el Total sigue siendo el consolidado)
+        net: income - expenses + internalReceived - internalSent,
+      };
     }),
   );
   perCharacter.sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0));

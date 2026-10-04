@@ -35,7 +35,12 @@ export type Summary = {
     lastSyncAt: string | null;
     balance: number | null;
     balanceAt: string | null;
-    // Recibido de tus otros pilotos y enviado a ellos en el período (fuera de income/expenses/net)
+    // Saldo con el que entró en el período (partial: su historial empieza dentro del período, en openingAt)
+    openingBalance: number | null;
+    openingAt: string | null;
+    openingPartial: boolean;
+    // Recibido de tus otros pilotos y enviado a ellos en el período. net = income − expenses + recibido − enviado:
+    // lo que cambió su wallet (openingBalance + net = balance); en la suma de todos se anula
     internalReceived: number;
     internalSent: number;
   })[];
@@ -44,7 +49,8 @@ export type Summary = {
   // «PvP con naves»: compras de reposición y couriers de naves perdidas movidos a PvP (ship_replacement, ship_transport)
   shipFlow: { replacement: number; transport: number };
   // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos
-  daily: (Flow & { date: string; accounts: number })[];
+  // internal: en la vista de un piloto, lo movido con tus otros pilotos ese día (ya incluido en net, no en income/expenses)
+  daily: (Flow & { date: string; accounts: number; internal: number })[];
   today: Flow;
   previous: Flow & { complete: boolean };
   coverage: { firstEntryAt: string | null; coveredDays: number };
