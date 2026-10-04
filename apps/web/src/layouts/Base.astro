@@ -1,5 +1,6 @@
 ---
 // Marco común de las páginas: barra superior (marca, secciones, estado del sync, botón), pie y scripts
+import { APP_VERSION } from 'astro:env/server';
 import '@fontsource-variable/inter';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
@@ -140,7 +141,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     </main>
 
     <footer class="shell">
-      <span class="footer-brand">EVE LEDGER · localhost</span>
+      <span class="footer-brand">EVE LEDGER · localhost{APP_VERSION && <span class="footer-version"> · v{APP_VERSION}</span>}</span>
       <span>{m.footer}</span>
     </footer>
   </body>

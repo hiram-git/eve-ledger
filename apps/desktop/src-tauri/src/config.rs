@@ -168,8 +168,10 @@ impl Config {
     }
 
     /// Variables de entorno de la web (Astro: API_URL y PILOT_SLOTS se leen al arrancar)
-    pub fn web_env(&self) -> Vec<(String, String)> {
+    pub fn web_env(&self, version: &str) -> Vec<(String, String)> {
         vec![
+            // Pie del dashboard: «v0.1.8»
+            ("APP_VERSION".into(), version.into()),
             ("PORT".into(), self.web_port.to_string()),
             ("HOST".into(), "127.0.0.1".into()),
             ("API_URL".into(), format!("http://127.0.0.1:{}", self.api_port)),
@@ -260,6 +262,8 @@ mod tests {
         assert_eq!(env["AUTH_DONE_PAGE"], "1");
         assert_eq!(env["ESI_USER_AGENT"], "eve-ledger-desktop/0.1.0");
         assert_eq!(env["WEB_URL"], format!("http://127.0.0.1:{DEFAULT_WEB_PORT}"));
+        let web: BTreeMap<_, _> = valid().web_env("0.1.0").into_iter().collect();
+        assert_eq!(web["APP_VERSION"], "0.1.0");
     }
 
     #[test]

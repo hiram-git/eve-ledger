@@ -1,6 +1,6 @@
 [package]
 name = "eve-ledger-desktop"
-version = "0.1.7"
+version = "0.1.8"
 description = "EVE Ledger: ingresos, gastos e inventario de tus pilotos de EVE Online, en tu equipo"
 edition = "2021"
 publish = false
