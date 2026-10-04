@@ -139,19 +139,44 @@ export async function getSummary(days: number, characterId?: number) {
   // El período anterior solo es comparable si el historial lo cubre entero
   const previousComplete = !!firstEntryAt && firstEntryAt <= previousFrom;
 
-  // Movido entre tus pilotos: lo recibido y lo enviado (en la vista de un piloto pueden diferir; en el
-  // consolidado son lo mismo, salvo movimientos de antes de que el journal guardara los dos lados)
-  const [internal] = await db
-    .select({ received: income, sent: expenses })
+  // Movido entre tus pilotos, por piloto: quién envió y quién recibió cada transferencia. ESI da el mismo id a
+  // los dos lados y basta uno para saberlo (el signo dice quién paga; la otra parte es el otro piloto), así que
+  // también cuadra con movimientos de antes de que el journal guardara los dos lados (migración 0007)
+  const internalRows = await db
+    .select({
+      journalId: walletJournal.journalId,
+      characterId: walletJournal.characterId,
+      amount: walletJournal.amount,
+      firstPartyId: walletJournal.firstPartyId,
+      secondPartyId: walletJournal.secondPartyId,
+    })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), eq(isInternal, 1), pilot));
+    .where(and(gte(walletJournal.date, from), eq(isInternal, 1)));
+  const transfers = new Map<number, { from: number; to: number; amount: number }>();
+  for (const r of internalRows) {
+    if (transfers.has(r.journalId) || !r.amount) continue;
+    const other = r.firstPartyId === r.characterId ? r.secondPartyId! : r.firstPartyId!;
+    const [sender, receiver] = r.amount < 0 ? [r.characterId, other] : [other, r.characterId];
+    transfers.set(r.journalId, { from: sender, to: receiver, amount: Math.abs(r.amount) });
+  }
+  const internalByCharacter = new Map<number, { received: number; sent: number }>();
+  const internalOf = (id: number) => internalByCharacter.get(id) ?? internalByCharacter.set(id, { received: 0, sent: 0 }).get(id)!;
+  let movedBetween = 0;
+  for (const t of transfers.values()) {
+    internalOf(t.from).sent += t.amount;
+    internalOf(t.to).received += t.amount;
+    movedBetween += t.amount;
+  }
+  // En la vista de un piloto, lo suyo; en el consolidado, lo recibido y lo enviado son lo mismo
+  const internal = characterId
+    ? (internalByCharacter.get(characterId) ?? { received: 0, sent: 0 })
+    : { received: movedBetween, sent: movedBetween };
 
   const byCharacter = await db
     .select({ characterId: walletJournal.characterId, income, expenses })
     .from(walletJournal)
     .where(allPilots)
     .groupBy(walletJournal.characterId);
-
   const refType = refKind;
   const byRefType = await db
     .select({ refType, activity, income, expenses, count: sql<number>`count(*)` })
@@ -254,6 +279,8 @@ export async function getSummary(days: number, characterId?: number) {
         balanceAt: last?.date ?? null,
         income: agg?.income ?? 0,
         expenses: agg?.expenses ?? 0,
+        internalReceived: internalByCharacter.get(c.id)?.received ?? 0,
+        internalSent: internalByCharacter.get(c.id)?.sent ?? 0,
       });
     }),
   );

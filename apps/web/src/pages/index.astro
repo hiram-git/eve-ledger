@@ -296,9 +296,13 @@ const pilotTotals = (summary?.characters ?? []).reduce(
     income: t.income + c.income,
     expenses: t.expenses + c.expenses,
     net: t.net + c.net,
+    between: t.between + c.internalReceived - c.internalSent,
   }),
-  { balance: 0, inventory: 0, income: 0, expenses: 0, net: 0 },
+  { balance: 0, inventory: 0, income: 0, expenses: 0, net: 0, between: 0 },
 );
+// Entre tus pilotos (recibido − enviado): fuera del neto, explica el saldo de un alter que gasta ISK del main
+const between = (c: { internalReceived: number; internalSent: number }) => c.internalReceived - c.internalSent;
+const betweenText = (v: number) => (Math.abs(v) < 0.5 ? '0' : fmt(v, { sign: true }));
 // En la vista de un piloto la fila Total sigue siendo el consolidado: la etiqueta lo dice
 const withData = (summary?.characters ?? []).filter((c) => c.lastSyncAt).length;
 const totalLabel = selected ? m.pilotsTotalAll : m.pilotsTotal(summary?.characters.length ?? 0, withData);
@@ -889,6 +893,7 @@ const worthNote =
                       <th>{m.income}</th>
                       <th>{m.expenses}</th>
                       <th>{m.net}</th>
+                      <th>{m.betweenPilots}</th>
                       {/* Del período (arriba) a «ahora»: saldo, inventario y último sync, tras una línea */}
                       <th class="now-start">{m.balance}</th>
                       {withInv && <th>{m.inventory}</th>}
@@ -916,6 +921,9 @@ const worthNote =
                         <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
                           {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
                         </td>
+                        <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
+                          {c.lastSyncAt ? betweenText(between(c)) : '—'}
+                        </td>
                         <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
                           {c.balance === null ? '—' : fmt(c.balance)}
                         </td>
@@ -939,6 +947,7 @@ const worthNote =
                       <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
                         {fmt(pilotTotals.net, { sign: true })}
                       </td>
+                      <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
                       <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
                       {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
                       <td />
@@ -982,6 +991,12 @@ const worthNote =
                           <dd title={fullNet(c.net)}>{c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}</dd>
                         </div>
                         <div class="minor">
+                          <dt>{m.betweenPilots}</dt>
+                          <dd title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
+                            {c.lastSyncAt ? betweenText(between(c)) : '—'}
+                          </dd>
+                        </div>
+                        <div class="minor">
                           <dt>{m.balance}</dt>
                           <dd>{c.balance === null ? '—' : fmt(c.balance)}</dd>
                         </div>
@@ -1014,6 +1029,10 @@ const worthNote =
                       <dd title={fullNet(pilotTotals.net)}>{fmt(pilotTotals.net, { sign: true })}</dd>
                     </div>
                     <div class="minor">
+                      <dt>{m.betweenPilots}</dt>
+                      <dd>{betweenText(pilotTotals.between)}</dd>
+                    </div>
+                    <div class="minor">
                       <dt>{m.balance}</dt>
                       <dd>{fmt(pilotTotals.balance)}</dd>
                     </div>
@@ -1038,6 +1057,7 @@ const worthNote =
                     </>
                   )}
                 </p>
+                <p>{m.betweenPilotsNote}</p>
                 <p>
                   {withInv ? (
                     <>
@@ -2101,6 +2121,10 @@ const worthNote =
     min-width: 0;
   }
   .pilots th:first-child,
+  /* Entre tus pilotos: con signo pero sin verde/rojo (no es ganancia ni pérdida, solo ISK que cambia de wallet) */
+  .pilots td.between {
+    color: var(--text-secondary);
+  }
   .pilots td:first-child {
     padding-left: 22px;
   }

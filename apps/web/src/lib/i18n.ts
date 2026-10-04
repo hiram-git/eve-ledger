@@ -376,6 +376,10 @@ const es = {
   pilotsTotalNote: (card: boolean) =>
     `${card ? 'La tarjeta' : 'La fila'} Total es la suma de los pilotos: el consolidado del resumen, sin lo que mueves entre ellos.`,
   pilotsTotalNotePilot: (name: string) => `Arriba ves solo a ${name}; el Total es el consolidado de todos tus pilotos.`,
+  betweenPilots: 'Entre tus pilotos',
+  betweenPilotsTitle: (name: string, received: string, sent: string) =>
+    `${name} recibió ${received} de tus otros pilotos y les envió ${sent}. No cuenta en su neto: en el Total se anula`,
+  betweenPilotsNote: 'Entre tus pilotos = recibido − enviado a tus otros pilotos (donaciones, contratos, trades): fuera del neto, se anula en el Total. Neto + entre tus pilotos = lo que cambió su wallet.',
   invToggle: 'Qué cuenta en el patrimonio',
   invWallets: 'Wallets',
   invPlus: '+ inventario',
@@ -821,6 +825,10 @@ const en: Messages = {
   pilotsTotalNote: (card) =>
     `The Total ${card ? 'card' : 'row'} is the sum of your pilots: the overview's consolidated figures, without ISK moved between them.`,
   pilotsTotalNotePilot: (name) => `Above you see only ${name}; the Total is the consolidated view of all your pilots.`,
+  betweenPilots: 'Between your pilots',
+  betweenPilotsTitle: (name, received, sent) =>
+    `${name} received ${received} from your other pilots and sent them ${sent}. Not part of their net: it cancels out in the Total`,
+  betweenPilotsNote: 'Between your pilots = received − sent to your other pilots (donations, contracts, trades): left out of the net, it cancels out in the Total. Net + between your pilots = how much their wallet changed.',
   invToggle: 'What counts towards net worth',
   invWallets: 'Wallets',
   invPlus: '+ assets',
@@ -1265,6 +1273,10 @@ const de: Messages = {
   pilotsTotalNote: (card) =>
     `${card ? 'Die Karte' : 'Die Zeile'} Gesamt ist die Summe der Piloten: die Konsolidierung der Übersicht, ohne ISK zwischen ihnen.`,
   pilotsTotalNotePilot: (name) => `Oben siehst du nur ${name}; Gesamt ist die Konsolidierung aller deiner Piloten.`,
+  betweenPilots: 'Zwischen deinen Piloten',
+  betweenPilotsTitle: (name, received, sent) =>
+    `${name} hat ${received} von deinen anderen Piloten erhalten und ihnen ${sent} geschickt. Zählt nicht zum Netto: im Gesamt hebt es sich auf`,
+  betweenPilotsNote: 'Zwischen deinen Piloten = erhalten − an deine anderen Piloten gesendet (Spenden, Verträge, Handel): nicht im Netto, im Gesamt aufgehoben. Netto + zwischen deinen Piloten = Veränderung der Wallet.',
   invToggle: 'Was zum Vermögen zählt',
   invWallets: 'Wallets',
   invPlus: '+ Inventar',
