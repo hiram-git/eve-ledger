@@ -35,6 +35,9 @@ export type Summary = {
     lastSyncAt: string | null;
     balance: number | null;
     balanceAt: string | null;
+    // Recibido de tus otros pilotos y enviado a ellos en el período (fuera de income/expenses/net)
+    internalReceived: number;
+    internalSent: number;
   })[];
   // Brutos por actividad (totals también es bruto); el neto del trading es su margen
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
