@@ -5,7 +5,7 @@ Empaqueta el ledger personal (`apps/api` + `apps/web`) como una app de escritori
 ## Cómo funciona
 
 - **Tauri 2** (Rust) abre una ventana. En el primer arranque muestra el asistente (`ui/`, páginas locales en ES/EN/DE), que crea `ledger.env` en la carpeta de configuración del usuario. Lleva las mismas claves que los `.env` de `apps/api` y `apps/web`.
-- Con la configuración válida, `src-tauri/src/services.rs` arranca dos procesos con **Bun como sidecar**:
+- Con la configuración válida, `src-tauri/src/services.rs` copia el servidor de los recursos a la carpeta de datos local del usuario (`server/<versión-huella>`, una vez por compilación). En Windows, Bun no puede leer archivos en `C:\Program Files` («EPERM reading»). Después arranca dos procesos con **Bun como sidecar**:
   - la API (`resources/server/api/api.js`), con `DB_PATH` en la carpeta de datos del usuario y `MIGRATIONS_DIR` en los recursos;
   - la web (Astro SSR, `resources/server/web/server/entry.js`), con `API_URL` y `PILOT_SLOTS` leídos al arrancar.
 - Los dos escuchan solo en `127.0.0.1`, por defecto en los puertos 47300 (API) y 47321 (web). La ventana principal navega a `http://127.0.0.1:47321`; esa página remota no puede invocar ningún comando de Tauri (lo deniega el ACL de las capacidades).

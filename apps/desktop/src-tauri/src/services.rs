@@ -46,6 +46,49 @@ pub fn plain(path: PathBuf) -> PathBuf {
     PathBuf::from(strip_verbatim(&path.to_string_lossy()))
 }
 
+/// Copia los recursos del servidor (API, web y lanzador) a `dest/<huella>` si aún no están, y devuelve esa carpeta.
+/// La huella es la versión más el tamaño y la fecha de los archivos principales: una compilación nueva con la
+/// misma versión también se vuelve a copiar. Las copias de versiones anteriores se borran
+pub fn install_server(src: &Path, dest_root: &Path, version: &str) -> std::io::Result<PathBuf> {
+    let mut stamp = version.to_string();
+    for f in ["launch.js", "api/api.js", "web/server/entry.js"] {
+        let meta = fs::metadata(src.join(f))?;
+        let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+        stamp.push_str(&format!("-{}.{}", meta.len(), modified));
+    }
+    let name: String = stamp.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c } else { '_' }).collect();
+    let dest = dest_root.join(&name);
+    let marker = dest.join(".complete");
+    if !marker.exists() {
+        let _ = fs::remove_dir_all(&dest);
+        copy_dir(src, &dest)?;
+        fs::write(&marker, &stamp)?;
+    }
+    // Limpieza de copias viejas (si alguna está en uso, se queda para la próxima vez)
+    if let Ok(entries) = fs::read_dir(dest_root) {
+        for e in entries.flatten() {
+            if e.file_name().to_string_lossy() != name.as_str() {
+                let _ = fs::remove_dir_all(e.path());
+            }
+        }
+    }
+    Ok(dest)
+}
+
+fn copy_dir(src: &Path, dest: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let to = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &to)?;
+        } else {
+            fs::copy(entry.path(), &to)?;
+        }
+    }
+    Ok(())
+}
+
 fn strip_verbatim(path: &str) -> String {
     if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
         format!(r"\\{rest}")
@@ -83,14 +126,20 @@ impl Services {
         }
         fs::create_dir_all(&p.data).map_err(|e| e.to_string())?;
         fs::create_dir_all(&p.logs).map_err(|e| e.to_string())?;
+        // Bun no ejecuta nada desde la carpeta de instalación (en Windows, «EPERM reading» en C:\Program Files):
+        // corre una copia en la carpeta de datos local del usuario
+        let local = plain(app.path().app_local_data_dir().map_err(|e| e.to_string())?);
+        let server = install_server(&p.server, &local.join("server"), &app.package_info().version.to_string())
+            .map_err(|e| format!("copy:{e}"))?;
 
         let version = app.package_info().version.to_string();
         let mut api_env = cfg.api_env(&version);
         api_env.push(("DB_PATH".into(), p.data.join("ledger.db").to_string_lossy().into()));
-        api_env.push(("MIGRATIONS_DIR".into(), p.server.join("api").join("drizzle").to_string_lossy().into()));
+        api_env.push(("MIGRATIONS_DIR".into(), server.join("api").join("drizzle").to_string_lossy().into()));
 
-        let api = self.spawn(app, "api", &p.server.join("api").join("api.js"), api_env, &p)?;
-        let web = self.spawn(app, "web", &p.server.join("web").join("server").join("entry.js"), cfg.web_env(), &p)?;
+        let launcher = server.join("launch.js");
+        let api = self.spawn(app, "api", &launcher, &server.join("api").join("api.js"), api_env, &p)?;
+        let web = self.spawn(app, "web", &launcher, &server.join("web").join("server").join("entry.js"), cfg.web_env(), &p)?;
         let mut running = self.running.lock().unwrap();
         running.push(api);
         running.push(web);
@@ -101,6 +150,7 @@ impl Services {
         &self,
         app: &AppHandle,
         name: &'static str,
+        launcher: &Path,
         script: &Path,
         env: Vec<(String, String)>,
         p: &Paths,
@@ -110,7 +160,7 @@ impl Services {
             .sidecar("bun")
             .map_err(|e| e.to_string())?
             // launch.js sale cuando se cierra la app (aunque muera sin avisar) y luego importa el script
-            .args([p.server.join("launch.js").to_string_lossy().to_string(), script.to_string_lossy().to_string()])
+            .args([launcher.to_string_lossy().to_string(), script.to_string_lossy().to_string()])
             .envs(env)
             .current_dir(&p.data)
             .spawn()
@@ -182,7 +232,33 @@ impl Services {
 
 #[cfg(test)]
 mod tests {
-    use super::strip_verbatim;
+    use super::{install_server, strip_verbatim};
+    use std::fs;
+
+    #[test]
+    fn copia_el_servidor_una_vez_por_huella_y_borra_las_viejas() {
+        let tmp = std::env::temp_dir().join(format!("eve-ledger-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let src = tmp.join("recursos");
+        for (f, body) in [("launch.js", "l"), ("api/api.js", "a"), ("api/drizzle/0000.sql", "s"), ("web/server/entry.js", "w"), ("web/client/x.css", "c")] {
+            let path = src.join(f);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, body).unwrap();
+        }
+        let root = tmp.join("local").join("server");
+        fs::create_dir_all(root.join("0.0.9-viejo")).unwrap();
+        let dest = install_server(&src, &root, "0.1.1").unwrap();
+        assert_eq!(fs::read_to_string(dest.join("api/drizzle/0000.sql")).unwrap(), "s");
+        assert_eq!(fs::read_to_string(dest.join("web/client/x.css")).unwrap(), "c");
+        assert!(!root.join("0.0.9-viejo").exists());
+        // Segunda vez: misma carpeta, sin volver a copiar (un archivo tocado en la copia sigue igual)
+        fs::write(dest.join("web/client/x.css"), "tocado").unwrap();
+        assert_eq!(install_server(&src, &root, "0.1.1").unwrap(), dest);
+        assert_eq!(fs::read_to_string(dest.join("web/client/x.css")).unwrap(), "tocado");
+        // Otra versión: carpeta nueva
+        assert_ne!(install_server(&src, &root, "0.1.2").unwrap(), dest);
+        let _ = fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn quita_el_prefijo_verbatim_de_windows() {
