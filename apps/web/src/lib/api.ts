@@ -217,6 +217,8 @@ export type Pilot = {
   missingScopes: string[];
   lastSyncAt: string | null;
   createdAt: string;
+  // Último vínculo (el primero o el de la última revinculación)
+  linkedAt: string;
   lastError: { at: string | null; kind: string; message: string } | null;
 };
 

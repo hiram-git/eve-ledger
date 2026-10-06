@@ -43,8 +43,11 @@ export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunn
     const text = hint === m.errToken ? m.stateToken : m.stateError(kind);
     return { kind: 'error', text, title: p.lastError.message, hint };
   }
+  // Recién (re)vinculado y sin sync desde entonces: su sync está en marcha (también al revincular un piloto con datos)
+  const recent = Date.now() - new Date(p.linkedAt ?? p.createdAt).getTime() < FIRST_SYNC_GRACE_MS;
+  const syncedSinceLink = !!p.lastSyncAt && new Date(p.lastSyncAt) >= new Date(p.linkedAt ?? p.createdAt);
+  if (p.lastSyncAt && !syncedSinceLink && (syncRunning || recent)) return { kind: 'pending', text: m.syncing };
   if (!p.lastSyncAt) {
-    const recent = Date.now() - new Date(p.createdAt).getTime() < FIRST_SYNC_GRACE_MS;
     if (syncRunning || recent) return { kind: 'pending', text: m.statePending };
     // Si además le falta algún permiso, la acción es revincular (da los permisos y lanza el primer sync)
     return { kind: 'stale', text: m.stateNoFirstSync, hint: p.missingScopes.length ? m.noFirstSyncRelinkHint : m.noFirstSyncHint };

@@ -14,6 +14,8 @@ export const characters = sqliteTable('characters', {
   tokenExpiresAt: ts('token_expires_at'),
   lastSyncAt: ts('last_sync_at'),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+  // Último vínculo (también al revincular): los errores de sync anteriores ya no cuentan
+  linkedAt: ts('linked_at'),
 });
 
 export const walletJournal = sqliteTable(

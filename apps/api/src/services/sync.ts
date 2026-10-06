@@ -64,8 +64,9 @@ const CHUNK = 500;
 const TX_PAGE_SIZE = 2500;
 const TX_MAX_PAGES = 20;
 
-// Evita dos syncs simultáneos del mismo personaje
+// Evita dos syncs simultáneos del mismo personaje; los pedidos con queue (al revincular) se repiten al acabar
 const running = new Set<number>();
+const rerun = new Set<number>();
 
 type Table = typeof walletJournal | typeof walletTransactions;
 
@@ -196,12 +197,13 @@ async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | u
 }
 
 // Journal + transacciones + inventario de un personaje; después precios y nombres que falten
-export async function syncCharacter(characterId: number): Promise<SyncResult> {
+export async function syncCharacter(characterId: number, opts: { queue?: boolean } = {}): Promise<SyncResult> {
   const ch = await db.query.characters.findFirst({ where: eq(characters.id, characterId) });
   if (!ch) throw new Error(`Personaje ${characterId} no vinculado`);
 
   const result: SyncResult = { characterId, name: ch.name, inserted: 0 };
   if (running.has(characterId)) {
+    if (opts.queue) rerun.add(characterId);
     return { ...result, error: 'Ya hay una sincronización en curso para este personaje' };
   }
   running.add(characterId);
@@ -242,6 +244,12 @@ export async function syncCharacter(characterId: number): Promise<SyncResult> {
     }
   } finally {
     running.delete(characterId);
+    if (rerun.delete(characterId)) {
+      syncCharacter(characterId).then(
+        (r) => console.log(`[sync] repetido tras revincular ${r.name}: ${r.error ?? `${r.inserted} movimientos`}`),
+        (err) => console.error('[sync] repetido tras revincular:', err),
+      );
+    }
   }
   return result;
 }
