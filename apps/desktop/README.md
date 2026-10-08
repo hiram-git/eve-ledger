@@ -40,7 +40,7 @@ Sin secreto, el login de EVE usa PKCE, así que el Client ID de una app de EVE s
 
 Con esa app, el puerto de la API no se puede cambiar (la Callback URL es fija); quien quiera otro puerto usa su propia app.
 
-Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) los compila en GitHub Actions. Se lanza a mano (los instaladores quedan como artefactos) o con una etiqueta `desktop-v0.1.0`, que además crea un borrador de release.
+Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) los compila en GitHub Actions. Se lanza solo cuando una versión nueva de `src-tauri/tauri.conf.json` llega a `main` (merge): compila los tres instaladores y deja un borrador de release «EVE Ledger x.y.z» con la etiqueta `desktop-vx.y.z` (si esa release ya existe, no hace nada: hay que subir la versión). También a mano (Actions → «Instaladores de escritorio» → Run workflow: los instaladores quedan como artefactos y, con la casilla «release», también el borrador) o con una etiqueta `desktop-v0.1.0` que coincida con la versión.
 
 ## Actualizaciones automáticas
 
@@ -61,7 +61,7 @@ Cada versión va firmada; la app solo acepta lo firmado con tu clave. Solo se ac
 
 **Cada versión:**
 1. Sube la versión en `src-tauri/tauri.conf.json` y `src-tauri/Cargo.toml` (la app solo se actualiza a una versión mayor).
-2. Commit, etiqueta y push: `git tag desktop-v0.1.6 && git push origin desktop-v0.1.6`.
+2. Commit y merge a `main` (o etiqueta y push: `git tag desktop-v0.1.6 && git push origin desktop-v0.1.6`).
 3. Cuando terminen los tres sistemas en Actions, revisa el borrador de la release y pulsa **Publish release**. Desde ese momento, las apps instaladas la reciben al arrancar o en menos de 6 horas.
 
 ## Notas
