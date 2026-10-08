@@ -106,7 +106,8 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
         <div>
           <strong>{m.linkedTitle(linked.name)}</strong>
           <p>
-            {linked.lastSyncAt ? m.linkedDone(rel(linked.lastSyncAt)) : m.linkedPending}
+            {/* Solo cuenta un sync posterior al vínculo: al revincular, el anterior era con el token viejo */}
+            {linked.lastSyncAt && linked.lastSyncAt >= linked.linkedAt ? m.linkedDone(rel(linked.lastSyncAt)) : m.linkedPending}
           </p>
         </div>
       </div>

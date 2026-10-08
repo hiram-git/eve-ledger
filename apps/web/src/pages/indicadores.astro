@@ -3,9 +3,10 @@
 // los wallets), ISK por hora de ratting, fondo de reposición de las naves perdidas y comisiones del mercado
 import Base from '../layouts/Base.astro';
 import CoverageNote from '../components/CoverageNote.astro';
+import Donut from '../components/Donut.astro';
 import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
 import { hasIssue, pilotState } from '../lib/pilot-state';
-import { ago, isk, iskFull, refTypeLabel } from '../lib/format';
+import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 const lang = getLang(Astro);
@@ -54,6 +55,40 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
 const r = indicators?.ratting;
 const rep = indicators?.replacement;
 const fees = indicators?.fees;
+const dy = indicators?.days;
+const fmtSigned = (v: number) => isk(v, { lang, sign: true });
+const fullSigned = (v: number) => iskFull(v, lang, true);
+// Repartos (tortas): como mucho 7 porciones, en orden fijo; a partir de la séptima, «Otros»
+const MAX_SLICES = 7;
+const fold = <T extends { label: string; value: number }>(items: T[], otherLabel: (n: number) => string) => {
+  if (items.length <= MAX_SLICES) return items as { label: string; value: number; sub?: string }[];
+  const head = items.slice(0, MAX_SLICES - 1);
+  const rest = items.slice(MAX_SLICES - 1);
+  return [...head, { label: otherLabel(rest.length), value: rest.reduce((n, i) => n + i.value, 0) }];
+};
+const otherPilots = (n: number) => (lang === 'es' ? `Otros ${n} pilotos` : lang === 'de' ? `${n} weitere Piloten` : `${n} other pilots`);
+// ISK de ratting por piloto (todo lo que suma al piloto: recompensas, ESS, escalaciones y loot)
+const pilotSlices = fold(
+  (r?.byPilot ?? []).map((p) => ({ label: p.name, value: p.isk, hours: p.hours, iskPerHour: p.iskPerHour })),
+  otherPilots,
+);
+// Recompensas por sistema: los 6 primeros, el resto agrupado y las que no dicen sistema
+const systemSlices = [
+  ...(r?.bySystem ?? []).map((sys) => ({ label: sys.name ?? `#${sys.systemId}`, sec: sys.security, value: sys.isk, hours: sys.hours, iskPerHour: sys.iskPerHour })),
+  ...(r && r.bySystemRest.systems > 0 ? [{ label: m.systemsOther(r.bySystemRest.systems), sec: null, value: r.bySystemRest.isk, hours: r.bySystemRest.hours, iskPerHour: r.bySystemRest.isk / r.bySystemRest.hours }] : []),
+  ...(r && r.bySystemUnknown.ticks > 0 ? [{ label: m.systemsUnknown, sec: null, value: r.bySystemUnknown.isk, hours: r.bySystemUnknown.hours, iskPerHour: r.bySystemUnknown.isk / r.bySystemUnknown.hours }] : []),
+];
+const systemIsk = systemSlices.reduce((n, s) => n + s.value, 0);
+// Saldo por piloto: de mayor a menor, con su nombre
+const pilotName = new Map(pilots.map((p) => [p.id, p.name]));
+const balanceSlices = fold(
+  (o?.balances ?? [])
+    .filter((b) => (b.balance ?? 0) > 0)
+    .map((b) => ({ label: pilotName.get(b.characterId) ?? `#${b.characterId}`, value: b.balance ?? 0 }))
+    .sort((a, b) => b.value - a.value),
+  otherPilots,
+);
+const balanceTotal = balanceSlices.reduce((n, b) => n + b.value, 0);
 // «8 h», «2,3 h», «0,6 h»: una cifra decimal por debajo de 10 h; sin partirse entre líneas
 // Por debajo de una hora, en minutos (un Rifter son «1 min» de ratting, no «0 h»)
 const hours = (h: number) =>
@@ -209,47 +244,82 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                         </span>
                       ))}
                   </p>
-                  <table class="mini">
-                    <caption class="sr-only">{m.rattingByPilot}</caption>
-                    <thead>
-                      <tr>
-                        <th>{m.rattingByPilot}</th>
-                        <th>{m.rattingHours}</th>
-                        <th>{m.perHour}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {r.byPilot.map((p) => (
+                  <div class="donut-row">
+                    <Donut slices={pilotSlices} label={m.rattingShare} format={fmt} lang={lang} center={fmt(r.isk)} centerSub="ISK" />
+                    <table class="mini">
+                      <caption class="sr-only">{m.rattingByPilot}</caption>
+                      <thead>
                         <tr>
-                          <th scope="row">{p.name}</th>
-                          <td>{hours(p.hours)}</td>
-                          <td title={p.iskPerHour !== null ? full(p.iskPerHour) : undefined}>{p.iskPerHour !== null ? fmt(p.iskPerHour) : '—'}</td>
+                          <th>{m.rattingByPilot}</th>
+                          <th>{m.rattingHours}</th>
+                          <th>{m.rattingIskCol}</th>
+                          <th>{m.perHour}</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {r.bySystem.length > 0 && (
+                      </thead>
+                      <tbody>
+                        {pilotSlices.map((p, i) => (
+                          <tr>
+                            <th scope="row">
+                              <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                              {p.label}
+                            </th>
+                            <td>{'hours' in p && typeof p.hours === 'number' ? hours(p.hours) : '—'}</td>
+                            <td title={full(p.value)}>{fmt(p.value)}</td>
+                            <td title={'iskPerHour' in p && typeof p.iskPerHour === 'number' ? full(p.iskPerHour) : undefined}>
+                              {'iskPerHour' in p && typeof p.iskPerHour === 'number' ? fmt(p.iskPerHour) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p class="price-meta">{m.rattingNote(r.tickMinutes)}</p>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
+        {r && (
+          <section class="panel" aria-labelledby="systems-title">
+            <div class="panel-heading">
+              <h2 id="systems-title">{m.systemsTitle}</h2>
+              <span class="meta">{m.systemsLead(r.days)}</span>
+            </div>
+            <div class="panel-body">
+              {systemIsk <= 0 ? (
+                <p class="eta">{m.systemsNone(r.days)}</p>
+              ) : (
+                <>
+                  <div class="donut-row">
+                    <Donut slices={systemSlices} label={m.systemsShare} format={fmt} lang={lang} center={fmt(systemIsk)} centerSub="ISK" />
                     <table class="mini">
                       <caption class="sr-only">{m.rattingBySystem}</caption>
                       <thead>
                         <tr>
                           <th>{m.rattingBySystem}</th>
                           <th>{m.rattingHours}</th>
+                          <th>{m.rattingIskCol}</th>
                           <th>{m.perHour}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {r.bySystem.map((s) => (
+                        {systemSlices.map((sys, i) => (
                           <tr>
-                            <th scope="row">{s.name ?? `#${s.systemId}`}<span class="sec">{sec(s.security)}</span></th>
-                            <td>{hours(s.hours)}</td>
-                            <td title={full(s.iskPerHour)}>{fmt(s.iskPerHour)}</td>
+                            <th scope="row">
+                              <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                              {sys.label}
+                              <span class="sec">{sec(sys.sec)}</span>
+                            </th>
+                            <td>{hours(sys.hours)}</td>
+                            <td title={full(sys.value)}>{fmt(sys.value)}</td>
+                            <td title={full(sys.iskPerHour)}>{fmt(sys.iskPerHour)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  )}
-                  <p class="price-meta">{m.rattingNote(r.tickMinutes)}</p>
+                  </div>
+                  <p class="price-meta">{m.systemsNote(r.tickMinutes)}</p>
                 </>
               )}
             </div>
@@ -359,6 +429,95 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
             </div>
           </section>
         )}
+
+        {dy && (
+          <section class="panel" aria-labelledby="days-title">
+            <div class="panel-heading">
+              <h2 id="days-title">{m.daysTitle}</h2>
+              <span class="meta">{m.daysLead(dy.days)}</span>
+            </div>
+            <div class="panel-body">
+              {dy.withData === 0 || !dy.best || !dy.worst ? (
+                <p class="eta">{m.daysNone}</p>
+              ) : (
+                <>
+                  <p class="answer">
+                    <span class="answer-label">{m.daysAnswerLabel}</span>
+                    <span class="answer-value">{m.daysOf(dy.positive, dy.withData)}</span>
+                    <span class="answer-sub">{m.daysStreak(dy.streak)}</span>
+                  </p>
+                  {/* Un neto por fila: el signo en verde/rojo como en todo el ledger */}
+                  <table class="mini">
+                    <caption class="sr-only">{m.daysTitle}</caption>
+                    <tbody>
+                      <tr>
+                        <th scope="row">{m.daysBest}</th>
+                        <td class="when">{shortDate(dy.best.date, lang)}</td>
+                        <td class:list={{ pos: dy.best.net > 0, neg: dy.best.net < 0 }} title={fullSigned(dy.best.net)}>{fmtSigned(dy.best.net)}</td>
+                      </tr>
+                      <tr>
+                        <th scope="row">{m.daysWorst}</th>
+                        <td class="when">{shortDate(dy.worst.date, lang)}</td>
+                        <td class:list={{ pos: dy.worst.net > 0, neg: dy.worst.net < 0 }} title={fullSigned(dy.worst.net)}>{fmtSigned(dy.worst.net)}</td>
+                      </tr>
+                      <tr>
+                        <th scope="row">{m.daysAvg}</th>
+                        <td class="when" />
+                        <td class:list={{ pos: (dy.avg ?? 0) > 0, neg: (dy.avg ?? 0) < 0 }} title={dy.avg !== null ? fullSigned(dy.avg) : undefined}>{dy.avg !== null ? fmtSigned(dy.avg) : '—'}</td>
+                      </tr>
+                      <tr>
+                        <th scope="row">{m.daysNegative}</th>
+                        <td class="when" />
+                        <td>{dy.negative}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p class="price-meta">{m.daysNote}</p>
+                </>
+              )}
+            </div>
+          </section>
+        )}
+
+        {o && (
+          <section class="panel" aria-labelledby="share-title">
+            <div class="panel-heading">
+              <h2 id="share-title">{m.shareTitle}</h2>
+              <span class="meta">{m.shareLead}</span>
+            </div>
+            <div class="panel-body">
+              {balanceTotal <= 0 ? (
+                <p class="eta">{m.shareNone}</p>
+              ) : (
+                <div class="donut-row">
+                  <Donut slices={balanceSlices} label={m.shareChart} format={fmt} lang={lang} center={fmt(balanceTotal)} centerSub="ISK" />
+                  <table class="mini">
+                    <caption class="sr-only">{m.shareChart}</caption>
+                    <thead>
+                      <tr>
+                        <th>{m.rattingByPilot}</th>
+                        <th>{m.balance}</th>
+                        <th>{m.shareCol}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {balanceSlices.map((b, i) => (
+                        <tr>
+                          <th scope="row">
+                            <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                            {b.label}
+                          </th>
+                          <td title={full(b.value)}>{fmt(b.value)}</td>
+                          <td>{pct.format(b.value / balanceTotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     )
   }
@@ -417,6 +576,40 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     color: var(--text-muted);
     font-family: var(--mono);
     font-weight: 400;
+  }
+  /* Torta + tabla (leyenda y vista en tabla a la vez); en estrecho, la torta arriba */
+  .donut-row {
+    display: grid;
+    grid-template-columns: 136px minmax(0, 1fr);
+    gap: 14px 22px;
+    align-items: center;
+  }
+  @media (max-width: 480px) {
+    .donut-row {
+      grid-template-columns: 1fr;
+      justify-items: center;
+    }
+    .donut-row :global(.donut) {
+      width: 150px;
+    }
+    .donut-row .mini {
+      width: 100%;
+    }
+    /* Las tablas cortas no se encogen por debajo de su contenido: en 390 px «1.791.399 veces» se parte en dos líneas */
+    .mini td {
+      white-space: normal;
+    }
+  }
+  .mini td.when {
+    font-family: var(--font);
+    color: var(--text-secondary);
+    text-align: right;
+  }
+  .mini td.pos {
+    color: var(--positive);
+  }
+  .mini td.neg {
+    color: var(--critical);
   }
   h1 {
     font-size: 28px;

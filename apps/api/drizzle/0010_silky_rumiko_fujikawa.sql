@@ -1,0 +1,1 @@
+ALTER TABLE `characters` ADD `linked_at` integer;

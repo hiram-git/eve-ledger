@@ -11,7 +11,7 @@ const DAY_MS = 86_400_000;
 // (una sale de un wallet y entra en otro), así que no cuentan como ingreso ni gasto.
 // Dos pilotos DISTINTOS: en una compra de mercado (market_escrow) ESI pone al propio comprador como
 // primera y segunda parte, y eso es un gasto, no una transferencia
-const isInternal = sql<number>`(case when ${walletJournal.firstPartyId} in (select id from characters)
+export const isInternal = sql<number>`(case when ${walletJournal.firstPartyId} in (select id from characters)
   and ${walletJournal.secondPartyId} in (select id from characters)
   and ${walletJournal.firstPartyId} <> ${walletJournal.secondPartyId} then 1 else 0 end)`;
 
@@ -22,7 +22,7 @@ export type Totals = { income: number; expenses: number; net: number };
 
 // Tipo de movimiento para el detalle: el ref_type de ESI, salvo escalaciones vendidas y loot del buyback
 const refKind = refKindOf(walletJournal.refType, walletJournal.amount, walletJournal.firstPartyId);
-const activity = activityOf(walletJournal.refType, walletJournal.contextId, refKind);
+export const activity = activityOf(walletJournal.refType, walletJournal.contextId, refKind);
 
 const withNet = <T extends { income: number; expenses: number }>(r: T): T & { net: number } => ({
   ...r,

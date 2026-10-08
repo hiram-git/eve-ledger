@@ -15,6 +15,7 @@ async function listCharacters() {
       scopes: characters.scopes,
       lastSyncAt: characters.lastSyncAt,
       createdAt: characters.createdAt,
+      linkedAt: characters.linkedAt,
     })
     .from(characters);
 
@@ -23,12 +24,15 @@ async function listCharacters() {
   return rows.map((c) => {
     const granted = c.scopes.split(' ').filter(Boolean);
     const last = logs.find((l) => l.characterId === c.id && l.finishedAt);
+    // Último vínculo: el primero o, si se revinculó, el más reciente (los errores de antes ya no cuentan)
+    const linkedAt = c.linkedAt ?? c.createdAt;
     const lastError =
-      last?.error && (!c.lastSyncAt || last.startedAt >= c.lastSyncAt)
+      last?.error && (!c.lastSyncAt || last.startedAt >= c.lastSyncAt) && last.startedAt >= linkedAt
         ? { at: last.finishedAt, kind: last.kind, message: last.error }
         : null;
     return {
       ...c,
+      linkedAt,
       scopes: granted,
       missingScopes: SCOPES.filter((s) => !granted.includes(s)),
       lastError,

@@ -53,6 +53,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           refreshToken: await encrypt(tokens.refresh_token),
           accessToken: await encrypt(tokens.access_token),
           tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+          linkedAt: new Date(),
         };
 
         await db
@@ -60,8 +61,9 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           .values({ id: id.characterId, ...values })
           .onConflictDoUpdate({ target: characters.id, set: values });
 
-        // Primer sync en segundo plano: el journal solo guarda ~30 días, cuanto antes mejor
-        syncCharacter(id.characterId).then(
+        // Primer sync en segundo plano: el journal solo guarda ~30 días, cuanto antes mejor. Al revincular, si ya
+        // había un sync de ese piloto en marcha (con el token viejo), se repite en cuanto acabe
+        syncCharacter(id.characterId, { queue: true }).then(
           (r) => console.log(`[auth] sync inicial de ${id.name}: ${r.error ?? `${r.inserted} movimientos`}`),
           (err) => console.error(`[auth] sync inicial de ${id.name} falló:`, err),
         );

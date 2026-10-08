@@ -7,7 +7,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun src/db/migrate.ts",
     "export:debug": "bun scripts/export-debug.ts",
-    "import:debug": "bun scripts/import-debug.ts"
+    "import:debug": "bun scripts/import-debug.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.0",

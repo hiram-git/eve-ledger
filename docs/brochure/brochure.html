@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>EVE Ledger · brochure</title>
+<style>
+@font-face { font-family: 'Inter'; src: url('../../apps/web/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; }
+@font-face { font-family: 'Barlow Condensed'; src: url('../../apps/web/node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff2') format('woff2'); font-weight: 700; }
+@font-face { font-family: 'Barlow Condensed'; src: url('../../apps/web/node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-500-normal.woff2') format('woff2'); font-weight: 500; }
+@font-face { font-family: 'IBM Plex Mono'; src: url('../../apps/web/node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2') format('woff2'); font-weight: 500; }
+:root {
+  --bg: #070c13; --panel: #0f1822; --line: #1f2d3a; --line-strong: #2d4556; --corner: #4d7185;
+  --text: #e6eef5; --text-secondary: #9fb3c2; --text-muted: #7890a2;
+  --cyan: #61cce5; --cyan-dim: #3b7f94; --positive: #8ed7bc;
+  --font: 'Inter', system-ui, sans-serif; --mono: 'IBM Plex Mono', monospace; --display: 'Barlow Condensed', sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  width: 2000px; height: 1000px; overflow: hidden; position: relative;
+  color: var(--text); font: 28px/1.4 var(--font); font-synthesis: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 30% 0%, #13304680, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 100% 100%, #2a1f4a33, transparent 70%),
+    var(--bg);
+}
+/* estrellas */
+.stars { position: absolute; inset: 0; pointer-events: none; }
+.stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #c9d8e4; opacity: .35; }
+.stars i.b { width: 3px; height: 3px; opacity: .55; }
+.left { position: absolute; left: 96px; top: 70px; width: 860px; }
+.lockup { display: flex; align-items: center; gap: 28px; }
+.mark { width: 100px; height: 100px; border-radius: 20px; background: #0a131d; border: 4px solid var(--cyan-dim); display: grid; place-items: center; box-shadow: 0 0 0 1px #0a131d, 0 12px 40px -16px #61cce566; }
+.mark svg { width: 68px; height: 68px; }
+.wordmark { font: 700 96px/1 var(--display); letter-spacing: 0.02em; text-transform: uppercase; color: var(--text); white-space: nowrap; }
+.wordmark span { font-weight: 500; color: #c9d8e4; }
+.wordmark i { font-style: normal; color: var(--cyan); margin-left: 4px; }
+.chip { margin-left: 22px; align-self: center; font: 500 24px var(--mono); color: var(--cyan); border: 2px solid var(--cyan-dim); border-radius: 14px; padding: 6px 18px; background: #61cce50f; }
+.tagline { margin: 18px 0 0; font-size: 30px; color: var(--text-secondary); letter-spacing: 0.01em; }
+h1 { margin: 40px 0 0; font-size: 58px; line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; }
+h1 em { font-style: normal; color: var(--cyan); }
+ul { list-style: none; margin: 34px 0 0; padding: 0; display: grid; gap: 14px; }
+li { display: flex; align-items: center; gap: 20px; font-size: 27px; white-space: nowrap; color: #d4e0ea; }
+li::before { content: ''; flex: none; width: 16px; height: 16px; border: 3px solid var(--cyan-dim); transform: rotate(45deg); margin: 0 6px; }
+.box { margin-top: 34px; display: flex; align-items: center; gap: 24px; padding: 20px 28px; border: 2px solid var(--line-strong); border-radius: 18px; background: linear-gradient(135deg, #111c27, #0d1620 70%); position: relative; }
+.box::before, .box::after { content: ''; position: absolute; width: 18px; height: 18px; }
+.box::before { top: -2px; left: -2px; border-top: 2px solid var(--corner); border-left: 2px solid var(--corner); border-top-left-radius: 18px; }
+.box::after { bottom: -2px; right: -2px; border-bottom: 2px solid var(--corner); border-right: 2px solid var(--corner); border-bottom-right-radius: 18px; }
+.box svg { width: 72px; height: 72px; flex: none; fill: none; stroke: var(--cyan); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.box .t1 { font-size: 30px; font-weight: 700; }
+.box .t1 b { color: var(--cyan); }
+.box .t2 { font: 500 27px var(--mono); color: var(--cyan); margin-top: 2px; }
+.box .t3 { font-size: 24px; color: var(--text-secondary); margin-top: 4px; }
+.foot { position: absolute; left: 96px; width: 880px; bottom: 26px; font-size: 19px; line-height: 1.35; color: var(--text-muted); }
+/* capturas */
+.shots { position: absolute; left: 1000px; top: 0; right: 0; bottom: 0; }
+.shot { position: absolute; border: 2px solid #2d4556; border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: 0 30px 80px -30px #000; }
+.shot img { display: block; width: 100%; }
+.shot.back { left: 150px; top: 56px; width: 1000px; height: 600px; opacity: .8; border-color: #26384a; }
+.shot.back img { width: 1000px; }
+.shot.front { left: 20px; top: 270px; width: 1100px; height: 700px; border-color: #3b7f94; box-shadow: 0 0 0 1px #61cce522, 0 40px 100px -30px #000; }
+.shot.front img { width: 1100px; }
+.bracket { position: absolute; width: 44px; height: 44px; border: 3px solid var(--corner); }
+.bracket.tl { left: 130px; top: 36px; border-right: 0; border-bottom: 0; }
+.bracket.tr { right: 26px; top: 36px; border-left: 0; border-bottom: 0; }
+.bracket.fl { left: 0; top: 250px; border-right: 0; border-bottom: 0; border-color: var(--cyan-dim); }
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+<div class="left">
+  <div class="lockup">
+    <div class="mark"><svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#e6eef5" d="M13 15h22v8H21v5h12v8H21v5h14v8H13z"/><rect x="39" y="45" width="12" height="4" fill="#61cce5"/></svg></div>
+    <div class="wordmark">EVE <span>LEDGER</span><i>_</i></div>
+    <div class="chip" data-version></div>
+  </div>
+  <p class="tagline" data-t="tagline"></p>
+  <h1 data-t="headline"></h1>
+  <ul data-t="bullets"></ul>
+  <div class="box">
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="mon"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+    <div>
+      <div class="t1" data-t="box1"></div>
+            <div class="t3" data-t="box3"></div>
+    </div>
+  </div>
+</div>
+<div class="shots">
+  <i class="bracket tl"></i><i class="bracket tr"></i>
+  <div class="shot back"><img src="shot-losses.png" /></div>
+  <i class="bracket fl"></i>
+  <div class="shot front"><img src="shot-dashboard.png" /></div>
+</div>
+<p class="foot" data-t="foot"></p>
+<script>
+const T = {
+  es: {
+    tagline: 'Contabilidad de tus pilotos de EVE Online',
+    headline: '¿Ganas o pierdes ISK?<br>Tus pilotos, <em>una economía</em>.',
+    bullets: ['Wallets e inventario de todos tus personajes, consolidados', 'Neto por actividad: PvE, PvP, trading y logística', 'Naves perdidas: lo que te costaron de verdad', 'ISK/h de ratting, Omega de todas las cuentas y comisiones', '100 % local y parametrizable'],
+    box1: 'App de escritorio, <b>gratis</b>',
+    box3: 'Windows · macOS · Linux · Español / English / Deutsch',
+    foot: 'EVE Online y todo lo relacionado son marcas de CCP hf. EVE Ledger es una herramienta de terceros, no afiliada a CCP. Capturas con datos de demostración.',
+  },
+  en: {
+    tagline: 'A ledger for your EVE Online pilots',
+    headline: 'Making or losing ISK?<br>Your pilots, <em>one economy</em>.',
+    bullets: ['Wallets and assets of all your characters, consolidated', 'Net by activity: PvE, PvP, trading, logistics', 'Lost ships: what they really cost you', 'Ratting ISK/h, Omega for all accounts, fees & taxes', '100% local and configurable'],
+    box1: 'Desktop app, <b>free</b>',
+    box3: 'Windows · macOS · Linux · Español / English / Deutsch',
+    foot: 'EVE Online and all related marks are trademarks of CCP hf. EVE Ledger is a third-party tool, not affiliated with CCP. Screenshots: demo data.',
+  },
+};
+const q = new URLSearchParams(location.search);
+const t = T[q.get('lang') || 'es'];
+document.documentElement.lang = q.get('lang') || 'es';
+document.querySelector('[data-version]').textContent = q.get('v') || '0.1.8';
+for (const el of document.querySelectorAll('[data-t]')) {
+  const k = el.dataset.t;
+  if (k === 'bullets') el.innerHTML = t.bullets.map((b) => '<li>' + b + '</li>').join('');
+  else el.innerHTML = t[k];
+}
+// Estrellas deterministas
+let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+const stars = document.getElementById('stars');
+for (let i = 0; i < 140; i++) { const d = document.createElement('i'); if (rnd() < .2) d.className = 'b'; d.style.left = rnd() * 2000 + 'px'; d.style.top = rnd() * 1000 + 'px'; stars.append(d); }
+</script>
+</body>
+</html>

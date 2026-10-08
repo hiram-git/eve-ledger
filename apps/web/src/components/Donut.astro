@@ -1,0 +1,97 @@
+---
+// Gráfico de torta (anillo) para un reparto: cada porción es un arco con un hueco de 2 px entre vecinas, en la
+// paleta categórica validada sobre el fondo de los paneles (--cat-1…7, orden fijo: la porción i siempre lleva el
+// color i, también en la tabla de al lado, que hace de leyenda y de vista en tabla). Sin etiquetas sobre el anillo:
+// el nombre, la cifra y el % van en la tabla; cada arco lleva un <title> para el hover y el svg un aria-label
+import type { Lang } from '../lib/i18n';
+
+interface Props {
+  slices: { label: string; value: number }[];
+  label: string;
+  format: (v: number) => string;
+  lang: Lang;
+  // Texto del centro (p. ej. el total)
+  center?: string;
+  centerSub?: string;
+}
+const { slices, label, format, lang, center, centerSub } = Astro.props;
+
+const R = 44;
+const WIDTH = 16;
+const GAP = 2 / R; // 2 px de hueco medidos sobre el radio del anillo (viewBox de 120, el svg se escala)
+const total = slices.reduce((n, s) => n + Math.max(0, s.value), 0);
+const pct = new Intl.NumberFormat(lang, { style: 'percent', maximumFractionDigits: 0 });
+const polar = (a: number) => [60 + R * Math.cos(a - Math.PI / 2), 60 + R * Math.sin(a - Math.PI / 2)];
+let start = 0;
+const arcs = slices
+  .map((s, i) => {
+    const share = total > 0 ? Math.max(0, s.value) / total : 0;
+    const sweep = share * 2 * Math.PI;
+    const a0 = start;
+    start += sweep;
+    if (share <= 0) return null;
+    // Una sola porción: el anillo entero (dos semicírculos, un arco no puede dar la vuelta completa)
+    if (share >= 0.9999) return { i, s, share, d: `M60,16 A44,44 0 1 1 60,104 A44,44 0 1 1 60,16` };
+    // El hueco se reparte a los dos lados; una porción más fina que el hueco se dibuja como un hilo
+    const g = Math.min(GAP, sweep / 2 - 0.004);
+    const [x0, y0] = polar(a0 + g / 2);
+    const [x1, y1] = polar(a0 + sweep - g / 2);
+    const large = sweep - g > Math.PI ? 1 : 0;
+    return { i, s, share, d: `M${x0.toFixed(2)},${y0.toFixed(2)} A44,44 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}` };
+  })
+  .filter((a): a is NonNullable<typeof a> => a !== null);
+const summary = arcs.map((a) => `${a.s.label} ${pct.format(a.share)}`).join(', ');
+---
+
+<svg class="donut" viewBox="0 0 120 120" role="img" aria-label={`${label}: ${summary}`}>
+  {arcs.map((a) => (
+    <path d={a.d} fill="none" stroke={`var(--cat-${(a.i % 7) + 1})`} stroke-width={WIDTH}>
+      <title>{`${a.s.label} · ${format(a.s.value)} · ${pct.format(a.share)}`}</title>
+    </path>
+  ))}
+  {center && (
+    <text x="60" y={centerSub ? 58 : 64} text-anchor="middle" class="center">
+      {center}
+    </text>
+  )}
+  {centerSub && (
+    <text x="60" y="74" text-anchor="middle" class="center-sub">
+      {centerSub}
+    </text>
+  )}
+</svg>
+
+<style is:global>
+  /* Paleta categórica para repartos (validada en modo oscuro sobre #111c27: banda de luminosidad, croma, separación
+     CVD ≥ 8,4 entre vecinas, contraste ≥ 3:1). Orden fijo; nunca para interfaz ni para ingresos/gastos */
+  :root {
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #c98500;
+    --cat-5: #d55181;
+    --cat-6: #9085e9;
+    --cat-7: #e66767;
+  }
+  .donut {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .donut .center {
+    font: 500 13px var(--mono);
+    fill: var(--text);
+  }
+  .donut .center-sub {
+    font: 400 8px var(--font);
+    fill: var(--text-muted);
+  }
+  .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    border-radius: 2px;
+    vertical-align: 0;
+  }
+</style>
