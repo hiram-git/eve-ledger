@@ -270,6 +270,21 @@ export type Indicators = {
     recent: { days: number; hours: number; iskPerHour: number | null };
     byPilot: { characterId: number; name: string; ticks: number; hours: number; isk: number; iskPerHour: number | null }[];
     bySystem: { systemId: number; name: string | null; security: number | null; ticks: number; hours: number; isk: number; iskPerHour: number }[];
+    // Los sistemas que no están entre los 6 primeros, agrupados, y las recompensas cuyo sistema el journal no dice
+    bySystemRest: { systems: number; ticks: number; hours: number; isk: number };
+    bySystemUnknown: { ticks: number; hours: number; isk: number };
+  };
+  // Tus días: neto de juego por día (sin PLEX ni lo movido entre tus pilotos), consolidado
+  days: {
+    days: number;
+    withData: number;
+    positive: number;
+    negative: number;
+    best: { date: string; net: number } | null;
+    worst: { date: string; net: number } | null;
+    streak: number;
+    avg: number | null;
+    firstAt: string | null;
   };
   // Fondo de reposición: cuántas veces repones cada nave perdida con el saldo, y lo que te costaron en horas
   replacement: {

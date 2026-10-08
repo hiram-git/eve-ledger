@@ -5,7 +5,7 @@ import { PVE_EXTRA_KINDS, refKindOf } from '../lib/activities';
 import { env } from '../lib/env';
 import { shipLosses } from './losses';
 import { PLEX_TYPE_ID, getQuote } from './quotes';
-import { dailyNetRate, lastBalance } from './summary';
+import { activity, dailyNetRate, isInternal, lastBalance } from './summary';
 
 const DAY_MS = 86_400_000;
 // Desde las 00:00 EVE de hace `days - 1` días, como el resumen
@@ -166,8 +166,19 @@ export async function rattingIndicator(days = 30) {
       const hours = (v.ticks * TICK_MINUTES) / 60;
       return { systemId: id, name: sysById.get(id)?.name ?? nameById.get(id) ?? null, security: sysById.get(id)?.security ?? null, ticks: v.ticks, hours, isk: v.isk, iskPerHour: v.isk / hours };
     })
-    .sort((a, b) => b.hours - a.hours)
-    .slice(0, 6);
+    .sort((a, b) => b.hours - a.hours);
+  // Para el reparto: los 6 sistemas con más horas; el resto, agrupado; y las recompensas sin sistema (el journal no lo dice)
+  const TOP = 6;
+  const rest = bySystem.slice(TOP).reduce(
+    (acc, s) => ({ systems: acc.systems + 1, ticks: acc.ticks + s.ticks, hours: acc.hours + s.hours, isk: acc.isk + s.isk }),
+    { systems: 0, ticks: 0, hours: 0, isk: 0 },
+  );
+  const noSystemTicks = all.bounty.filter((r) => r.contextIdType !== 'system_id' || !r.contextId).length;
+  const noSystem = {
+    ticks: noSystemTicks,
+    hours: (noSystemTicks * TICK_MINUTES) / 60,
+    isk: all.bounty.filter((r) => r.contextIdType !== 'system_id' || !r.contextId).reduce((n, r) => n + Math.max(0, r.amount), 0),
+  };
 
   return {
     days,
@@ -180,8 +191,46 @@ export async function rattingIndicator(days = 30) {
     // Los últimos 7 días, para ver si el ritmo sube o baja
     recent: { days: 7, hours: recent.hours, iskPerHour: recent.iskPerHour },
     byPilot,
-    bySystem,
+    bySystem: bySystem.slice(0, TOP),
+    bySystemRest: rest,
+    bySystemUnknown: noSystem,
   };
+}
+
+// Tus días: el neto de juego de cada día del período (sin PLEX y sin lo movido entre tus pilotos), consolidado.
+// Mejor y peor día, cuántos días acabaron en positivo y la racha actual. Un día sin movimientos cuenta como 0
+// desde el primer movimiento guardado; antes del historial no cuenta
+export async function daysIndicator(days = 30) {
+  const from = periodFrom(days);
+  const day = sql<string>`date(${walletJournal.date}, 'unixepoch')`;
+  const rows = await db
+    .select({ day, net: sql<number>`coalesce(sum(${walletJournal.amount}), 0)` })
+    .from(walletJournal)
+    .where(and(gte(walletJournal.date, from), eq(isInternal, 0), sql`${activity} <> 'accounts'`))
+    .groupBy(day);
+  const [first] = await db.select({ at: sql<number | null>`min(${walletJournal.date})` }).from(walletJournal);
+  const firstAt = first?.at ? new Date(Number(first.at) * 1000) : null;
+  if (!firstAt) return { days, withData: 0, positive: 0, negative: 0, best: null, worst: null, streak: 0, avg: null, firstAt: null };
+  const netOf = new Map(rows.map((r) => [r.day, r.net]));
+  const now = new Date();
+  const todayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const firstDay = Date.UTC(firstAt.getUTCFullYear(), firstAt.getUTCMonth(), firstAt.getUTCDate());
+  const series: { date: string; net: number }[] = [];
+  for (let t = Math.max(from.getTime(), firstDay); t <= todayStart; t += DAY_MS) {
+    const date = new Date(t).toISOString().slice(0, 10);
+    series.push({ date, net: netOf.get(date) ?? 0 });
+  }
+  // Hoy aún no ha terminado: entra en la media y en la racha solo si ya tiene movimientos
+  const closed = series.filter((d, i) => i < series.length - 1 || netOf.has(d.date));
+  const withData = closed.length;
+  const positive = closed.filter((d) => d.net > 0).length;
+  const negative = closed.filter((d) => d.net < 0).length;
+  const best = closed.length ? closed.reduce((a, b) => (b.net > a.net ? b : a)) : null;
+  const worst = closed.length ? closed.reduce((a, b) => (b.net < a.net ? b : a)) : null;
+  let streak = 0;
+  for (let i = closed.length - 1; i >= 0 && closed[i].net > 0; i--) streak++;
+  const avg = withData ? closed.reduce((n, d) => n + d.net, 0) / withData : null;
+  return { days, withData, positive, negative, best, worst, streak, avg, firstAt: firstAt.toISOString() };
 }
 
 // Fondo de reposición: cuántas veces repones cada nave que has perdido (casco + equipo como lo perdiste, al
@@ -255,5 +304,6 @@ export async function getIndicators() {
     ratting,
     replacement: await replacementIndicator(ratting.iskPerHour),
     fees: await feesIndicator(),
+    days: await daysIndicator(),
   };
 }
