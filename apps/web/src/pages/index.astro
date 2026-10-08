@@ -12,6 +12,8 @@ import ActivityList from '../components/ActivityList.astro';
 import BarList, { type BarRow } from '../components/BarList.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import ShipLosses from '../components/ShipLosses.astro';
+import Donut from '../components/Donut.astro';
+import { fold } from '../lib/shares';
 import {
   ApiError,
   getIndicators,
@@ -312,6 +314,35 @@ const reconcileGaps = (summary?.characters ?? []).filter((c) => c.lastSyncAt && 
 // En la vista de un piloto la fila Total sigue siendo el consolidado: la etiqueta lo dice
 const withData = (summary?.characters ?? []).filter((c) => c.lastSyncAt).length;
 const totalLabel = selected ? m.pilotsTotalAll : m.pilotsTotal(summary?.characters.length ?? 0, withData);
+// Tortas de la tabla de pilotos: de quién vienen los ingresos y quién gasta (brutos, sin lo movido entre pilotos).
+// El color sigue al piloto (su posición en la lista), también en la muestra de su fila; con más de 7, «Otros»
+const pilotRows = summary?.characters ?? [];
+const pilotColor = (i: number) => `var(--cat-${(pilotRows.length <= 7 ? i : Math.min(i, 6)) + 1})`;
+const pilotIncomeSlices = fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? c.income : 0 })), m.otherPilots);
+const pilotExpensesSlices = fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? c.expenses : 0 })), m.otherPilots);
+// Columnas que ordenan la tabla (y las tarjetas en móvil): clave del data-* de cada fila y su etiqueta
+const sortCols = [
+  { key: 'name', label: m.pilot, cls: '' },
+  { key: 'opening', label: m.openingBalance, cls: 'opening' },
+  { key: 'income', label: m.income, cls: '' },
+  { key: 'expenses', label: m.expenses, cls: '' },
+  { key: 'between', label: m.betweenPilots, cls: '' },
+  { key: 'net', label: m.net, cls: '' },
+  { key: 'balance', label: m.balance, cls: 'now-start' },
+  ...(withInv ? [{ key: 'inventory', label: m.inventory, cls: '' }] : []),
+  { key: 'sync', label: m.lastSync, cls: '' },
+];
+const rowData = (c: (typeof pilotRows)[number]) => ({
+  'data-name': c.name,
+  'data-opening': c.openingBalance ?? '',
+  'data-income': c.lastSyncAt ? c.income : '',
+  'data-expenses': c.lastSyncAt ? -c.expenses : '',
+  'data-between': c.lastSyncAt ? between(c) : '',
+  'data-net': c.lastSyncAt ? c.net : '',
+  'data-balance': c.balance ?? '',
+  'data-inventory': inventoryByChar.get(c.id) ?? '',
+  'data-sync': c.lastSyncAt ? new Date(c.lastSyncAt).getTime() : '',
+});
 // Lo que aporta cada piloto a Patrimonio (saldo + inventario): la nota de cobertura dice cuánto es viejo
 const worthByPilot: Record<number, number> = Object.fromEntries(
   (summary?.characters ?? []).map((c) => [c.id, (c.balance ?? 0) + (inventoryByChar.get(c.id) ?? 0)]),
@@ -883,7 +914,7 @@ const worthNote =
 
             {!pilotEmpty && losses && <ShipLosses losses={losses} days={days} pilotName={selected?.name} />}
 
-            <section class="panel">
+            <section class="panel" data-pilots-panel>
               <div class="panel-heading">
                 <h2 id="pilotos">{m.pilotsPeriod(days)}</h2>
                 <a class="meta link" href="/pilotos">
@@ -891,28 +922,55 @@ const worthNote =
                   {m.managePilots}
                 </a>
               </div>
+              {(pilotTotals.income > 0 || pilotTotals.expenses > 0) && (
+                <div class="panel-body shares pilot-shares">
+                  {pilotTotals.income > 0 && (
+                    <figure class="caption-only">
+                      <Donut slices={pilotIncomeSlices} label={m.shareIncomePilot} format={fmt} lang={lang} center={fmt(pilotTotals.income)} centerSub="ISK" />
+                      <figcaption>{m.shareIncomePilot}</figcaption>
+                    </figure>
+                  )}
+                  {pilotTotals.expenses > 0 && (
+                    <figure class="caption-only">
+                      <Donut slices={pilotExpensesSlices} label={m.shareExpensesPilot} format={fmt} lang={lang} center={fmt(pilotTotals.expenses)} centerSub="ISK" />
+                      <figcaption>{m.shareExpensesPilot}</figcaption>
+                    </figure>
+                  )}
+                </div>
+              )}
+              {/* Móvil: las tarjetas no tienen cabecera que ordene; un selector hace lo mismo */}
+              <div class="cards-sort">
+                <label class="sort-select">
+                  {m.sortBy}
+                  <select data-sort-select>
+                    <option value="">{m.sortOriginal}</option>
+                    {sortCols.map((col) => (
+                      <option value={col.key}>{col.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <div class="scroll pilots-table" role="group" aria-label={m.pilots}>
                 <table class="pilots">
                   <thead>
                     <tr>
-                      <th>{m.pilot}</th>
-                      {/* Saldo anterior + (ingresos − gastos + entre tus pilotos = neto) = saldo */}
-                      <th class="opening">{m.openingBalance}</th>
-                      <th>{m.income}</th>
-                      <th>{m.expenses}</th>
-                      <th>{m.betweenPilots}</th>
-                      <th>{m.net}</th>
-                      {/* Del período (arriba) a «ahora»: saldo, inventario y último sync, tras una línea */}
-                      <th class="now-start">{m.balance}</th>
-                      {withInv && <th>{m.inventory}</th>}
-                      <th>{m.lastSync}</th>
+                      {/* Saldo anterior + (ingresos − gastos + entre tus pilotos = neto) = saldo; del período a «ahora»
+                          (saldo, inventario, último sync) tras una línea. Cada cabecera ordena la tabla */}
+                      {sortCols.map((col) => (
+                        <th class={col.cls || undefined} aria-sort="none">
+                          <button type="button" class="sort-button" data-sort={col.key} title={m.sortByCol(col.label)}>
+                            {col.label}
+                          </button>
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.characters.map((c) => (
-                      <tr class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined}>
+                    {summary.characters.map((c, i) => (
+                      <tr class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined} {...rowData(c)}>
                         <td>
                           <span class="who">
+                            <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
                             <img
                               src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`}
                               alt=""
@@ -977,10 +1035,11 @@ const worthNote =
               {/* Móvil: una tarjeta por piloto con nombre, neto y último sync; la tabla de 7 columnas se oculta */}
               <ul class="pilot-cards">
                 {
-                  summary.characters.map((c) => (
-                    <li class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined}>
+                  summary.characters.map((c, i) => (
+                    <li class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined} {...rowData(c)}>
                       <div class="card-head">
                         <a class="who" href={href(days, c.id)} title={m.viewLedger(c.name)}>
+                          <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
                           <img
                             src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`}
                             alt=""
@@ -1072,6 +1131,62 @@ const worthNote =
                   </dl>
                 </li>
               </ul>
+              <script>
+                // Ordenar la tabla de pilotos (y las tarjetas de móvil, que llevan los mismos data-*) por una columna.
+                // Clic en la cabecera: de mayor a menor (el nombre, de la A a la Z), otro clic invierte, el tercero
+                // vuelve al orden original. Sin dato («—») siempre al final. La fila Total no se mueve
+                const panel = document.querySelector<HTMLElement>('[data-pilots-panel]');
+                const tbody = panel?.querySelector<HTMLTableSectionElement>('table.pilots tbody');
+                const cards = panel?.querySelector<HTMLElement>('.pilot-cards');
+                if (panel && tbody && cards) {
+                  const rows = [...tbody.rows];
+                  const items = [...cards.querySelectorAll<HTMLElement>(':scope > li:not(.total)')];
+                  const totalCard = cards.querySelector<HTMLElement>(':scope > li.total');
+                  const heads = [...panel.querySelectorAll<HTMLTableCellElement>('th[aria-sort]')];
+                  const select = panel.querySelector<HTMLSelectElement>('select[data-sort-select]');
+                  const value = (el: HTMLElement, key: string): string | number | null => {
+                    const v = el.dataset[key];
+                    if (v === undefined || v === '') return null;
+                    return key === 'name' ? v : Number(v);
+                  };
+                  const apply = (key: string, dir: 'asc' | 'desc') => {
+                    const idx = rows.map((_, i) => i);
+                    if (key) {
+                      idx.sort((a, b) => {
+                        const va = value(rows[a], key);
+                        const vb = value(rows[b], key);
+                        if (va === null && vb === null) return a - b;
+                        if (va === null) return 1;
+                        if (vb === null) return -1;
+                        const c = typeof va === 'string' ? va.localeCompare(String(vb), undefined, { sensitivity: 'base' }) : va - Number(vb);
+                        return (c || a - b) * (dir === 'desc' ? -1 : 1);
+                      });
+                    }
+                    for (const i of idx) {
+                      tbody.append(rows[i]);
+                      if (items[i]) cards.append(items[i]);
+                    }
+                    if (totalCard) cards.append(totalCard);
+                    for (const th of heads) {
+                      const k = th.querySelector<HTMLElement>('[data-sort]')?.dataset.sort;
+                      th.setAttribute('aria-sort', k && k === key ? (dir === 'desc' ? 'descending' : 'ascending') : 'none');
+                    }
+                    if (select) select.value = key;
+                  };
+                  const first = (key: string) => (key === 'name' ? 'asc' : 'desc');
+                  for (const th of heads) {
+                    const btn = th.querySelector<HTMLButtonElement>('[data-sort]');
+                    btn?.addEventListener('click', () => {
+                      const key = btn.dataset.sort ?? '';
+                      const cur = th.getAttribute('aria-sort');
+                      if (cur === 'none') apply(key, first(key));
+                      else if ((cur === 'descending') === (first(key) === 'desc')) apply(key, first(key) === 'desc' ? 'asc' : 'desc');
+                      else apply('', 'asc');
+                    });
+                  }
+                  select?.addEventListener('change', () => apply(select.value, first(select.value)));
+                }
+              </script>
               {/* Dos notas cortas: qué es el Total (en la vista de un piloto, que es el consolidado) y de dónde salen saldo e inventario */}
               <div class="panel-note pilots-note">
                 <p>
@@ -1811,6 +1926,13 @@ const worthNote =
     padding: 0;
     list-style: none;
   }
+  .pilot-shares {
+    border-bottom: 1px solid var(--line);
+  }
+  .cards-sort {
+    display: none;
+    padding: 12px 16px 0;
+  }
   @media (max-width: 600px) {
     /* Una línea por piloto, con su acción: en móvil es donde más cuesta ir a Pilotos */
     .pilot-health {
@@ -1831,6 +1953,9 @@ const worthNote =
     }
     .pilot-cards {
       display: block;
+    }
+    .cards-sort {
+      display: flex;
     }
     .pilot-cards li {
       padding: 0 16px 14px;

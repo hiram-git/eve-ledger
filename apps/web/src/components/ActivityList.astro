@@ -2,8 +2,10 @@
 // Detalle por actividad (PvE, PvP, trading como margen, otros). El vistazo con el neto de cada una vive en la
 // tarjeta de Neto: aquí solo lo que hay detrás, por tipo de movimiento de ESI, sin repetir barras ni netos.
 import type { Summary } from '../lib/api';
+import Donut from './Donut.astro';
 import { isk, iskFull, refTypeLabel } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
+import { shareOf } from '../lib/shares';
 
 interface Props {
   activities: Summary['byActivity'];
@@ -15,9 +17,16 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const out = (v: number) => (v ? -v : 0);
 
-// Orden fijo (PvE, PvP, Trading, Otros, el de la API): que la fila no cambie de sitio con el período
+// Orden fijo (PvE, PvP, Trading, Logística, Otros, PLEX: el de la API): que la fila no cambie de sitio con el
+// período, y que cada actividad lleve siempre el mismo color (la porción i de las tortas y la muestra de su fila)
 const rows = activities;
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
+const color = (i: number) => `var(--cat-${(i % 7) + 1})`;
+// Tortas: de dónde vienen los ingresos y a dónde van los gastos (brutos), por actividad
+const totalIncome = rows.reduce((n, a) => n + a.income, 0);
+const totalExpenses = rows.reduce((n, a) => n + a.expenses, 0);
+const incomeSlices = rows.map((a) => ({ label: m.activityName[a.activity], value: a.income }));
+const expensesSlices = rows.map((a) => ({ label: m.activityName[a.activity], value: a.expenses }));
 ---
 
 <section class="panel" id="por-actividad">
@@ -28,41 +37,85 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
     rows.length === 0 ? (
       <p class="empty panel-body">{m.noData}</p>
     ) : (
-      <ul>
-        {rows.map((a) => (
-          <li>
-            <details>
-              <summary>
-                <span class="who">
-                  <span class="name">{m.activityName[a.activity]}</span>
+      <>
+        {(totalIncome > 0 || totalExpenses > 0) && (
+          <div class="panel-body shares">
+            {totalIncome > 0 && (
+              <figure class="caption-only">
+                <Donut slices={incomeSlices} label={m.shareIncomeActivity} format={fmt} lang={lang} center={fmt(totalIncome)} centerSub="ISK" />
+                <figcaption>{m.shareIncomeActivity}</figcaption>
+              </figure>
+            )}
+            {totalExpenses > 0 && (
+              <figure class="caption-only">
+                <Donut slices={expensesSlices} label={m.shareExpensesActivity} format={fmt} lang={lang} center={fmt(totalExpenses)} centerSub="ISK" />
+                <figcaption>{m.shareExpensesActivity}</figcaption>
+              </figure>
+            )}
+          </div>
+        )}
+        {/* Cabecera de las columnas de la lista (las filas son <details>, no una tabla) */}
+        <div class="cols" aria-hidden="true">
+          <span />
+          <span>{m.income}</span>
+          <span>{m.expenses}</span>
+        </div>
+        <ul>
+          {rows.map((a, i) => (
+            <li>
+              <details>
+                <summary>
+                  <span class="name">
+                    <i class="swatch" style={`background: ${color(i)}`} aria-hidden="true" />
+                    {m.activityName[a.activity]}
+                  </span>
                   <span class="hint">{m.activityHint[a.activity]}</span>
-                </span>
-                <span class="gross" title={`${m.net} ${full(a.net)}`}>{m.activityInOut(fmt(a.income), fmt(a.expenses))}</span>
-              </summary>
-              <table aria-label={m.activityDetail(m.activityName[a.activity])}>
-                <thead>
-                  <tr>
-                    <th>{m.entryType}</th>
-                    <th>{m.income}</th>
-                    <th>{m.expenses}</th>
-                    <th>{m.net}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {a.refTypes.map((r) => (
+                  <span class="cell inc" title={`${m.income} ${full(a.income)}`}>
+                    <span class="sr-only">{m.income} </span>
+                    <span class="amount">{a.income ? fmt(a.income) : '—'}</span>
+                    {a.income > 0 && (
+                      <span class="share">
+                        <span class="sr-only">{m.shareOfIncome(shareOf(a.income, totalIncome, lang))}</span>
+                        <span aria-hidden="true">{shareOf(a.income, totalIncome, lang)}</span>
+                      </span>
+                    )}
+                  </span>
+                  <span class="cell exp" title={`${m.expenses} ${full(out(a.expenses))}`}>
+                    <span class="sr-only">{m.expenses} </span>
+                    <span class="amount">{a.expenses ? fmt(out(a.expenses)) : '—'}</span>
+                    {a.expenses > 0 && (
+                      <span class="share">
+                        <span class="sr-only">{m.shareOfExpenses(shareOf(a.expenses, totalExpenses, lang))}</span>
+                        <span aria-hidden="true">{shareOf(a.expenses, totalExpenses, lang)}</span>
+                      </span>
+                    )}
+                  </span>
+                </summary>
+                <table aria-label={m.activityDetail(m.activityName[a.activity])}>
+                  <thead>
                     <tr>
-                      <td title={m.entries(r.count)}>{refTypeLabel(r.refType, lang)}</td>
-                      <td title={full(r.income)}>{r.income ? fmt(r.income) : '—'}</td>
-                      <td title={full(out(r.expenses))}>{r.expenses ? fmt(out(r.expenses)) : '—'}</td>
-                      <td class:list={[sign(r.net)]} title={`${m.income} ${full(r.income)} · ${m.expenses} ${full(out(r.expenses))}`}>{fmt(r.net, { sign: true })}</td>
+                      <th>{m.entryType}</th>
+                      <th>{m.income}</th>
+                      <th>{m.expenses}</th>
+                      <th>{m.net}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
-          </li>
-        ))}
-      </ul>
+                  </thead>
+                  <tbody>
+                    {a.refTypes.map((r) => (
+                      <tr>
+                        <td title={m.entries(r.count)}>{refTypeLabel(r.refType, lang)}</td>
+                        <td title={full(r.income)}>{r.income ? fmt(r.income) : '—'}</td>
+                        <td title={full(out(r.expenses))}>{r.expenses ? fmt(out(r.expenses)) : '—'}</td>
+                        <td class:list={[sign(r.net)]} title={`${m.income} ${full(r.income)} · ${m.expenses} ${full(out(r.expenses))}`}>{fmt(r.net, { sign: true })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </>
     )
   }
   <p class="panel-note">{m.activityNote}.</p>
@@ -72,19 +125,55 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
   section {
     scroll-margin-top: 16px;
   }
+  .shares {
+    border-bottom: 1px solid var(--line);
+  }
   ul {
     list-style: none;
     margin: 0;
-    padding: 6px 0;
+    padding: 0 0 6px;
   }
   li + li {
     border-top: 1px solid var(--line);
   }
+  /* Cabecera y filas comparten la misma rejilla: nombre (con su pista debajo), Ingresos, Gastos */
+  .cols,
   summary {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 7.5rem 7.5rem;
     align-items: center;
-    gap: 20px;
+    gap: 2px 20px;
+  }
+  summary {
+    grid-template-areas:
+      'name inc exp'
+      'hint inc exp';
+  }
+  .name {
+    grid-area: name;
+  }
+  .hint {
+    grid-area: hint;
+  }
+  .cell.inc {
+    grid-area: inc;
+  }
+  .cell.exp {
+    grid-area: exp;
+  }
+  .cols {
+    padding: 10px 22px 8px 40px;
+    border-bottom: 1px solid var(--line-strong);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .cols span:not(:first-child) {
+    text-align: right;
+  }
+  summary {
     padding: 12px 22px 12px 40px;
     cursor: pointer;
     list-style: none;
@@ -118,12 +207,10 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
   summary:focus-visible {
     outline-offset: -2px;
   }
-  .who {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-  }
   .name {
+    display: flex;
+    align-items: center;
+    min-width: 0;
     font-weight: 600;
     color: var(--text);
   }
@@ -137,10 +224,17 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
   td.neg {
     color: var(--critical);
   }
-  .gross {
-    font: 13px var(--mono);
-    color: var(--text-muted);
+  .cell {
+    display: grid;
+    justify-items: end;
+    gap: 2px;
+    font: 14px var(--mono);
+    color: var(--text);
     white-space: nowrap;
+  }
+  .share {
+    font-size: 12px;
+    color: var(--text-muted);
   }
   table {
     margin: 0 22px 14px 40px;
@@ -160,16 +254,28 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
     font-size: 13px;
   }
   @media (max-width: 600px) {
+    /* En móvil la pista pasa a su propia línea, a todo el ancho */
+    .cols,
     summary {
-      grid-template-columns: 1fr;
-      gap: 4px;
+      grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem;
+      gap: 4px 12px;
+    }
+    summary {
+      grid-template-areas:
+        'name inc exp'
+        'hint hint hint';
+    }
+    .cols {
+      padding: 10px 16px 8px 34px;
+    }
+    summary {
       padding: 12px 16px 12px 34px;
     }
     summary::before {
       left: 16px;
     }
-    .gross {
-      white-space: normal;
+    .cell {
+      font-size: 13px;
     }
     table {
       margin: 0 16px 14px;

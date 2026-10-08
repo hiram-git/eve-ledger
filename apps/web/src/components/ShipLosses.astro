@@ -6,8 +6,10 @@
 // estimación al precio medio y va aparte, en gris y con «~»: el verde/rojo solo para lo que ya no puede cambiar.
 // En la vista de un piloto son SUS naves (las pague quien las pague); su wallet va como línea secundaria
 import type { Losses } from '../lib/api';
+import Donut from './Donut.astro';
 import { isk, iskFull, remaining, shortDate, shortDateTime } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
+import { fold } from '../lib/shares';
 
 interface Props {
   losses: Losses;
@@ -143,6 +145,31 @@ const coverage = [
   .filter(Boolean)
   .join(' ');
 const notes = coverage ? [coverage] : [];
+// Tortas: a quién y a qué nave se fue el coste (lo que te costó cada pérdida, con lo estimado por reponer; una
+// pérdida que el seguro dejó en positivo cuenta 0). De mayor a menor, 6 + «Otros». Por piloto solo en el consolidado
+const costOf = (l: Loss) => Math.max(0, -l.cost);
+const sumBy = (key: (l: Loss) => string) => {
+  const acc = new Map<string, { label: string; value: number; count: number }>();
+  for (const l of losses.losses) {
+    const k = key(l);
+    const cur = acc.get(k) ?? { label: k, value: 0, count: 0 };
+    cur.value += costOf(l);
+    cur.count += 1;
+    acc.set(k, cur);
+  }
+  return [...acc.values()].filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+};
+const byPilot = pilotName ? [] : sumBy((l) => l.pilot ?? `#${l.characterId}`);
+const byShip = sumBy((l) => l.ship ?? `#${l.shipTypeId}`);
+const foldCount = (items: { label: string; value: number; count: number }[], other: (n: number) => string) => {
+  const folded = fold(items, other);
+  const rest = items.slice(folded.length - 1);
+  return folded.map((f, i) => ('count' in f ? f : { ...f, count: rest.reduce((n, r) => n + r.count, 0) })) as typeof items;
+};
+const pilotSlices = byPilot.length > 1 ? foldCount(byPilot, m.otherPilots) : [];
+const shipSlices = byShip.length > 1 ? foldCount(byShip, m.otherShips) : [];
+const costTotal = losses.losses.reduce((n, l) => n + costOf(l), 0);
+const shareCaption = (label: string) => (tot.toReplace >= 0.5 ? `${label} (${m.shareCostEstimate})` : label);
 // Vista de un piloto que no perdió nada pero pagó la reposición de otro (el alter de Jita): también hay cuenta
 const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
 ---
@@ -227,6 +254,43 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
           </tbody>
         </table>
       </div>
+      {(pilotSlices.length > 0 || shipSlices.length > 0) && (
+        <div class="panel-body shares">
+          {[
+            { slices: pilotSlices, label: m.shareCostPilot, col: m.pilot },
+            { slices: shipSlices, label: m.shareCostShip, col: m.lossShip },
+          ]
+            .filter((f) => f.slices.length > 0)
+            .map((f) => (
+              <figure>
+                <Donut slices={f.slices} label={shareCaption(f.label)} format={fmt} lang={lang} center={fmt(costTotal)} centerSub="ISK" />
+                <table class="mini">
+                  <caption class="sr-only">{shareCaption(f.label)}</caption>
+                  <thead>
+                    <tr>
+                      <th>{f.col}</th>
+                      <th>{m.lossShipsCol}</th>
+                      <th>{m.lossCost}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {f.slices.map((p, i) => (
+                      <tr>
+                        <th scope="row">
+                          <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                          {p.label}
+                        </th>
+                        <td>{p.count}</td>
+                        <td title={full(p.value)}>{fmt(p.value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <figcaption class="sr-only">{shareCaption(f.label)}</figcaption>
+              </figure>
+            ))}
+        </div>
+      )}
       {tot.count > 0 && (
         <table class="loss-table" aria-labelledby="losses-title">
           <thead>
@@ -465,6 +529,9 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
     padding-left: 12px;
     color: var(--text-muted);
     text-align: center;
+  }
+  .shares {
+    border-top: 1px solid var(--line);
   }
   .loss-table {
     width: 100%;

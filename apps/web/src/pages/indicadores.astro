@@ -4,6 +4,7 @@
 import Base from '../layouts/Base.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import Donut from '../components/Donut.astro';
+import { fold } from '../lib/shares';
 import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
 import { hasIssue, pilotState } from '../lib/pilot-state';
 import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
@@ -58,15 +59,7 @@ const fees = indicators?.fees;
 const dy = indicators?.days;
 const fmtSigned = (v: number) => isk(v, { lang, sign: true });
 const fullSigned = (v: number) => iskFull(v, lang, true);
-// Repartos (tortas): como mucho 7 porciones, en orden fijo; a partir de la séptima, «Otros»
-const MAX_SLICES = 7;
-const fold = <T extends { label: string; value: number }>(items: T[], otherLabel: (n: number) => string) => {
-  if (items.length <= MAX_SLICES) return items as { label: string; value: number; sub?: string }[];
-  const head = items.slice(0, MAX_SLICES - 1);
-  const rest = items.slice(MAX_SLICES - 1);
-  return [...head, { label: otherLabel(rest.length), value: rest.reduce((n, i) => n + i.value, 0) }];
-};
-const otherPilots = (n: number) => (lang === 'es' ? `Otros ${n} pilotos` : lang === 'de' ? `${n} weitere Piloten` : `${n} other pilots`);
+const otherPilots = m.otherPilots;
 // ISK de ratting por piloto (todo lo que suma al piloto: recompensas, ESS, escalaciones y loot)
 const pilotSlices = fold(
   (r?.byPilot ?? []).map((p) => ({ label: p.name, value: p.isk, hours: p.hours, iskPerHour: p.iskPerHour })),
@@ -528,49 +521,8 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     display: grid;
     gap: 6px;
   }
-  /* Tablas cortas de las tarjetas: etiqueta a la izquierda, cifras a la derecha */
-  .mini {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .mini th,
-  .mini td {
-    padding: 7px 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 13px;
-    text-align: right;
-  }
-  .mini th:first-child {
-    text-align: left;
-  }
-  .mini th:not(:first-child),
-  .mini td {
-    padding-left: 12px;
-  }
-  /* Las cabeceras se parten (el tema pone nowrap en th): si no, ensanchaban la tarjeta en móvil */
-  .mini thead th {
-    font-size: 12px;
-    color: var(--text-muted);
-    white-space: normal;
-    vertical-align: bottom;
-  }
   .cards > section {
     min-width: 0;
-  }
-  .mini tbody th {
-    font-weight: 500;
-    color: var(--text);
-    text-transform: none;
-    letter-spacing: 0;
-    white-space: normal;
-  }
-  .mini td {
-    font-family: var(--mono);
-    color: var(--text);
-    white-space: nowrap;
-  }
-  .mini tbody tr:last-child > * {
-    border-bottom: 0;
   }
   .sec {
     color: var(--text-muted);
@@ -594,10 +546,6 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     }
     .donut-row .mini {
       width: 100%;
-    }
-    /* Las tablas cortas no se encogen por debajo de su contenido: en 390 px «1.791.399 veces» se parte en dos líneas */
-    .mini td {
-      white-space: normal;
     }
   }
   .mini td.when {
