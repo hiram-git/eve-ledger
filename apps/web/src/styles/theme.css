@@ -483,6 +483,166 @@ main {
   color: var(--text-muted);
 }
 
+/* Repartos (tortas) en los paneles: una fila de figuras, cada una con su torta y su pie (o su tabla-leyenda al lado) */
+.shares {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 56px;
+}
+.shares figure {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px 20px;
+  align-items: center;
+  flex: 1 1 360px;
+  margin: 0;
+  min-width: 0;
+}
+.shares figure.caption-only {
+  grid-template-columns: 120px;
+  justify-items: center;
+  flex: 0 0 auto;
+}
+.shares figcaption {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.shares figure.caption-only figcaption {
+  text-align: center;
+}
+.shares .mini {
+  align-self: start;
+}
+/* La muestra de color pegada al nombre (en .who el hueco ya lo pone el gap) */
+.who .swatch {
+  margin-right: 0;
+}
+@media (max-width: 600px) {
+  .shares {
+    gap: 20px 32px;
+  }
+  .shares figure {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .shares figure .donut {
+    width: 140px;
+  }
+  .shares figure.caption-only .donut {
+    width: 120px;
+  }
+  .shares .mini {
+    width: 100%;
+  }
+}
+/* Tablas cortas junto a una torta: etiqueta a la izquierda, cifras a la derecha; la muestra de color es la leyenda */
+.mini {
+  width: 100%;
+  border-collapse: collapse;
+}
+.mini th,
+.mini td {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  text-align: right;
+}
+.mini th:first-child {
+  text-align: left;
+}
+.mini th:not(:first-child),
+.mini td {
+  padding-left: 12px;
+}
+/* Las cabeceras se parten (th lleva nowrap): si no, ensanchaban la tarjeta en móvil */
+.mini thead th {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: normal;
+  vertical-align: bottom;
+}
+.mini tbody th {
+  font-weight: 500;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+}
+.mini td {
+  font-family: var(--mono);
+  color: var(--text);
+  white-space: nowrap;
+}
+.mini tbody tr:last-child > * {
+  border-bottom: 0;
+}
+@media (max-width: 480px) {
+  /* Las tablas cortas no se encogen por debajo de su contenido: en 390 px «1.791.399 veces» se parte en dos líneas */
+  .mini td {
+    white-space: normal;
+  }
+}
+/* Cabecera de columna que ordena la tabla (botón sin aspecto de botón; la flecha, en el relleno de la celda para no
+   ensanchar la columna, dice el orden) */
+.sort-button {
+  position: relative;
+  display: inline-block;
+  margin: -6px -8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.sort-button:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.sort-button::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  width: 0.9em;
+  height: 0.9em;
+  translate: 0 -50%;
+  opacity: 0;
+  background: currentColor;
+  mask: center / contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 3l4 5H4z'/%3E%3C/svg%3E");
+}
+th[aria-sort='ascending'] .sort-button,
+th[aria-sort='descending'] .sort-button {
+  color: var(--text);
+}
+th[aria-sort='ascending'] .sort-button::after {
+  opacity: 1;
+}
+th[aria-sort='descending'] .sort-button::after {
+  opacity: 1;
+  transform: rotate(180deg);
+}
+/* Selector de orden (móvil, donde la tabla son tarjetas sin cabecera) */
+.sort-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.sort-select select {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel-2, #0f1a25);
+  color: var(--text);
+  font: 13px var(--font);
+}
+
 /* Aviso / mensajes */
 .notice {
   display: flex;
