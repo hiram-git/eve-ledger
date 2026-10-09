@@ -15,7 +15,7 @@ import { LANG_NAMES, LANGS, getLang, t } from '../lib/i18n';
 
 interface Props {
   title?: string;
-  section: 'resumen' | 'indicadores' | 'pilotos';
+  section: 'resumen' | 'indicadores' | 'balances' | 'pilotos';
   status?: SyncStatus;
   pilots?: number;
   // Pilotos con el sync roto, viejo o sin primer sync: un punto ámbar junto a «Pilotos»
@@ -67,6 +67,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       <nav class="sections" aria-label={m.sections}>
         <a href="/" aria-current={section === 'resumen' ? 'page' : undefined}>{m.summary}</a>
         <a href="/indicadores" aria-current={section === 'indicadores' ? 'page' : undefined}>{m.indicators}</a>
+        <a href="/balances" aria-current={section === 'balances' ? 'page' : undefined}>{m.balances}</a>
         <a
           href="/pilotos"
           aria-current={section === 'pilotos' ? 'page' : undefined}

@@ -94,6 +94,9 @@ const REF_TYPES: Record<string, Record<Lang, string>> = {
   jump_clone_activation_fee: { es: 'Activación de clon', en: 'Jump clone activation', de: 'Sprungklon-Aktivierung' },
   jump_clone_installation_fee: { es: 'Instalación de clon', en: 'Jump clone installation', de: 'Sprungklon-Installation' },
   skill_purchase: { es: 'Compra de skills', en: 'Skill purchase', de: 'Skill-Kauf' },
+  project_discovery_reward: { es: 'Project Discovery', en: 'Project Discovery', de: 'Project Discovery' },
+  air_career_program_reward: { es: 'Programa AIR', en: 'AIR career program', de: 'AIR-Karriereprogramm' },
+  manufacturing: { es: 'Fabricación', en: 'Manufacturing', de: 'Fertigung' },
   insurance: { es: 'Seguros', en: 'Insurance', de: 'Versicherung' },
   kill_right_fee: { es: 'Kill rights', en: 'Kill rights', de: 'Kill-Rights' },
   // No son ref_types de ESI: escalaciones vendidas (donaciones redondas de fuera) y loot vendido al buyback (PvE)

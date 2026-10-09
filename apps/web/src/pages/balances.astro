@@ -1,0 +1,747 @@
+---
+// Balances: las cifras del resumen presentadas como un libro. Balance general (qué tienes al último sync:
+// wallets e inventario frente a los compromisos: el Omega del próximo mes y las naves por reponer) y estado de
+// resultados del período (ingresos y gastos por actividad y tipo de movimiento, resultado del wallet, ajustes al
+// resultado de juego) con la conciliación del wallet (saldo anterior + variación = saldo actual)
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+import {
+  getIndicators,
+  getInventory,
+  getLosses,
+  getPilots,
+  getSummary,
+  getSyncStatus,
+  type Indicators,
+  type Inventory,
+  type Losses,
+  type Pilot,
+  type Summary,
+  type SyncStatus,
+} from '../lib/api';
+import { hasIssue, pilotState } from '../lib/pilot-state';
+import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+import { shareOf } from '../lib/shares';
+
+const lang = getLang(Astro);
+const m = t(lang);
+const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
+const full = (v: number) => iskFull(v, lang);
+const fullNet = (v: number) => iskFull(v, lang, true);
+const date = (iso: string) => shortDate(iso, lang);
+const qty = new Intl.NumberFormat(lang, { useGrouping: 'always' });
+const sign = (v: number) => (v > 0.5 ? 'pos' : v < -0.5 ? 'neg' : 'zero');
+
+const PERIODS = [7, 30, 90];
+const q = Astro.url.searchParams;
+const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 30;
+const pilotParam = Number(q.get('pilot'));
+let pilotId = Number.isSafeInteger(pilotParam) && pilotParam > 0 ? pilotParam : undefined;
+const href = (d: number, pilot?: number) => `/balances?days=${d}${pilot ? `&pilot=${pilot}` : ''}`;
+
+let summary: Summary | undefined;
+let losses: Losses | undefined;
+let inventory: Inventory | undefined;
+let indicators: Indicators | undefined;
+let status: SyncStatus | undefined;
+let pilots: Pilot[] = [];
+let apiError: string | undefined;
+try {
+  [status, pilots] = await Promise.all([getSyncStatus(), getPilots()]);
+  // Un enlace a un piloto desvinculado vuelve al consolidado
+  if (pilotId && !pilots.some((p) => p.id === pilotId)) pilotId = undefined;
+  if (pilots.length > 0) {
+    [summary, losses, inventory, indicators] = await Promise.all([
+      getSummary(days, pilotId),
+      getLosses(days, pilotId),
+      getInventory(pilotId).catch(() => undefined),
+      getIndicators().catch(() => undefined),
+    ]);
+  }
+} catch (err) {
+  apiError = err instanceof Error ? err.message : String(err);
+}
+
+const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
+
+const chars = summary?.characters ?? [];
+const selected = pilotId ? chars.find((c) => c.id === pilotId) : undefined;
+// Filas de wallet: todos los pilotos o solo el filtrado
+const walletRows = selected ? [selected] : chars;
+const hasData = walletRows.some((c) => c.lastSyncAt);
+const lastSync = walletRows.map((c) => c.lastSyncAt).filter((x): x is string => !!x).sort().at(-1) ?? null;
+
+// ---- Balance general ----
+const o = indicators?.omega;
+const wallets = walletRows.reduce((n, c) => n + (c.balance ?? 0), 0);
+const openingKnown = walletRows.every((c) => c.openingBalance !== null);
+const opening = walletRows.reduce((n, c) => n + (c.openingBalance ?? 0), 0);
+const invValue = inventory?.value ?? 0;
+// PLEX guardado valorado a la media de ESI (como el inventario); solo se conoce en el consolidado
+const plexValue = !selected && o && o.plexOwned > 0 && o.plexAveragePrice !== null ? o.plexOwned * o.plexAveragePrice : 0;
+const otherInv = Math.max(0, invValue - plexValue);
+const assets = wallets + invValue;
+const omegaCost = !selected && o ? o.cost : null;
+const toReplace = losses && losses.totals.toReplace >= 0.5 ? losses.totals.toReplace : 0;
+const liabilities = (omegaCost ?? 0) + toReplace;
+const equity = assets - liabilities;
+
+// ---- Estado de resultados ----
+const acts = summary?.byActivity ?? [];
+const tot = summary?.totals ?? { income: 0, expenses: 0, net: 0 };
+const incomeGroups = acts.filter((a) => a.income > 0.5).map((a) => ({ a, lines: a.refTypes.filter((r) => r.income > 0.5) }));
+const expenseGroups = acts.filter((a) => a.expenses > 0.5).map((a) => ({ a, lines: a.refTypes.filter((r) => r.expenses > 0.5) }));
+const walletResult = tot.income - tot.expenses;
+// Vista de un piloto: su neto incluye lo movido con tus otros pilotos (es lo que cambió su wallet)
+const internal = selected ? (summary?.internalReceived ?? 0) - (summary?.internalSent ?? 0) : 0;
+const walletChange = selected ? tot.net : walletResult;
+const accountsNet = acts.find((a) => a.activity === 'accounts')?.net ?? 0;
+const unreplaced = losses?.totals.unreplaced ?? 0;
+const gameResult = walletChange - accountsNet - unreplaced - toReplace;
+const prev = summary?.previous;
+
+// ---- Conciliación del wallet ----
+const gap = openingKnown ? wallets - opening - walletChange : 0;
+const partialAt = walletRows
+  .filter((c) => c.openingPartial && c.openingAt)
+  .map((c) => c.openingAt!)
+  .sort()
+  .at(-1);
+---
+
+<Base title={m.balances} section="balances" status={status} pilots={pilots.length} pilotIssues={pilotIssues}>
+  {
+    pilots.length > 0 && (
+      <nav class="main-nav shell" aria-label={m.period} slot="nav">
+        <div class="nav-tabs">
+          {PERIODS.map((p) => (
+            <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'true' : undefined}>
+              <Icon name="clock" />
+              {m.days(p)}
+            </a>
+          ))}
+        </div>
+        {summary && (
+          <p class="period-meta">
+            <span>
+              {date(summary.period.from)} – {date(summary.period.to)} · {m.eveTime}
+            </span>
+          </p>
+        )}
+      </nav>
+    )
+  }
+
+  <div class="page-head">
+    <h1>{m.balances}</h1>
+    <p class="subtitle">{m.acctLead}</p>
+  </div>
+
+  {
+    apiError && (
+      <div class="notice error" role="alert">
+        <div>
+          <strong>{m.apiDown}</strong>
+          <p class="muted">{apiError}</p>
+          <p>
+            {m.apiRunning} <code>apps/api</code>: <code>bun run dev</code>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  {!apiError && pilots.length === 0 && <p class="empty-note">{m.acctNoPilots}</p>}
+
+  {
+    summary && (
+      <>
+        {/* Filtro de piloto: todos o uno (el mismo ?pilot= que el resumen) */}
+        {chars.length > 1 && (
+          <nav class="pilot-filter" aria-label={m.pilots}>
+            <ul>
+              <li>
+                <a href={href(days)} aria-current={!selected ? 'true' : undefined}>
+                  {m.allPilots}
+                </a>
+              </li>
+              {chars.map((c) => (
+                <li>
+                  <a href={href(days, c.id)} aria-current={selected?.id === c.id ? 'true' : undefined}>
+                    {c.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+
+        {!hasData ? (
+          <p class="empty-note">{m.acctNoData}</p>
+        ) : (
+          <div class="books">
+            {/* ---------- Balance general ---------- */}
+            <section class="panel" aria-labelledby="bs-title">
+              <div class="panel-heading">
+                <h2 id="bs-title">{m.bsTitle}</h2>
+                <span class="meta">{lastSync ? m.acctAt(ago(lastSync, lang)) : ''}</span>
+              </div>
+              <table class="statement">
+                <caption class="sr-only">{m.bsTitle}</caption>
+                <tbody>
+                  <tr class="group">
+                    <th scope="rowgroup" colspan="3">{m.bsAssets}</th>
+                  </tr>
+                  {walletRows.map((c) => (
+                    <tr class={selected ? undefined : 'sub'}>
+                      <th scope="row">
+                        {selected ? m.bsWallets : m.bsWallet(c.name)}
+                        {c.openingBalance !== null && <span class="row-meta">{m.bsBefore(days, fmt(c.openingBalance))}</span>}
+                      </th>
+                      <td class="op" aria-hidden="true" />
+                      <td title={c.balance === null ? m.noEntries : full(c.balance)}>{c.balance === null ? '—' : fmt(c.balance)}</td>
+                    </tr>
+                  ))}
+                  {!selected && walletRows.length > 1 && (
+                    <tr class="subtotal">
+                      <th scope="row">{m.bsWallets}</th>
+                      <td class="op" aria-hidden="true" />
+                      <td title={full(wallets)}>{fmt(wallets)}</td>
+                    </tr>
+                  )}
+                  {plexValue > 0 && (
+                    <tr class="sub">
+                      <th scope="row">
+                        {m.bsPlex}
+                        <span class="row-meta">{m.bsPlexMeta(qty.format(o!.plexOwned), `${fmt(o!.plexAveragePrice!)} ISK`)}</span>
+                      </th>
+                      <td class="op" aria-hidden="true" />
+                      <td title={full(plexValue)}>{fmt(plexValue)}</td>
+                    </tr>
+                  )}
+                  <tr class={plexValue > 0 ? 'sub' : undefined}>
+                    <th scope="row">
+                      {plexValue > 0 ? m.bsOtherInventory : m.bsInventory}
+                      <span class="row-meta">
+                        {inventory && inventory.stacks > 0 && inventory.assetsUpdatedAt
+                          ? m.bsInventoryMeta(qty.format(inventory.stacks), ago(inventory.assetsUpdatedAt, lang))
+                          : m.bsNoInventory}
+                      </span>
+                    </th>
+                    <td class="op" aria-hidden="true" />
+                    <td title={full(otherInv)}>{inventory && inventory.stacks > 0 ? fmt(otherInv) : '—'}</td>
+                  </tr>
+                  {plexValue > 0 && (
+                    <tr class="subtotal">
+                      <th scope="row">{m.bsInventory}</th>
+                      <td class="op" aria-hidden="true" />
+                      <td title={full(invValue)}>{fmt(invValue)}</td>
+                    </tr>
+                  )}
+                  <tr class="total">
+                    <th scope="row">{m.bsTotalAssets}</th>
+                    <td class="op" aria-hidden="true" />
+                    <td title={full(assets)}>{fmt(assets)}</td>
+                  </tr>
+
+                  <tr class="group">
+                    <th scope="rowgroup" colspan="3">{m.bsLiabilities}</th>
+                  </tr>
+                  {!selected && o && (
+                    <tr>
+                      <th scope="row">
+                        {omegaCost !== null ? m.bsOmega : m.bsOmegaNoPrice}
+                        {omegaCost !== null && o.plexPrice !== null && o.plexPriceSource && (
+                          <span class="row-meta">
+                            {m.bsOmegaMeta(
+                              qty.format(o.plexNeeded),
+                              `${fmt(o.plexPrice)} ISK`,
+                              m.omegaPriceMeta(o.plexPriceSource, ago(o.plexPriceUpdatedAt, lang)),
+                            )}
+                          </span>
+                        )}
+                      </th>
+                      <td class="op" aria-hidden="true" />
+                      <td title={omegaCost !== null ? full(omegaCost) : undefined}>{omegaCost !== null ? fmt(omegaCost) : '—'}</td>
+                    </tr>
+                  )}
+                  {toReplace > 0 && (
+                    <tr class="estimate">
+                      <th scope="row">{m.bsToReplace}</th>
+                      <td class="op" aria-hidden="true" />
+                      <td title={full(toReplace)}>~{fmt(toReplace)}</td>
+                    </tr>
+                  )}
+                  {(selected || !o) && toReplace === 0 && (
+                    <tr>
+                      <th scope="row" class="muted-row">{m.bsNoLiabilities}</th>
+                      <td class="op" aria-hidden="true" />
+                      <td>0</td>
+                    </tr>
+                  )}
+                  <tr class="total">
+                    <th scope="row">{m.bsTotalLiabilities}</th>
+                    <td class="op">
+                      <span aria-hidden="true">−</span>
+                      <span class="sr-only">{m.opMinus}</span>
+                    </td>
+                    <td title={full(liabilities)}>{fmt(liabilities)}</td>
+                  </tr>
+                  <tr class="result">
+                    <th scope="row">
+                      {m.bsEquity}
+                      <span class="row-meta">{m.bsEquityMeta}</span>
+                    </th>
+                    <td class="op">
+                      <span aria-hidden="true">=</span>
+                      <span class="sr-only">{m.opEquals}</span>
+                    </td>
+                    {/* Patrimonio: una cifra de stock, sin «+»; en rojo solo si es negativo */}
+                    <td class:list={{ neg: equity < -0.5 }} title={full(equity)}>
+                      {fmt(equity)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="panel-note">{m.bsNote}</p>
+            </section>
+
+            {/* ---------- Estado de resultados ---------- */}
+            <section class="panel" aria-labelledby="is-title">
+              <div class="panel-heading">
+                <h2 id="is-title">{m.isTitle}</h2>
+                <span class="meta">{selected ? m.acctPilot(selected.name) : m.periodDays(days)}</span>
+              </div>
+              <table class="statement with-share">
+                <caption class="sr-only">{m.isTitle}</caption>
+                <tbody>
+                  <tr class="group">
+                    <th scope="rowgroup" colspan="4">{m.isIncome}</th>
+                  </tr>
+                  {incomeGroups.map(({ a, lines }) => (
+                    <>
+                      <tr>
+                        <th scope="row">{m.activityName[a.activity]}</th>
+                        <td class="op" aria-hidden="true" />
+                        <td title={full(a.income)}>{fmt(a.income)}</td>
+                        <td class="share">{shareOf(a.income, tot.income, lang)}</td>
+                      </tr>
+                      {lines.map((r) => (
+                          <tr class="sub">
+                            <th scope="row">{refTypeLabel(r.refType, lang)}</th>
+                            <td class="op" aria-hidden="true" />
+                            <td title={full(r.income)}>{fmt(r.income)}</td>
+                            <td class="share">{shareOf(r.income, tot.income, lang)}</td>
+                          </tr>
+                      ))}
+                    </>
+                  ))}
+                  <tr class="total">
+                    <th scope="row">
+                      {m.isTotalIncome}
+                      {prev?.complete && <span class="row-meta">{m.isPrevious(fmt(prev.income))}</span>}
+                    </th>
+                    <td class="op" aria-hidden="true" />
+                    <td title={full(tot.income)}>{fmt(tot.income)}</td>
+                    <td class="share" />
+                  </tr>
+
+                  <tr class="group">
+                    <th scope="rowgroup" colspan="4">{m.isExpenses}</th>
+                  </tr>
+                  {expenseGroups.map(({ a, lines }) => (
+                    <>
+                      <tr>
+                        <th scope="row">{m.activityName[a.activity]}</th>
+                        <td class="op" aria-hidden="true" />
+                        <td title={full(a.expenses)}>{fmt(a.expenses)}</td>
+                        <td class="share">{shareOf(a.expenses, tot.expenses, lang)}</td>
+                      </tr>
+                      {lines.map((r) => (
+                          <tr class="sub">
+                            <th scope="row">{refTypeLabel(r.refType, lang)}</th>
+                            <td class="op" aria-hidden="true" />
+                            <td title={full(r.expenses)}>{fmt(r.expenses)}</td>
+                            <td class="share">{shareOf(r.expenses, tot.expenses, lang)}</td>
+                          </tr>
+                      ))}
+                    </>
+                  ))}
+                  <tr class="total">
+                    <th scope="row">
+                      {m.isTotalExpenses}
+                      {prev?.complete && <span class="row-meta">{m.isPrevious(fmt(prev.expenses))}</span>}
+                    </th>
+                    <td class="op">
+                      <span aria-hidden="true">−</span>
+                      <span class="sr-only">{m.opMinus}</span>
+                    </td>
+                    <td title={full(tot.expenses)}>{fmt(tot.expenses)}</td>
+                    <td class="share" />
+                  </tr>
+
+                  <tr class="result">
+                    <th scope="row">
+                      {m.isWalletResult}
+                      <span class="row-meta">{m.isWalletResultMeta}</span>
+                    </th>
+                    <td class="op">
+                      <span aria-hidden="true">=</span>
+                      <span class="sr-only">{m.opEquals}</span>
+                    </td>
+                    <td class:list={[sign(walletResult)]} title={fullNet(walletResult)}>
+                      {fmt(walletResult, { sign: true })}
+                    </td>
+                    <td class="share" />
+                  </tr>
+                  {selected && (
+                    <>
+                      <tr>
+                        <th scope="row">
+                          {m.isInternal}
+                          <span class="row-meta">{m.isInternalMeta(fmt(summary.internalReceived), fmt(summary.internalSent))}</span>
+                        </th>
+                        <td class="op">
+                          <span aria-hidden="true">{internal < 0 ? '−' : '+'}</span>
+                          <span class="sr-only">{internal < 0 ? m.opMinus : m.opPlus}</span>
+                        </td>
+                        <td title={full(Math.abs(internal))}>{fmt(Math.abs(internal))}</td>
+                        <td class="share" />
+                      </tr>
+                      <tr class="result">
+                        <th scope="row">{m.isWalletChange}</th>
+                        <td class="op">
+                          <span aria-hidden="true">=</span>
+                          <span class="sr-only">{m.opEquals}</span>
+                        </td>
+                        <td class:list={[sign(walletChange)]} title={fullNet(walletChange)}>
+                          {fmt(walletChange, { sign: true })}
+                        </td>
+                        <td class="share" />
+                      </tr>
+                    </>
+                  )}
+
+                  {(Math.abs(accountsNet) > 0.5 || unreplaced > 0.5 || toReplace > 0) && (
+                    <>
+                      <tr class="group">
+                        <th scope="rowgroup" colspan="4">{m.isAdjust}</th>
+                      </tr>
+                      {Math.abs(accountsNet) > 0.5 && (
+                        <tr>
+                          <th scope="row">
+                            {m.isPlexAside}
+                            <span class="row-meta">{m.isPlexAsideMeta(qty.format(summary.accounts.plexBought), qty.format(summary.accounts.plexSold))}</span>
+                          </th>
+                          <td class="op">
+                            <span aria-hidden="true">{accountsNet < 0 ? '+' : '−'}</span>
+                            <span class="sr-only">{accountsNet < 0 ? m.opPlus : m.opMinus}</span>
+                          </td>
+                          <td title={full(Math.abs(accountsNet))}>{fmt(Math.abs(accountsNet))}</td>
+                          <td class="share" />
+                        </tr>
+                      )}
+                      {unreplaced > 0.5 && (
+                        <tr>
+                          <th scope="row">{m.lossesUnreplacedRow}</th>
+                          <td class="op">
+                            <span aria-hidden="true">−</span>
+                            <span class="sr-only">{m.opMinus}</span>
+                          </td>
+                          <td title={full(unreplaced)}>{fmt(unreplaced)}</td>
+                          <td class="share" />
+                        </tr>
+                      )}
+                      {toReplace > 0 && (
+                        <tr class="estimate">
+                          <th scope="row">{m.lossesPendingRow}</th>
+                          <td class="op">
+                            <span aria-hidden="true">−</span>
+                            <span class="sr-only">{m.opMinus}</span>
+                          </td>
+                          <td title={full(toReplace)}>~{fmt(toReplace)}</td>
+                          <td class="share" />
+                        </tr>
+                      )}
+                      <tr class="result">
+                        <th scope="row">{m.isGameResult}</th>
+                        <td class="op">
+                          <span aria-hidden="true">=</span>
+                          <span class="sr-only">{m.opEquals}</span>
+                        </td>
+                        <td class:list={[toReplace > 0 ? 'estimate' : sign(gameResult)]} title={fullNet(gameResult)}>
+                          {toReplace > 0 ? `~ ${fmt(gameResult, { sign: true })}` : fmt(gameResult, { sign: true })}
+                        </td>
+                        <td class="share" />
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+              <p class="panel-note">{m.isNote}</p>
+            </section>
+
+            {/* ---------- Conciliación del wallet ---------- */}
+            <section class="panel" aria-labelledby="rec-title">
+              <div class="panel-heading">
+                <h2 id="rec-title">{m.recTitle}</h2>
+                <span class="meta">{selected ? m.acctPilot(selected.name) : m.periodDays(days)}</span>
+              </div>
+              <table class="statement">
+                <caption class="sr-only">{m.recTitle}</caption>
+                <tbody>
+                  <tr>
+                    <th scope="row">
+                      {m.recOpening}
+                      <span class="row-meta">{partialAt ? m.recOpeningPartial(date(partialAt)) : m.recOpeningMeta(date(summary.period.from))}</span>
+                    </th>
+                    <td class="op" aria-hidden="true" />
+                    <td title={openingKnown ? full(opening) : undefined}>{openingKnown ? fmt(opening) : '—'}</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">{m.isWalletChange}</th>
+                    <td class="op">
+                      <span aria-hidden="true">{walletChange < 0 ? '−' : '+'}</span>
+                      <span class="sr-only">{walletChange < 0 ? m.opMinus : m.opPlus}</span>
+                    </td>
+                    <td title={full(Math.abs(walletChange))}>{fmt(Math.abs(walletChange))}</td>
+                  </tr>
+                  {openingKnown && Math.abs(gap) >= 1 && (
+                    <tr>
+                      <th scope="row">
+                        {m.recGap}
+                        <span class="row-meta">{m.recGapMeta}</span>
+                      </th>
+                      <td class="op">
+                        <span aria-hidden="true">{gap < 0 ? '−' : '+'}</span>
+                        <span class="sr-only">{gap < 0 ? m.opMinus : m.opPlus}</span>
+                      </td>
+                      <td title={full(Math.abs(gap))}>{fmt(Math.abs(gap))}</td>
+                    </tr>
+                  )}
+                  <tr class="result">
+                    <th scope="row">{m.recBalance}</th>
+                    <td class="op">
+                      <span aria-hidden="true">=</span>
+                      <span class="sr-only">{m.opEquals}</span>
+                    </td>
+                    <td title={full(wallets)}>{fmt(wallets)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="panel-note">{m.recNote}</p>
+            </section>
+          </div>
+        )}
+      </>
+    )
+  }
+</Base>
+
+<style>
+  .page-head {
+    display: grid;
+    gap: 6px;
+  }
+  .subtitle {
+    max-width: 70ch;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .empty-note {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  /* Filtro de piloto: chips de 40 px, en una fila con scroll en estrecho */
+  /* Como elemento de la rejilla de <main>, sin min-width: 0 la fila de chips ensanchaba la columna en móvil */
+  .pilot-filter {
+    min-width: 0;
+  }
+  .pilot-filter ul {
+    display: flex;
+    gap: 6px;
+    margin: 0;
+    padding: 0 0 4px;
+    list-style: none;
+    overflow-x: auto;
+  }
+  .pilot-filter a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .pilot-filter a:hover {
+    color: var(--text);
+    text-decoration: none;
+    background: var(--hover);
+  }
+  .pilot-filter a[aria-current] {
+    color: #8addee;
+    border-color: #30506480;
+    background: #16304070;
+  }
+  /* Balance a la izquierda (con la conciliación debajo), resultados a la derecha; apilado en estrecho */
+  .books {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    /* La conciliación va justo bajo el balance: la primera fila mide lo que mide el balance */
+    grid-template-rows: max-content 1fr;
+    grid-template-areas:
+      'bs is'
+      'rec is';
+    gap: 20px;
+    align-items: start;
+  }
+  .books > section:nth-child(1) {
+    grid-area: bs;
+  }
+  .books > section:nth-child(2) {
+    grid-area: is;
+  }
+  .books > section:nth-child(3) {
+    grid-area: rec;
+  }
+  @media (max-width: 960px) {
+    .books {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'bs'
+        'is'
+        'rec';
+    }
+  }
+  /* Estado contable: etiqueta (con su nota debajo), operador, importe y, en resultados, % del total */
+  .statement {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .statement th,
+  .statement td {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    vertical-align: baseline;
+  }
+  .statement th:first-child {
+    padding-left: 22px;
+  }
+  .statement td:last-child {
+    padding-right: 22px;
+  }
+  .statement tbody th {
+    width: 100%;
+    font: 400 14px var(--font);
+    color: var(--text);
+    text-align: left;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: normal;
+  }
+  .statement td {
+    font: 14px var(--mono);
+    color: var(--text);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .statement td.op {
+    width: 2ch;
+    padding-left: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .statement td.op + td {
+    padding-left: 8px;
+  }
+  .statement td.share {
+    width: 4ch;
+    padding-left: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .statement th.muted-row {
+    color: var(--text-muted);
+  }
+  .row-meta {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  /* Cabecera de grupo (ACTIVO, INGRESOS…) */
+  .statement tr.group th {
+    padding-top: 14px;
+    padding-bottom: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom-color: var(--line-strong);
+  }
+  .statement tr.sub th {
+    padding-left: 40px;
+    color: var(--text-secondary);
+  }
+  .statement tr.sub td {
+    color: var(--text-secondary);
+  }
+  .statement tr.subtotal th,
+  .statement tr.subtotal td,
+  .statement tr.total th,
+  .statement tr.total td {
+    font-weight: 500;
+  }
+  /* Totales: línea fuerte arriba; resultados: doble línea, como un libro */
+  .statement tr.total th,
+  .statement tr.total td {
+    border-top: 1px solid var(--line-strong);
+  }
+  .statement tr.result th,
+  .statement tr.result td {
+    border-top: 3px double var(--line-strong);
+    font-weight: 600;
+  }
+  .statement tr.result th .row-meta {
+    font-weight: 400;
+  }
+  .statement td.pos {
+    color: var(--positive);
+  }
+  .statement td.neg {
+    color: var(--critical);
+  }
+  /* Lo estimado (por reponer, precio medio) en gris */
+  .statement tr.estimate th,
+  .statement tr.estimate td,
+  .statement td.estimate {
+    color: var(--text-muted);
+  }
+  .statement tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  @media (max-width: 600px) {
+    .statement th:first-child {
+      padding-left: 16px;
+    }
+    .statement td:last-child {
+      padding-right: 16px;
+    }
+    .statement tr.sub th {
+      padding-left: 30px;
+    }
+    .statement tbody th {
+      font-size: 13px;
+    }
+    .statement td {
+      font-size: 13px;
+    }
+  }
+</style>
