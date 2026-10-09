@@ -1,5 +1,5 @@
 ---
-// Contabilidad: las cifras del resumen presentadas como un libro. Balance general (qué tienes al último sync:
+// Balances: las cifras del resumen presentadas como un libro. Balance general (qué tienes al último sync:
 // wallets e inventario frente a los compromisos: el Omega del próximo mes y las naves por reponer) y estado de
 // resultados del período (ingresos y gastos por actividad y tipo de movimiento, resultado del wallet, ajustes al
 // resultado de juego) con la conciliación del wallet (saldo anterior + variación = saldo actual)
@@ -38,7 +38,7 @@ const q = Astro.url.searchParams;
 const days = PERIODS.includes(Number(q.get('days'))) ? Number(q.get('days')) : 30;
 const pilotParam = Number(q.get('pilot'));
 let pilotId = Number.isSafeInteger(pilotParam) && pilotParam > 0 ? pilotParam : undefined;
-const href = (d: number, pilot?: number) => `/contabilidad?days=${d}${pilot ? `&pilot=${pilot}` : ''}`;
+const href = (d: number, pilot?: number) => `/balances?days=${d}${pilot ? `&pilot=${pilot}` : ''}`;
 
 let summary: Summary | undefined;
 let losses: Losses | undefined;
@@ -111,7 +111,7 @@ const partialAt = walletRows
   .at(-1);
 ---
 
-<Base title={m.accounting} section="contabilidad" status={status} pilots={pilots.length} pilotIssues={pilotIssues}>
+<Base title={m.balances} section="balances" status={status} pilots={pilots.length} pilotIssues={pilotIssues}>
   {
     pilots.length > 0 && (
       <nav class="main-nav shell" aria-label={m.period} slot="nav">
@@ -135,7 +135,7 @@ const partialAt = walletRows
   }
 
   <div class="page-head">
-    <h1>{m.accounting}</h1>
+    <h1>{m.balances}</h1>
     <p class="subtitle">{m.acctLead}</p>
   </div>
 

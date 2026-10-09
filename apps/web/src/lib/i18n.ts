@@ -47,7 +47,7 @@ const es = {
   footer: 'Datos vía ESI. EVE Online y todo lo relacionado son marcas de CCP hf.',
   // Indicadores
   indicators: 'Indicadores',
-  accounting: 'Contabilidad',
+  balances: 'Balances',
   indicatorsLead: 'Metas y ritmos: el Omega frente a tu saldo, lo que rinde tu ratting, lo que cuestan tus pérdidas y lo que se lleva el mercado.',
   // Indicadores: ratting, fondo de reposición, comisiones
   rattingTitle: 'ISK por hora de ratting',
@@ -614,7 +614,7 @@ const en: Messages = {
   footer: 'Data via ESI. EVE Online and all related marks are trademarks of CCP hf.',
   // Indicators
   indicators: 'Indicators',
-  accounting: 'Accounting',
+  balances: 'Balances',
   indicatorsLead: 'Goals and rates: Omega against your balance, what your ratting earns, what your losses cost and what the market takes.',
   rattingTitle: 'ISK per hour of ratting',
   periodDays: (days) => `last ${days} days`,
@@ -1161,7 +1161,7 @@ const de: Messages = {
   footer: 'Daten über ESI. EVE Online und alle zugehörigen Marken sind Marken von CCP hf.',
   // Kennzahlen
   indicators: 'Kennzahlen',
-  accounting: 'Buchhaltung',
+  balances: 'Bilanzen',
   indicatorsLead: 'Ziele und Raten: Omega gegen dein Guthaben, was dein Ratting bringt, was deine Verluste kosten und was der Markt nimmt.',
   rattingTitle: 'ISK pro Stunde Ratting',
   periodDays: (days) => `letzte ${days} Tage`,
