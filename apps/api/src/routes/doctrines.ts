@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { refreshDoctrinePrices } from '../services/jita';
 import { addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, DoctrineError, listDoctrines, setClone, setPlan } from '../services/doctrines';
 
 const id = t.Object({ id: t.Numeric({ minimum: 1 }) });
@@ -23,6 +24,15 @@ export const doctrineRoutes = new Elysia()
     },
     { body: t.Object({ name: t.String({ maxLength: 200 }) }) },
   )
+  // Precios de Jita ahora mismo (el sync los refresca cada hora; con el sync apagado, a mano)
+  .post('/doctrines/prices', async ({ status }) => {
+    try {
+      return { updated: await refreshDoctrinePrices({ force: true }) };
+    } catch (err) {
+      console.warn('[jita] falló:', err instanceof Error ? err.message : err);
+      return status(502, { error: 'esi' });
+    }
+  })
   .delete('/doctrines/:id', async ({ params }) => {
     await deleteDoctrine(params.id);
     return { ok: true };

@@ -131,6 +131,15 @@ export const marketQuotes = sqliteTable('market_quotes', {
   updatedAt: ts('updated_at').notNull(),
 });
 
+// Doctrinas: venta más baja en Jita de lo que llevan los fits y de los inyectores de skills (órdenes públicas de
+// The Forge filtradas por el sistema de Jita). Se refresca como mucho cada hora (sync y al añadir un fit)
+export const jitaPrices = sqliteTable('jita_prices', {
+  typeId: integer('type_id').primaryKey(),
+  sellMin: real('sell_min'), // null = sin órdenes de venta en Jita
+  sellOrders: integer('sell_orders').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+});
+
 // Caché de geografía de ESI para el mapa: sistemas con coordenadas y estación → sistema.
 // Son datos estáticos del universo, se piden una sola vez por ID
 export const systems = sqliteTable('systems', {

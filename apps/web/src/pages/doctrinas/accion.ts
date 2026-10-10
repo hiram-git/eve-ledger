@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { safeBackUrl } from '../../lib/safe-back';
-import { ActionError, addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, setPlan } from '../../lib/api';
+import { ActionError, addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, refreshPrices, setPlan } from '../../lib/api';
 
 // Formularios de Doctrinas: crear o borrar doctrinas y fits, importar o quitar el plan (.emp, que se reenvía a la
 // API en base64). Vuelve a /doctrinas con el resultado en la query y un ancla al sitio tocado
@@ -22,6 +22,9 @@ export const POST: APIRoute = async ({ request, redirect }) => {
       const r = await createDoctrine(name);
       ok('doctrine', { name: name.trim().slice(0, 80) });
       anchor = `doctrina-${r.id}`;
+    } else if (action === 'prices') {
+      const r = await refreshPrices();
+      ok('prices', { n: String(r.updated) });
     } else if (action === 'delete-doctrine' && id) {
       await deleteDoctrine(id);
       ok('deleted');

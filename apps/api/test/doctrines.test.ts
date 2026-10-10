@@ -27,6 +27,8 @@ const TYPES: Record<number, Fake> = {
   3436: ['Drones', 273, 16, 1, 166, 167, []],
   3423: ['Capacitor Emission Systems', 255, 16, 2, 165, 166, []],
 };
+// Venta más baja en Jita (el neutralizador no tiene órdenes: queda sin precio); 40520/45635 = inyectores
+const JITA: Record<number, number> = { 587: 500_000, 2048: 1_200_000, 2488: 300_000, 40520: 800_000_000, 45635: 180_000_000 };
 const GROUP_CATEGORY = Object.fromEntries(Object.values(TYPES).map((t) => [t[1], t[2]]));
 const REQ_ATTRS = [
   [182, 277],
@@ -57,6 +59,13 @@ mock.module(`${API}/lib/esi.ts`, () => ({
     }
     const group = path.match(/^\/universe\/groups\/(\d+)$/);
     if (group) return { data: { group_id: Number(group[1]), category_id: GROUP_CATEGORY[Number(group[1])] }, headers: new Headers() };
+    // Órdenes de venta de The Forge: solo cuentan las del sistema de Jita (30000142)
+    const orders = path.match(/^\/markets\/10000002\/orders\/\?order_type=sell&type_id=(\d+)&page=1$/);
+    if (orders) {
+      const price = JITA[Number(orders[1])];
+      const data = price ? [{ price, is_buy_order: false, system_id: 30000142 }, { price: price / 2, is_buy_order: false, system_id: 30000144 }] : [];
+      return { data, headers: new Headers({ 'x-pages': '1' }) };
+    }
     throw new Error(`ESI no simulado: ${path}`);
   },
   esiPost: async (path: string, body: string[]) => {
@@ -72,7 +81,8 @@ const s = await import(`${API}/db/schema.ts`);
 const { parseEft } = await import(`${API}/lib/eft.ts`);
 const { parseEmp } = await import(`${API}/lib/emp.ts`);
 const { spForLevel, withPrerequisites, evaluate } = await import(`${API}/lib/skill-math.ts`);
-const { addFit, createDoctrine, listDoctrines, setPlan, DoctrineError } = await import(`${API}/services/doctrines.ts`);
+const { addFit, budget, createDoctrine, listDoctrines, setPlan, DoctrineError } = await import(`${API}/services/doctrines.ts`);
+const { injectorsFor, largeYield } = await import(`${API}/lib/injectors.ts`);
 const { inArray } = await import('drizzle-orm');
 runMigrations();
 
@@ -173,6 +183,29 @@ test('SP por nivel, prerrequisitos en cadena y tiempo de entrenamiento', () => {
   expect(alpha.minutes).toBeCloseTo(omega.minutes! * 2, 6);
 });
 
+test('inyectores: tramos por SP totales, SP sin asignar primero y pequeños si salen más baratos', () => {
+  expect([4_999_999, 5_000_000, 50_000_000, 80_000_000].map(largeYield)).toEqual([500_000, 400_000, 300_000, 150_000]);
+  const price = { large: 800_000_000, small: 180_000_000 };
+  // 600.000 SP con 4,9 M: un grande da 500.000 (aún por debajo de 5 M); faltan 100.000 a 80.000 por pequeño = 2
+  expect(injectorsFor(600_000, 4_900_000, 0, price)).toEqual({ sp: 600_000, large: 1, small: 2, cost: 800_000_000 + 2 * 180_000_000 });
+  // Los SP sin asignar se gastan antes
+  expect(injectorsFor(600_000, 4_900_000, 650_000, price)).toEqual({ sp: 0, large: 0, small: 0, cost: 0 });
+  // Sin precios: 5 pequeños o más → un grande; el coste no se sabe
+  expect(injectorsFor(350_000, 10_000_000, 0, { large: null, small: null })).toEqual({ sp: 350_000, large: 1, small: 0, cost: null });
+});
+
+test('presupuesto: con todo el wallet o reservando el Omega, en horas de ratting y días', () => {
+  const funds = { wallet: 600, omegaReserve: 500, iskPerHour: 100, dailyNet: 50 };
+  expect(budget(1000, funds)).toEqual({
+    need: 1000,
+    wallet: { short: 400, hours: 4, days: 8 },
+    withOmega: { short: 900, hours: 9, days: 18 },
+  });
+  expect(budget(100, funds).wallet).toEqual({ short: 0, hours: 0, days: 0 });
+  // Sin precio del PLEX no hay escenario con Omega; sin ritmo positivo, no hay días
+  expect(budget(1000, { ...funds, omegaReserve: null, dailyNet: -5 })).toEqual({ need: 1000, wallet: { short: 400, hours: 4, days: null }, withOmega: null });
+});
+
 test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   const { id } = await createDoctrine('  Frigates  ');
   const fit = await addFit(id, EFT);
@@ -234,6 +267,17 @@ test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   expect(p.targetSp).toBe(45255 + 90510);
   expect(p.haveSp).toBe(8000 + 500);
   expect(p.missing.length).toBe(2);
+  // Coste en Jita (solo órdenes del sistema de Jita): casco 0,5 M + Damage Control II 1,2 M + 5 Warrior II 1,5 M;
+  // el neutralizador de la carga no tiene órdenes
+  expect(f.cost).toMatchObject({ hull: 500_000, fitted: 1_200_000, drones: 1_500_000, cargo: 0, unpriced: 1, total: 3_200_000 });
+  // Al novato le faltan 17.165 SP: con 0 SP totales, un pequeño da 100.000 y sale más barato que un grande
+  expect(by.get(9103)!.injectors!.fly).toEqual({ sp: 17165, large: 0, small: 1, cost: 180_000_000 });
+  expect(by.get(9103)!.budget!.need).toBe(3_200_000 + 180_000_000);
+  // Quien ya puede volarlo solo necesita el fit; un Alfa que solo necesita Omega, también
+  expect(by.get(9101)!.injectors!.fly).toBeNull();
+  expect(by.get(9101)!.budget!.need).toBe(3_200_000);
+  expect(by.get(9102)!.budget!.need).toBe(3_200_000);
+  expect(by.get(9104)!.budget).toBeNull();
   // Cada tipo se pide a ESI una sola vez: la segunda importación ya no llama a /universe/types
   const before = esiCalls.filter((c) => c.startsWith('/universe/types')).length;
   await addFit(id, EFT);

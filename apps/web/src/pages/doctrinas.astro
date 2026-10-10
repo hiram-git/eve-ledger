@@ -1,7 +1,9 @@
 ---
 // Doctrinas: los fits de cada doctrina (pegados en EFT) con su plan de skills de la comunidad (.emp de EVEMon).
 // Por fit, una fila por piloto: si puede volarlo (y si no, qué le falta y cuánto tarda) y su avance en el plan
-// óptimo. Las cuentas las hace la API con las skills y atributos de cada piloto (Alfa a la mitad)
+// óptimo. Las cuentas las hace la API con las skills y atributos de cada piloto (Alfa a la mitad).
+// Entrega 2: coste del fit en Jita, inyectores para volarlo ya o completar el plan, y lo que falta del wallet
+// (con todo el saldo o reservando el Omega) en horas de ratting y días al ritmo actual
 import Base from '../layouts/Base.astro';
 import Icon from '../components/Icon.astro';
 import {
@@ -11,12 +13,14 @@ import {
   type DoctrineFit,
   type DoctrinesView,
   type FitPilotStatus,
+  type InjectorPlan,
   type MissingSkill,
   type Pilot,
+  type Shortfall,
   type SkillEvaluation,
   type SyncStatus,
 } from '../lib/api';
-import { duration, isk } from '../lib/format';
+import { ago, duration, hoursPlayed, isk, iskFull } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { hasIssue, pilotState } from '../lib/pilot-state';
 
@@ -56,7 +60,9 @@ const okText =
         ? m.planOk(q.get('name') ?? '', Number(q.get('n') ?? 0))
         : okKind === 'deleted'
           ? m.deletedOk
-          : null;
+          : okKind === 'prices'
+            ? m.pricesOk(Number(q.get('n') ?? 0))
+            : null;
 const ignored = q.get('ignored');
 const errorCode = q.get('error');
 
@@ -103,6 +109,33 @@ const STATUS_ICON: Record<FitPilotStatus, 'check' | 'clock' | 'alert' | 'info'> 
   noScope: 'alert',
   noData: 'info',
 };
+// Dinero y presupuesto
+const money = (v: number) => isk(v, { lang });
+const costOr = (v: number | null) => (v === null ? m.noPriceShort : money(v));
+const injText = (i: InjectorPlan) => m.injectors(i.large, i.small);
+const shortText = (s: Shortfall) =>
+  s.short <= 0
+    ? m.covered
+    : [
+        m.shortBy(money(s.short)),
+        s.hours !== null && m.farmHours(hoursPlayed(s.hours, lang)),
+        s.days !== null && m.farmDays(duration(s.days * 1440, lang)),
+      ]
+        .filter(Boolean)
+        .join(' · ');
+const costParts = (f: DoctrineFit) =>
+  [
+    f.cost.hull && m.costHull(money(f.cost.hull)),
+    f.cost.fitted && m.costFitted(money(f.cost.fitted)),
+    f.cost.drones && m.costDrones(money(f.cost.drones)),
+    f.cost.cargo && m.costCargo(money(f.cost.cargo)),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+const funds = view?.funds;
+const allFits = view?.doctrines.flatMap((d) => d.fits) ?? [];
+// El precio más viejo de los que se usan: la frescura de toda la página
+const pricedAt = allFits.map((f) => f.cost.pricedAt).filter((d): d is string => !!d).sort()[0] ?? null;
 const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?size=64`;
 ---
 
@@ -190,6 +223,55 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   {view && view.doctrines.length === 0 && <p class="empty-state">{m.doctrinesEmpty}</p>}
 
   {
+    /* Con qué se paga: lo mismo para todos los fits (el saldo de todos tus pilotos, el Omega y tus ritmos) */
+    funds && allFits.length > 0 && (
+      <section class="funds" aria-labelledby="funds-title">
+        <h2 id="funds-title" class="sr-only">{m.fundsTitle}</h2>
+        <dl>
+          <div>
+            <dt>{m.fundsWallet}</dt>
+            <dd title={iskFull(funds.wallet, lang)}>{money(funds.wallet)}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsOmega}</dt>
+            <dd title={funds.omegaReserve === null ? undefined : iskFull(funds.omegaReserve, lang)}>{costOr(funds.omegaReserve)}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsRatting}</dt>
+            <dd>{funds.iskPerHour === null ? '—' : m.perHourOf(money(funds.iskPerHour))}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsPace}</dt>
+            <dd>{funds.dailyNet === null ? '—' : m.perDay(isk(funds.dailyNet, { lang, sign: true }))}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsInjectors}</dt>
+            <dd class="small">{m.injectorPrices(costOr(funds.injectorPrice.large), costOr(funds.injectorPrice.small))}</dd>
+          </div>
+        </dl>
+        <div class="funds-foot">
+          <p>
+            {m.fundsNote} {m.budgetScenariosHint}
+            {pricedAt && (
+              <>
+                {' '}
+                <span class="nowrap">{m.pricesFrom(ago(pricedAt, lang))}</span>
+              </>
+            )}
+          </p>
+          <form method="post" action="/doctrinas/accion">
+            <input type="hidden" name="action" value="prices" />
+            <button type="submit" class="inline-action">
+              <Icon name="refresh" />
+              {m.pricesRefresh}
+            </button>
+          </form>
+        </div>
+      </section>
+    )
+  }
+
+  {
     view?.doctrines.map((d) => {
       const withData = view!.pilots.filter((p) => p.hasScope && p.skillsAt);
       return (
@@ -237,6 +319,11 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                   <p class="fit-meta">
                     {slotsText(f)}
                     {f.required > 0 && <> · {m.fitRequired(f.required)}</>}
+                  </p>
+                  <p class="fit-cost">
+                    <strong title={iskFull(f.cost.total, lang)}>{m.fitCost(money(f.cost.total))}</strong>
+                    {costParts(f) && <span class="parts"> · {costParts(f)}</span>}
+                    {f.cost.unpriced > 0 && <span class="unpriced"> · {m.costUnpriced(f.cost.unpriced)}</span>}
                   </p>
                 </div>
                 <form method="post" action="/doctrinas/accion" data-confirm={m.fitDeleteConfirm(fitLabel(f))}>
@@ -300,6 +387,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                         <th scope="col">{m.colPilot}</th>
                         <th scope="col">{m.colFly}</th>
                         <th scope="col">{m.colPlan}</th>
+                        <th scope="col" title={m.budgetScenariosHint}>{m.colBudget}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -357,6 +445,9 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                                         : m.trainUnknown}
                                     </span>
                                   )}
+                                  {row.injectors?.plan && row.injectors.plan.sp > 0 && (
+                                    <span class="sub">{m.planInjectors(injText(row.injectors.plan), costOr(row.injectors.plan.cost))}</span>
+                                  )}
                                   {plan.missing.length > 0 && (
                                     <details class="skills">
                                       <summary>{m.missingList(plan.missing.length)}</summary>
@@ -370,6 +461,35 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                                       </ul>
                                     </details>
                                   )}
+                                </>
+                              )}
+                            </td>
+                            <td class="budget">
+                              {!row.budget ? (
+                                row.injectors?.fly ? (
+                                  <span class="sub">{m.budgetNoInjectorPrice}</span>
+                                ) : (
+                                  <span class="none">—</span>
+                                )
+                              ) : (
+                                <>
+                                  <span class="cell-label" aria-hidden="true">{m.colBudget}</span>
+                                  <span class="need" title={iskFull(row.budget.need, lang)}>{money(row.budget.need)}</span>
+                                  <span class="sub">
+                                    {row.injectors?.fly && row.injectors.fly.sp > 0
+                                      ? m.budgetParts(money(f.cost.total), injText(row.injectors.fly), costOr(row.injectors.fly.cost))
+                                      : m.budgetFitOnly}
+                                  </span>
+                                  <dl class="scenarios">
+                                    <div class:list={{ covered: row.budget.wallet.short <= 0 }}>
+                                      <dt>{m.scenarioWallet}</dt>
+                                      <dd>{shortText(row.budget.wallet)}</dd>
+                                    </div>
+                                    <div class:list={{ covered: !!row.budget.withOmega && row.budget.withOmega.short <= 0 }}>
+                                      <dt>{m.scenarioOmega}</dt>
+                                      <dd>{row.budget.withOmega ? shortText(row.budget.withOmega) : m.noOmegaPrice}</dd>
+                                    </div>
+                                  </dl>
                                 </>
                               )}
                             </td>
@@ -685,8 +805,107 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     letter-spacing: normal;
     text-transform: none;
   }
+  .fit-pilots th[scope='row'] {
+    width: 16%;
+  }
   .fit-pilots td.fly {
-    width: 38%;
+    width: 28%;
+  }
+  .fit-pilots td.plan {
+    width: 27%;
+  }
+  .need {
+    display: block;
+    font: 500 15px var(--mono);
+    color: var(--text);
+  }
+  .scenarios {
+    display: grid;
+    gap: 3px;
+    margin: 6px 0 0;
+  }
+  /* «Con el wallet: lo tienes» en una línea; si no cabe, la cifra baja */
+  .scenarios div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+  }
+  .scenarios dt {
+    color: var(--text-muted);
+  }
+  .scenarios dt::after {
+    content: ':';
+  }
+  .scenarios dd {
+    margin: 0;
+    color: var(--text);
+  }
+  .scenarios .covered dd {
+    color: var(--text-secondary);
+  }
+
+  /* Con qué se paga: una franja de datos compartida por todos los fits */
+  .funds {
+    display: grid;
+    gap: 10px;
+    padding: 14px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #0d1620;
+  }
+  .funds dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 32px;
+    margin: 0;
+  }
+  .funds dt {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .funds dd {
+    margin: 2px 0 0;
+    font: 500 16px var(--mono);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .funds dd.small {
+    font-size: 13px;
+    line-height: 22px;
+  }
+  .funds-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .funds-foot p {
+    max-width: 90ch;
+  }
+  .funds-foot :global(.icon) {
+    width: 14px;
+    height: 14px;
+  }
+  .funds-foot .inline-action {
+    gap: 6px;
+  }
+  .nowrap {
+    white-space: nowrap;
+  }
+  .fit-cost {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .fit-cost strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .fit-cost .unpriced {
+    color: var(--text-secondary);
   }
   .clone-tag {
     margin-left: 8px;
@@ -873,8 +1092,23 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     .fit-pilots td.plan:has(.none) {
       display: none;
     }
-    .fit-pilots td.plan {
+    .fit-pilots td.plan,
+    .fit-pilots td.budget {
       margin-top: 4px;
+    }
+    .fit-pilots td.budget:has(> .none) {
+      display: none;
+    }
+    .funds {
+      padding: 12px 16px;
+    }
+    .funds dl {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+    }
+    .funds dd {
+      white-space: normal;
     }
     .cell-label {
       display: block;

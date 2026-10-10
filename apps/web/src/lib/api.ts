@@ -332,6 +332,12 @@ export type SkillEvaluation = {
 // ok: puede volarlo; missing: le faltan skills; omega: las tiene pero un Alfa no puede usarlas;
 // noScope: falta el permiso de skills; noData: aún sin sync de skills
 export type FitPilotStatus = 'ok' | 'missing' | 'omega' | 'noScope' | 'noData';
+// Inyectores para unos SP (los sin asignar se gastan antes); cost null si falta el precio de alguno
+export type InjectorPlan = { sp: number; large: number; small: number; cost: number | null };
+// Lo que falta del wallet: con todo el saldo, o reservando antes el Omega del próximo mes (null sin precio del PLEX).
+// En horas de ratting (null sin ISK/h) y en días al ritmo de 7 días (null sin ritmo positivo)
+export type Shortfall = { short: number; hours: number | null; days: number | null };
+export type Budget = { need: number; wallet: Shortfall; withOmega: Shortfall | null };
 export type DoctrineFit = {
   id: number;
   name: string;
@@ -342,9 +348,28 @@ export type DoctrineFit = {
   cargo: number;
   required: number;
   plan: { name: string; skills: number } | null;
-  pilots: { characterId: number; status: FitPilotStatus; fly: SkillEvaluation | null; plan: SkillEvaluation | null }[];
+  // A la venta más baja de Jita; unpriced = tipos sin precio (no suman)
+  cost: { total: number; hull: number; fitted: number; drones: number; cargo: number; unpriced: number; pricedAt: string | null };
+  budget: Budget;
+  pilots: {
+    characterId: number;
+    status: FitPilotStatus;
+    fly: SkillEvaluation | null;
+    plan: SkillEvaluation | null;
+    injectors: { fly: InjectorPlan | null; plan: InjectorPlan | null } | null;
+    // Volarlo ya: el fit más los inyectores que le faltan (null si falta el precio de los inyectores)
+    budget: Budget | null;
+  }[];
 };
 export type DoctrinesView = {
+  funds: {
+    wallet: number;
+    omegaReserve: number | null;
+    omegaCost: number | null;
+    iskPerHour: number | null;
+    dailyNet: number | null;
+    injectorPrice: { large: number | null; small: number | null };
+  };
   pilots: {
     id: number;
     name: string;
@@ -385,6 +410,7 @@ export const addFit = (doctrineId: number, eft: string) =>
 export const deleteFit = (id: number) => write('DELETE', `/fits/${id}`);
 export const setPlan = (fitId: number, data: string, filename: string) =>
   write<{ name: string; skills: number }>('PUT', `/fits/${fitId}/plan`, { data, filename });
+export const refreshPrices = () => write<{ updated: number }>('POST', '/doctrines/prices');
 export const deletePlan = (fitId: number) => write('DELETE', `/fits/${fitId}/plan`);
 export const setClone = (characterId: number, clone: 'omega' | 'alpha') =>
   write('PUT', `/characters/${characterId}/clone`, { clone });
