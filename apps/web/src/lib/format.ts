@@ -53,6 +53,24 @@ export function remaining(iso: string, lang: Lang = DEFAULT_LANG): string {
   return new Intl.NumberFormat(LOCALE[lang], { style: 'unit', unit, unitDisplay: 'short' }).format(n);
 }
 
+// Horas de juego (ratting): «~46 min», «20 h», «312 h» (en horas aunque sean días: es tiempo jugando, no de calendario)
+export function hoursPlayed(hours: number, lang: Lang = DEFAULT_LANG): string {
+  if (hours < 1) return duration(hours * 60, lang);
+  return new Intl.NumberFormat(LOCALE[lang], { style: 'unit', unit: 'hour', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.round(hours));
+}
+
+// Tiempo de entrenamiento: «12 d 4 h», «5 h 20 min», «45 min» (unidades cortas de cada idioma)
+export function duration(minutes: number, lang: Lang = DEFAULT_LANG): string {
+  const unit = (n: number, u: string) => new Intl.NumberFormat(LOCALE[lang], { style: 'unit', unit: u, unitDisplay: 'short' }).format(n);
+  const total = Math.max(1, Math.round(minutes));
+  const d = Math.floor(total / 1440);
+  const h = Math.floor((total % 1440) / 60);
+  const m = total % 60;
+  if (d > 0) return h > 0 ? `${unit(d, 'day')} ${unit(h, 'hour')}` : unit(d, 'day');
+  if (h > 0) return m > 0 ? `${unit(h, 'hour')} ${unit(m, 'minute')}` : unit(h, 'hour');
+  return unit(m, 'minute');
+}
+
 export function ago(iso: string | null, lang: Lang = DEFAULT_LANG): string {
   if (!iso) return t(lang).never;
   const min = (Date.now() - new Date(iso).getTime()) / 60_000;

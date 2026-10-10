@@ -11,6 +11,8 @@ export const SCOPES = [
   'esi-assets.read_assets.v1',
   'esi-killmails.read_killmails.v1',
   'esi-contracts.read_character_contracts.v1',
+  // Doctrinas: qué fits puede volar cada piloto y cuánto le falta de un plan (skills y atributos)
+  'esi-skills.read_skills.v1',
 ];
 
 export type TokenResponse = {

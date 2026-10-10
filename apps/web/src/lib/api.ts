@@ -222,6 +222,8 @@ export type Pilot = {
   createdAt: string;
   // Último vínculo (el primero o el de la última revinculación)
   linkedAt: string;
+  // Alfa entrena a la mitad y no puede usar todas las skills (lo marca el usuario en Pilotos)
+  clone: 'omega' | 'alpha';
   lastError: { at: string | null; kind: string; message: string } | null;
 };
 
@@ -304,3 +306,111 @@ export type Indicators = {
   fees: { days: number; total: number; sales: number; share: number | null; byType: { refType: string; total: number }[] };
 };
 export const getIndicators = () => call<Indicators>('/indicators');
+
+// Doctrinas: fits EFT con su plan de skills (.emp de EVEMon) y qué piloto vuela qué
+export type MissingSkill = {
+  skillId: number;
+  name: string | null;
+  // Nivel que pide, el que puede usar (activo) y el entrenado (un Alfa no usa todo lo entrenado)
+  need: number;
+  active: number;
+  trained: number;
+  // SP y minutos que faltan; null si no se conoce el rango o los atributos
+  sp: number | null;
+  minutes: number | null;
+  omegaOnly: boolean;
+};
+export type SkillEvaluation = {
+  missing: MissingSkill[];
+  missingSp: number | null;
+  minutes: number | null;
+  targetSp: number | null;
+  haveSp: number | null;
+  needsOmega: boolean;
+  required: number;
+};
+// ok: puede volarlo; missing: le faltan skills; omega: las tiene pero un Alfa no puede usarlas;
+// noScope: falta el permiso de skills; noData: aún sin sync de skills
+export type FitPilotStatus = 'ok' | 'missing' | 'omega' | 'noScope' | 'noData';
+// Inyectores para unos SP (los sin asignar se gastan antes); cost null si falta el precio de alguno
+export type InjectorPlan = { sp: number; large: number; small: number; cost: number | null };
+// Lo que falta del wallet: con todo el saldo, o reservando antes el Omega del próximo mes (null sin precio del PLEX).
+// En horas de ratting (null sin ISK/h) y en días al ritmo de 7 días (null sin ritmo positivo)
+export type Shortfall = { short: number; hours: number | null; days: number | null };
+export type Budget = { need: number; wallet: Shortfall; withOmega: Shortfall | null };
+export type DoctrineFit = {
+  id: number;
+  name: string;
+  shipTypeId: number;
+  ship: string | null;
+  slots: { high: number; mid: number; low: number; rig: number; subsystem: number };
+  drones: number;
+  cargo: number;
+  required: number;
+  plan: { name: string; skills: number } | null;
+  // A la venta más baja de Jita; unpriced = tipos sin precio (no suman)
+  cost: { total: number; hull: number; fitted: number; drones: number; cargo: number; unpriced: number; pricedAt: string | null };
+  budget: Budget;
+  pilots: {
+    characterId: number;
+    status: FitPilotStatus;
+    fly: SkillEvaluation | null;
+    plan: SkillEvaluation | null;
+    injectors: { fly: InjectorPlan | null; plan: InjectorPlan | null } | null;
+    // Volarlo ya: el fit más los inyectores que le faltan (null si falta el precio de los inyectores)
+    budget: Budget | null;
+  }[];
+};
+export type DoctrinesView = {
+  funds: {
+    wallet: number;
+    omegaReserve: number | null;
+    omegaCost: number | null;
+    iskPerHour: number | null;
+    dailyNet: number | null;
+    injectorPrice: { large: number | null; small: number | null };
+  };
+  pilots: {
+    id: number;
+    name: string;
+    clone: 'omega' | 'alpha';
+    totalSp: number | null;
+    unallocatedSp: number | null;
+    skillsAt: string | null;
+    hasScope: boolean;
+  }[];
+  doctrines: { id: number; name: string; fits: DoctrineFit[] }[];
+};
+export const getDoctrines = () => call<DoctrinesView>('/doctrines');
+
+// Escrituras de Doctrinas: la API responde 400 con un código (que la web traduce) si lo pegado no vale
+export class ActionError extends Error {
+  constructor(
+    readonly code: string,
+    readonly detail: string | null,
+  ) {
+    super(code);
+  }
+}
+async function write<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown };
+  if (res.status === 400 || res.status === 404) throw new ActionError(data.error ?? 'request', data.detail == null ? null : String(data.detail));
+  if (!res.ok) throw new ApiError(res.status, `API ${res.status} en ${path}`);
+  return data as T;
+}
+export const createDoctrine = (name: string) => write<{ id: number }>('POST', '/doctrines', { name });
+export const deleteDoctrine = (id: number) => write('DELETE', `/doctrines/${id}`);
+export const addFit = (doctrineId: number, eft: string) =>
+  write<{ id: number; ignored: string[] }>('POST', `/doctrines/${doctrineId}/fits`, { eft });
+export const deleteFit = (id: number) => write('DELETE', `/fits/${id}`);
+export const setPlan = (fitId: number, data: string, filename: string) =>
+  write<{ name: string; skills: number }>('PUT', `/fits/${fitId}/plan`, { data, filename });
+export const refreshPrices = () => write<{ updated: number }>('POST', '/doctrines/prices');
+export const deletePlan = (fitId: number) => write('DELETE', `/fits/${fitId}/plan`);
+export const setClone = (characterId: number, clone: 'omega' | 'alpha') =>
+  write('PUT', `/characters/${characterId}/clone`, { clone });

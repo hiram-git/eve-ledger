@@ -1,0 +1,1123 @@
+---
+// Doctrinas: los fits de cada doctrina (pegados en EFT) con su plan de skills de la comunidad (.emp de EVEMon).
+// Por fit, una fila por piloto: si puede volarlo (y si no, qué le falta y cuánto tarda) y su avance en el plan
+// óptimo. Las cuentas las hace la API con las skills y atributos de cada piloto (Alfa a la mitad).
+// Entrega 2: coste del fit en Jita, inyectores para volarlo ya o completar el plan, y lo que falta del wallet
+// (con todo el saldo o reservando el Omega) en horas de ratting y días al ritmo actual
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+import {
+  getDoctrines,
+  getPilots,
+  getSyncStatus,
+  type DoctrineFit,
+  type DoctrinesView,
+  type FitPilotStatus,
+  type InjectorPlan,
+  type MissingSkill,
+  type Pilot,
+  type Shortfall,
+  type SkillEvaluation,
+  type SyncStatus,
+} from '../lib/api';
+import { ago, duration, hoursPlayed, isk, iskFull } from '../lib/format';
+import { getLang, t } from '../lib/i18n';
+import { hasIssue, pilotState } from '../lib/pilot-state';
+
+const lang = getLang(Astro);
+const m = t(lang);
+const q = Astro.url.searchParams;
+const qty = new Intl.NumberFormat(lang, { useGrouping: 'always' });
+const pct = new Intl.NumberFormat(lang, { style: 'percent', maximumFractionDigits: 0 });
+const sp = (v: number) => isk(v, { lang });
+const time = (min: number | null) => (min === null ? m.trainUnknown : duration(min, lang));
+const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V'];
+
+let view: DoctrinesView | undefined;
+let pilots: Pilot[] = [];
+let status: SyncStatus | undefined;
+let apiError: string | undefined;
+try {
+  [view, pilots, status] = await Promise.all([getDoctrines(), getPilots(), getSyncStatus()]);
+} catch (err) {
+  apiError = err instanceof Error ? err.message : String(err);
+}
+
+const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
+const pilotOf = new Map(view?.pilots.map((p) => [p.id, p]));
+const noScope = view?.pilots.filter((p) => !p.hasScope) ?? [];
+const noData = view?.pilots.filter((p) => p.hasScope && !p.skillsAt) ?? [];
+
+// Resultado de la última acción (vuelta de /doctrinas/accion)
+const okKind = q.get('ok');
+const okText =
+  okKind === 'doctrine'
+    ? m.doctrineOk(q.get('name') ?? '')
+    : okKind === 'fit'
+      ? m.fitOk
+      : okKind === 'plan'
+        ? m.planOk(q.get('name') ?? '', Number(q.get('n') ?? 0))
+        : okKind === 'deleted'
+          ? m.deletedOk
+          : okKind === 'prices'
+            ? m.pricesOk(Number(q.get('n') ?? 0))
+            : null;
+const ignored = q.get('ignored');
+const errorCode = q.get('error');
+
+// En cada fit, primero quien puede volarlo; luego quien solo necesita Omega y quien está más cerca
+const RANK: Record<FitPilotStatus, number> = { ok: 0, omega: 1, missing: 2, noData: 3, noScope: 4 };
+const sorted = (fit: DoctrineFit) =>
+  [...fit.pilots].sort(
+    (a, b) =>
+      RANK[a.status] - RANK[b.status] ||
+      (a.fly?.minutes ?? Infinity) - (b.fly?.minutes ?? Infinity) ||
+      (pilotOf.get(a.characterId)?.name ?? '').localeCompare(pilotOf.get(b.characterId)?.name ?? ''),
+  );
+const fitLabel = (f: DoctrineFit) => (f.ship ? `${f.ship} · ${f.name}` : f.name);
+const slotsText = (f: DoctrineFit) =>
+  [
+    f.slots.high && m.slotHigh(f.slots.high),
+    f.slots.mid && m.slotMid(f.slots.mid),
+    f.slots.low && m.slotLow(f.slots.low),
+    f.slots.rig && m.slotRig(f.slots.rig),
+    f.slots.subsystem && m.slotSub(f.slots.subsystem),
+    f.drones && m.fitDrones(qty.format(f.drones)),
+    f.cargo && m.fitCargo(qty.format(f.cargo)),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+// Lo que tiene de un plan, en SP (el avance real: una skill de rango 10 pesa más que una de rango 1)
+const progress = (e: SkillEvaluation) => (e.targetSp ? Math.min(1, (e.haveSp ?? 0) / e.targetSp) : e.missing.length ? 0 : 1);
+const skillLine = (s: MissingSkill) =>
+  s.omegaOnly ? m.skillOmegaOnly : `${s.active ? ROMAN[s.active] : m.skillUntrained} → ${ROMAN[s.need]} · ${time(s.minutes)}`;
+const statusText = (status: FitPilotStatus, fly: SkillEvaluation | null) =>
+  status === 'ok'
+    ? m.statusOk
+    : status === 'omega'
+      ? m.statusOmega
+      : status === 'missing'
+        ? m.statusMissing(fly?.missing.length ?? 0)
+        : status === 'noScope'
+          ? m.statusNoScope
+          : m.statusNoData;
+const STATUS_ICON: Record<FitPilotStatus, 'check' | 'clock' | 'alert' | 'info'> = {
+  ok: 'check',
+  missing: 'clock',
+  omega: 'alert',
+  noScope: 'alert',
+  noData: 'info',
+};
+// Dinero y presupuesto
+const money = (v: number) => isk(v, { lang });
+const costOr = (v: number | null) => (v === null ? m.noPriceShort : money(v));
+const injText = (i: InjectorPlan) => m.injectors(i.large, i.small);
+const shortText = (s: Shortfall) =>
+  s.short <= 0
+    ? m.covered
+    : [
+        m.shortBy(money(s.short)),
+        s.hours !== null && m.farmHours(hoursPlayed(s.hours, lang)),
+        s.days !== null && m.farmDays(duration(s.days * 1440, lang)),
+      ]
+        .filter(Boolean)
+        .join(' · ');
+const costParts = (f: DoctrineFit) =>
+  [
+    f.cost.hull && m.costHull(money(f.cost.hull)),
+    f.cost.fitted && m.costFitted(money(f.cost.fitted)),
+    f.cost.drones && m.costDrones(money(f.cost.drones)),
+    f.cost.cargo && m.costCargo(money(f.cost.cargo)),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+const funds = view?.funds;
+const allFits = view?.doctrines.flatMap((d) => d.fits) ?? [];
+// El precio más viejo de los que se usan: la frescura de toda la página
+const pricedAt = allFits.map((f) => f.cost.pricedAt).filter((d): d is string => !!d).sort()[0] ?? null;
+const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?size=64`;
+---
+
+<Base title={m.doctrines} section="doctrinas" status={status} pilots={pilots.length} pilotIssues={pilotIssues}>
+  <div class="page-head">
+    <div>
+      <h1>{m.doctrines}</h1>
+      <p class="subtitle">{m.doctrinesLead}</p>
+    </div>
+    {
+      !apiError && (
+        <form method="post" action="/doctrinas/accion" class="new-doctrine">
+          <input type="hidden" name="action" value="create" />
+          <label for="doctrine-name" class="sr-only">{m.doctrineName}</label>
+          <input id="doctrine-name" name="name" type="text" maxlength="80" required placeholder={m.doctrineNamePlaceholder} autocomplete="off" />
+          <button type="submit" class="secondary-button">
+            <Icon name="add" />
+            {m.doctrineCreate}
+          </button>
+        </form>
+      )
+    }
+  </div>
+
+  {
+    okText && (
+      <div class="notice" role="status">
+        <Icon name="check" />
+        <div>
+          <p>{okText}</p>
+          {ignored && <p class="ignored">{m.fitIgnored(ignored)}</p>}
+        </div>
+      </div>
+    )
+  }
+  {
+    errorCode && (
+      <div class="notice error" role="alert">
+        <Icon name="alert" />
+        <p>{m.doctrineError(errorCode, q.get('detail'))}</p>
+      </div>
+    )
+  }
+  {
+    apiError && (
+      <div class="notice error" role="alert">
+        <Icon name="alert" />
+        <div>
+          <strong>{m.apiDown}</strong>
+          <p class="muted">{apiError}</p>
+        </div>
+      </div>
+    )
+  }
+  {
+    view && view.pilots.length === 0 && (
+      <div class="notice" role="status">
+        <Icon name="info" />
+        <p>
+          {m.doctrinesNoPilots} <a href="/pilotos">{m.pilots}</a>
+        </p>
+      </div>
+    )
+  }
+  {
+    /* Quién no entra en las cuentas y por qué: la acción está en Pilotos */
+    (noScope.length > 0 || noData.length > 0) && (
+      <div class="coverage">
+        {noScope.length > 0 && (
+          <p>
+            <Icon name="alert" class="stale-icon" />
+            {m.doctrinesScopeMissing(noScope.map((p) => p.name).join(', '))} <a href="/pilotos">{m.pilots}</a>.
+          </p>
+        )}
+        {noData.length > 0 && (
+          <p>
+            <Icon name="info" class="info-icon" />
+            {m.doctrinesNoData(noData.map((p) => p.name).join(', '))}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  {view && view.doctrines.length === 0 && <p class="empty-state">{m.doctrinesEmpty}</p>}
+
+  {
+    /* Con qué se paga: lo mismo para todos los fits (el saldo de todos tus pilotos, el Omega y tus ritmos) */
+    funds && allFits.length > 0 && (
+      <section class="funds" aria-labelledby="funds-title">
+        <h2 id="funds-title" class="sr-only">{m.fundsTitle}</h2>
+        <dl>
+          <div>
+            <dt>{m.fundsWallet}</dt>
+            <dd title={iskFull(funds.wallet, lang)}>{money(funds.wallet)}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsOmega}</dt>
+            <dd title={funds.omegaReserve === null ? undefined : iskFull(funds.omegaReserve, lang)}>{costOr(funds.omegaReserve)}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsRatting}</dt>
+            <dd>{funds.iskPerHour === null ? '—' : m.perHourOf(money(funds.iskPerHour))}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsPace}</dt>
+            <dd>{funds.dailyNet === null ? '—' : m.perDay(isk(funds.dailyNet, { lang, sign: true }))}</dd>
+          </div>
+          <div>
+            <dt>{m.fundsInjectors}</dt>
+            <dd class="small">{m.injectorPrices(costOr(funds.injectorPrice.large), costOr(funds.injectorPrice.small))}</dd>
+          </div>
+        </dl>
+        <div class="funds-foot">
+          <p>
+            {m.fundsNote} {m.budgetScenariosHint}
+            {pricedAt && (
+              <>
+                {' '}
+                <span class="nowrap">{m.pricesFrom(ago(pricedAt, lang))}</span>
+              </>
+            )}
+          </p>
+          <form method="post" action="/doctrinas/accion">
+            <input type="hidden" name="action" value="prices" />
+            <button type="submit" class="inline-action">
+              <Icon name="refresh" />
+              {m.pricesRefresh}
+            </button>
+          </form>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    view?.doctrines.map((d) => {
+      const withData = view!.pilots.filter((p) => p.hasScope && p.skillsAt);
+      return (
+        <section class="panel doctrine" id={`doctrina-${d.id}`} aria-labelledby={`doctrina-${d.id}-title`}>
+          <div class="panel-heading">
+            <h2 id={`doctrina-${d.id}-title`}>{d.name}</h2>
+            <form method="post" action="/doctrinas/accion" data-confirm={m.doctrineDeleteConfirm(d.name)}>
+              <input type="hidden" name="action" value="delete-doctrine" />
+              <input type="hidden" name="id" value={d.id} />
+              <button type="submit" class="icon-button" title={m.doctrineDelete} aria-label={`${m.doctrineDelete}: ${d.name}`}>
+                <Icon name="trash" />
+              </button>
+            </form>
+          </div>
+
+          {/* Quién vuela la doctrina: cuántos de sus fits puede volar cada piloto (con skills sincronizadas) */}
+          {d.fits.length > 0 && withData.length > 0 && (
+            <div class="who-flies">
+              <span class="who-label">{m.doctrineWho}</span>
+              <ul>
+                {withData.map((p) => {
+                  const n = d.fits.filter((f) => f.pilots.find((x) => x.characterId === p.id)?.status === 'ok').length;
+                  return (
+                    <li class:list={{ none: n === 0, all: n === d.fits.length }}>
+                      <span class="name">{p.name}</span>
+                      <span class="count">{m.doctrineFlies(n, d.fits.length)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {d.fits.length === 0 && <p class="panel-body muted">{m.fitNone}</p>}
+
+          {d.fits.map((f) => (
+            <article class="fit" id={`fit-${f.id}`} aria-labelledby={`fit-${f.id}-title`}>
+              <header class="fit-head">
+                <img src={shipIcon(f.shipTypeId)} alt="" width="40" height="40" loading="lazy" onerror="this.style.visibility='hidden'" />
+                <div class="fit-title">
+                  <h3 id={`fit-${f.id}-title`}>
+                    {f.ship && <span class="ship">{f.ship}</span>}
+                    <span class="fit-name">{f.name}</span>
+                  </h3>
+                  <p class="fit-meta">
+                    {slotsText(f)}
+                    {f.required > 0 && <> · {m.fitRequired(f.required)}</>}
+                  </p>
+                  <p class="fit-cost">
+                    <strong title={iskFull(f.cost.total, lang)}>{m.fitCost(money(f.cost.total))}</strong>
+                    {costParts(f) && <span class="parts"> · {costParts(f)}</span>}
+                    {f.cost.unpriced > 0 && <span class="unpriced"> · {m.costUnpriced(f.cost.unpriced)}</span>}
+                  </p>
+                </div>
+                <form method="post" action="/doctrinas/accion" data-confirm={m.fitDeleteConfirm(fitLabel(f))}>
+                  <input type="hidden" name="action" value="delete-fit" />
+                  <input type="hidden" name="id" value={f.id} />
+                  <input type="hidden" name="doctrine" value={d.id} />
+                  <button type="submit" class="icon-button" title={m.fitDelete} aria-label={`${m.fitDelete}: ${fitLabel(f)}`}>
+                    <Icon name="trash" />
+                  </button>
+                </form>
+              </header>
+
+              <div class="plan-line">
+                {f.plan ? (
+                  <>
+                    <span class="plan-name">{m.planName(f.plan.name, f.plan.skills)}</span>
+                    <details class="plan-change">
+                      <summary>{m.planReplace}</summary>
+                      <form method="post" action="/doctrinas/accion" enctype="multipart/form-data" class="plan-form">
+                        <input type="hidden" name="action" value="plan" />
+                        <input type="hidden" name="id" value={f.id} />
+                        <label>
+                          <span class="sr-only">{m.planFile}</span>
+                          <input type="file" name="file" accept=".emp" required />
+                        </label>
+                        <button type="submit" class="secondary-button">
+                          <Icon name="upload" />
+                          {m.planImport}
+                        </button>
+                      </form>
+                    </details>
+                    <form method="post" action="/doctrinas/accion" class="plan-delete">
+                      <input type="hidden" name="action" value="delete-plan" />
+                      <input type="hidden" name="id" value={f.id} />
+                      <button type="submit" class="inline-action">{m.planDelete}</button>
+                    </form>
+                  </>
+                ) : (
+                  <form method="post" action="/doctrinas/accion" enctype="multipart/form-data" class="plan-form">
+                    <input type="hidden" name="action" value="plan" />
+                    <input type="hidden" name="id" value={f.id} />
+                    <span class="plan-none">{m.planNone}</span>
+                    <label>
+                      <span class="sr-only">{m.planFile}</span>
+                      <input type="file" name="file" accept=".emp" required title={m.planHint} />
+                    </label>
+                    <button type="submit" class="secondary-button">
+                      <Icon name="upload" />
+                      {m.planImport}
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {f.pilots.length > 0 && (
+                <div class="table-scroll" role="group" aria-label={m.fitTableLabel(fitLabel(f))} tabindex="0">
+                  <table class="fit-pilots">
+                    <caption class="sr-only">{m.fitTableLabel(fitLabel(f))}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">{m.colPilot}</th>
+                        <th scope="col">{m.colFly}</th>
+                        <th scope="col">{m.colPlan}</th>
+                        <th scope="col" title={m.budgetScenariosHint}>{m.colBudget}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted(f).map((row) => {
+                        const p = pilotOf.get(row.characterId);
+                        const plan = row.plan;
+                        return (
+                          <tr class={row.status}>
+                            <th scope="row">
+                              <span class="pilot-name">{p?.name ?? row.characterId}</span>
+                              {p?.clone === 'alpha' && <span class="clone-tag">{m.cloneAlpha}</span>}
+                            </th>
+                            <td class="fly">
+                              <span class:list={['status', row.status]} title={row.status === 'omega' ? m.statusOmegaHint : undefined}>
+                                <Icon name={STATUS_ICON[row.status]} />
+                                {statusText(row.status, row.fly)}
+                              </span>
+                              {row.status === 'missing' && row.fly && <span class="sub">{m.trainTime(time(row.fly.minutes))}</span>}
+                              {row.status === 'omega' && <span class="sub">{m.statusOmegaHint}</span>}
+                              {row.fly && row.fly.missing.length > 0 && (
+                                <details class="skills">
+                                  <summary>{m.missingList(row.fly.missing.length)}</summary>
+                                  <ul>
+                                    {row.fly.missing.map((s) => (
+                                      <li>
+                                        <span class="skill">{s.name ?? s.skillId}</span>
+                                        <span class="lv">{skillLine(s)}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </details>
+                              )}
+                            </td>
+                            <td class="plan">
+                              {!plan ? (
+                                <span class="none">—</span>
+                              ) : (
+                                <>
+                                  {/* En móvil no hay cabecera de columna: la barra sola no decía de qué era */}
+                                  <span class="cell-label" aria-hidden="true">{m.colPlan}</span>
+                                  <span class="plan-pct">
+                                    <span class="bar" aria-hidden="true">
+                                      <i style={`width:${(progress(plan) * 100).toFixed(1)}%`} />
+                                    </span>
+                                    <span class="num">
+                                      {plan.missing.length === 0 ? m.planDone : m.planPercent(pct.format(Math.floor(progress(plan) * 100) / 100))}
+                                    </span>
+                                  </span>
+                                  {plan.missing.length > 0 && (
+                                    <span class="sub">
+                                      {plan.missingSp !== null
+                                        ? plan.minutes !== null
+                                          ? m.planLeft(sp(plan.missingSp), duration(plan.minutes, lang))
+                                          : m.planLeftSp(sp(plan.missingSp))
+                                        : m.trainUnknown}
+                                    </span>
+                                  )}
+                                  {row.injectors?.plan && row.injectors.plan.sp > 0 && (
+                                    <span class="sub">{m.planInjectors(injText(row.injectors.plan), costOr(row.injectors.plan.cost))}</span>
+                                  )}
+                                  {plan.missing.length > 0 && (
+                                    <details class="skills">
+                                      <summary>{m.missingList(plan.missing.length)}</summary>
+                                      <ul>
+                                        {plan.missing.map((s) => (
+                                          <li>
+                                            <span class="skill">{s.name ?? s.skillId}</span>
+                                            <span class="lv">{skillLine(s)}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </details>
+                                  )}
+                                </>
+                              )}
+                            </td>
+                            <td class="budget">
+                              {!row.budget ? (
+                                row.injectors?.fly ? (
+                                  <span class="sub">{m.budgetNoInjectorPrice}</span>
+                                ) : (
+                                  <span class="none">—</span>
+                                )
+                              ) : (
+                                <>
+                                  <span class="cell-label" aria-hidden="true">{m.colBudget}</span>
+                                  <span class="need" title={iskFull(row.budget.need, lang)}>{money(row.budget.need)}</span>
+                                  <span class="sub">
+                                    {row.injectors?.fly && row.injectors.fly.sp > 0
+                                      ? m.budgetParts(money(f.cost.total), injText(row.injectors.fly), costOr(row.injectors.fly.cost))
+                                      : m.budgetFitOnly}
+                                  </span>
+                                  <dl class="scenarios">
+                                    <div class:list={{ covered: row.budget.wallet.short <= 0 }}>
+                                      <dt>{m.scenarioWallet}</dt>
+                                      <dd>{shortText(row.budget.wallet)}</dd>
+                                    </div>
+                                    <div class:list={{ covered: !!row.budget.withOmega && row.budget.withOmega.short <= 0 }}>
+                                      <dt>{m.scenarioOmega}</dt>
+                                      <dd>{row.budget.withOmega ? shortText(row.budget.withOmega) : m.noOmegaPrice}</dd>
+                                    </div>
+                                  </dl>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </article>
+          ))}
+
+          <details class="add-fit" open={d.fits.length === 0}>
+            <summary>
+              <Icon name="add" />
+              {m.fitAdd}
+            </summary>
+            <form method="post" action="/doctrinas/accion" class="fit-form">
+              <input type="hidden" name="action" value="add-fit" />
+              <input type="hidden" name="id" value={d.id} />
+              <label for={`eft-${d.id}`}>{m.fitPaste}</label>
+              <p class="hint" id={`eft-hint-${d.id}`}>{m.fitPasteHint}</p>
+              <textarea
+                id={`eft-${d.id}`}
+                name="eft"
+                rows="10"
+                maxlength="50000"
+                required
+                spellcheck="false"
+                aria-describedby={`eft-hint-${d.id}`}
+                placeholder="[Rifter, Rifter PvP]"></textarea>
+              <button type="submit" class="secondary-button">
+                <Icon name="add" />
+                {m.fitAdd}
+              </button>
+            </form>
+          </details>
+        </section>
+      );
+    })
+  }
+</Base>
+
+<script>
+  // Borrar pide confirmación (el texto viene en data-confirm de cada formulario)
+  document.addEventListener('submit', (e) => {
+    const form = e.target as HTMLFormElement;
+    const msg = form.dataset.confirm;
+    if (msg && !confirm(msg)) e.preventDefault();
+  });
+</script>
+
+<style>
+  .page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+  }
+  .subtitle {
+    max-width: 70ch;
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .new-doctrine {
+    display: flex;
+    gap: 8px;
+  }
+  input[type='text'],
+  textarea {
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: #0b141d;
+    color: var(--text);
+    font: 13px var(--font);
+  }
+  input[type='text'] {
+    width: 16rem;
+  }
+  textarea {
+    width: 100%;
+    font: 12px/1.5 var(--mono);
+    resize: vertical;
+  }
+  input[type='file'] {
+    max-width: 100%;
+    font: 13px var(--font);
+    color: var(--text-secondary);
+  }
+  input[type='file']::file-selector-button {
+    margin-right: 10px;
+    padding: 6px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: #0f1a25;
+    color: var(--text);
+    font: 13px var(--font);
+    cursor: pointer;
+  }
+  .ignored {
+    margin-top: 4px;
+    color: var(--text-secondary);
+  }
+  .coverage {
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .coverage :global(.stale-icon) {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    vertical-align: -2px;
+    color: var(--warning);
+  }
+  .coverage :global(.info-icon) {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    vertical-align: -2px;
+    color: var(--cyan-dim);
+  }
+  .empty-state {
+    padding: 28px 22px;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .doctrine .panel-heading h2 {
+    font-size: 17px;
+  }
+  .icon-button {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .icon-button:hover {
+    border-color: var(--line-strong);
+    color: var(--text);
+  }
+
+  .who-flies {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 14px;
+    padding: 14px 22px;
+    border-bottom: 1px solid #26313b88;
+  }
+  .who-label {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .who-flies ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .who-flies li {
+    display: inline-flex;
+    gap: 6px;
+    padding: 3px 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: 5px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .who-flies li .count {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .who-flies li.none {
+    border-color: var(--line);
+    color: var(--text-muted);
+  }
+  .who-flies li.none .count {
+    color: var(--text-muted);
+  }
+
+  .fit {
+    padding: 18px 22px;
+    border-bottom: 1px solid #26313b88;
+  }
+  .fit-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .fit-head img {
+    flex-shrink: 0;
+    border-radius: 6px;
+    border: 1px solid var(--line-strong);
+    background: #162834;
+  }
+  .fit-title {
+    flex: 1;
+    min-width: 0;
+  }
+  .fit-title h3 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .fit-title .fit-name {
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .fit-meta {
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .plan-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin: 14px 0 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .plan-none {
+    flex-basis: 100%;
+    color: var(--text-muted);
+  }
+  .plan-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .plan-change summary {
+    color: var(--cyan);
+    cursor: pointer;
+  }
+  .plan-change[open] {
+    flex-basis: 100%;
+    order: 3;
+  }
+  .plan-change .plan-form {
+    margin-top: 8px;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+  .fit-pilots {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .fit-pilots thead th {
+    padding: 6px 12px 6px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-align: left;
+  }
+  /* Texto, no cifras: sin la mono, las mayúsculas ni el nowrap globales de las tablas */
+  .fit-pilots th[scope='row'],
+  .fit-pilots td {
+    padding: 10px 12px 10px 0;
+    border-bottom: 1px solid #1b2733;
+    vertical-align: top;
+    text-align: left;
+    white-space: normal;
+    font: 13px/1.45 var(--font);
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--text-secondary);
+  }
+  .fit-pilots tbody tr:hover td {
+    background: none;
+  }
+  .fit-pilots tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  .fit-pilots th[scope='row'] {
+    width: 22%;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .fit-pilots thead th {
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .fit-pilots th[scope='row'] {
+    width: 16%;
+  }
+  .fit-pilots td.fly {
+    width: 28%;
+  }
+  .fit-pilots td.plan {
+    width: 27%;
+  }
+  .need {
+    display: block;
+    font: 500 15px var(--mono);
+    color: var(--text);
+  }
+  .scenarios {
+    display: grid;
+    gap: 3px;
+    margin: 6px 0 0;
+  }
+  /* «Con el wallet: lo tienes» en una línea; si no cabe, la cifra baja */
+  .scenarios div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+  }
+  .scenarios dt {
+    color: var(--text-muted);
+  }
+  .scenarios dt::after {
+    content: ':';
+  }
+  .scenarios dd {
+    margin: 0;
+    color: var(--text);
+  }
+  .scenarios .covered dd {
+    color: var(--text-secondary);
+  }
+
+  /* Con qué se paga: una franja de datos compartida por todos los fits */
+  .funds {
+    display: grid;
+    gap: 10px;
+    padding: 14px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: #0d1620;
+  }
+  .funds dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 32px;
+    margin: 0;
+  }
+  .funds dt {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .funds dd {
+    margin: 2px 0 0;
+    font: 500 16px var(--mono);
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .funds dd.small {
+    font-size: 13px;
+    line-height: 22px;
+  }
+  .funds-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .funds-foot p {
+    max-width: 90ch;
+  }
+  .funds-foot :global(.icon) {
+    width: 14px;
+    height: 14px;
+  }
+  .funds-foot .inline-action {
+    gap: 6px;
+  }
+  .nowrap {
+    white-space: nowrap;
+  }
+  .fit-cost {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .fit-cost strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .fit-cost .unpriced {
+    color: var(--text-secondary);
+  }
+  .clone-tag {
+    margin-left: 8px;
+    padding: 1px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 550;
+    color: var(--text);
+  }
+  .status :global(.icon) {
+    width: 14px;
+    height: 14px;
+  }
+  .status.ok :global(.icon) {
+    color: var(--positive);
+  }
+  .status.missing :global(.icon) {
+    color: var(--cyan-dim);
+  }
+  .status.omega {
+    color: var(--warning);
+  }
+  .status.noScope,
+  .status.noData {
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .sub {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-muted);
+  }
+  .none {
+    color: var(--text-muted);
+  }
+  .cell-label {
+    display: none;
+  }
+  .plan-pct {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .bar {
+    position: relative;
+    flex: 0 1 140px;
+    height: 6px;
+    border-radius: 3px;
+    background: #1b2a37;
+    overflow: hidden;
+  }
+  .bar i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 3px;
+    background: var(--cyan-dim);
+  }
+  .plan-pct .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .skills {
+    margin-top: 6px;
+  }
+  .skills summary {
+    width: fit-content;
+    color: var(--cyan);
+    cursor: pointer;
+  }
+  .skills ul {
+    display: grid;
+    gap: 3px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .skills li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0 12px;
+    max-width: 34rem;
+  }
+  .skills .lv {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .add-fit {
+    padding: 14px 22px 18px;
+  }
+  .add-fit summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    font-size: 13px;
+    font-weight: 550;
+    color: var(--cyan);
+    cursor: pointer;
+  }
+  .add-fit summary :global(.icon) {
+    width: 14px;
+    height: 14px;
+  }
+  .fit-form {
+    display: grid;
+    gap: 6px;
+    max-width: 52rem;
+    margin-top: 10px;
+  }
+  .fit-form label {
+    font-size: 13px;
+    font-weight: 550;
+    color: var(--text);
+  }
+  .fit-form .hint {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .fit-form button {
+    justify-self: start;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 600px) {
+    .new-doctrine {
+      width: 100%;
+    }
+    .new-doctrine input[type='text'] {
+      flex: 1;
+      width: auto;
+    }
+    .new-doctrine .secondary-button,
+    .plan-form .secondary-button,
+    .fit-form .secondary-button {
+      min-height: 40px;
+    }
+    .icon-button {
+      width: 40px;
+      height: 40px;
+    }
+    .who-flies,
+    .fit,
+    .add-fit {
+      padding-inline: 16px;
+    }
+    /* Una tarjeta por piloto: nombre, volarlo y plan apilados */
+    .fit-pilots thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .fit-pilots tr {
+      display: grid;
+      gap: 6px;
+      padding: 12px 0;
+      border-bottom: 1px solid #1b2733;
+    }
+    .fit-pilots tbody tr:last-child {
+      border-bottom: 0;
+    }
+    .fit-pilots th[scope='row'],
+    .fit-pilots td {
+      display: block;
+      width: auto !important;
+      padding: 0;
+      border: 0;
+    }
+    .fit-pilots td.plan:has(.none) {
+      display: none;
+    }
+    .fit-pilots td.plan,
+    .fit-pilots td.budget {
+      margin-top: 4px;
+    }
+    .fit-pilots td.budget:has(> .none) {
+      display: none;
+    }
+    .funds {
+      padding: 12px 16px;
+    }
+    .funds dl {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+    }
+    .funds dd {
+      white-space: normal;
+    }
+    .cell-label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .skills summary {
+      padding-block: 8px;
+    }
+  }
+</style>

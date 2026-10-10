@@ -36,7 +36,7 @@ import {
 import { ago, isk, iskFull, longDate, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { withInventory } from '../lib/inventory-pref';
-import { ASSETS_SCOPE, CONTRACTS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
+import { ASSETS_SCOPE, CONTRACTS_SCOPE, SKILLS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -133,7 +133,12 @@ const needsAttention = (c: { id: number; lastSyncAt: string | null }) => {
 };
 type HealthAction = 'relink' | 'sync' | 'review' | null;
 // Permisos que le faltan a un piloto, con su nombre corto («inventario», «killmails», «contratos»)
-const PERM_LABELS: Record<string, string> = { [ASSETS_SCOPE]: m.permAssets, [LOSSES_SCOPE]: m.permKillmails, [CONTRACTS_SCOPE]: m.permContracts };
+const PERM_LABELS: Record<string, string> = {
+  [ASSETS_SCOPE]: m.permAssets,
+  [LOSSES_SCOPE]: m.permKillmails,
+  [CONTRACTS_SCOPE]: m.permContracts,
+  [SKILLS_SCOPE]: m.permSkills,
+};
 const missingPerms = (id: number) => (pilotById.get(id)?.missingScopes ?? []).map((s) => PERM_LABELS[s]).filter(Boolean);
 const healthItems =
   summary?.characters.filter(needsAttention).map((c): { id: number; name: string; cause: string; action: HealthAction } => {
