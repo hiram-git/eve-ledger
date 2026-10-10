@@ -29,6 +29,8 @@ No hace falta crear nada en el portal de desarrolladores de EVE: el programa ya 
 
 Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vincular piloto**: el login de EVE se abre en tu navegador. Inicia sesión allí y elige el personaje; al terminar, el navegador dice «Piloto vinculado · Puedes cerrar esta página» y la ventana del ledger muestra el piloto en Pilotos. Repite con cada uno de tus personajes. El primer sync tarda unos segundos por piloto.
 
+> **¿Ya tenías pilotos de una versión anterior?** La pestaña **Doctrinas** necesita leer sus skills, un permiso nuevo. En Pilotos, los que no lo tienen dicen «Skills (doctrinas) · falta el permiso»: pulsa **Revincular** y entra con ese mismo personaje. Marca también en Pilotos qué cuentas son **Alfa** (entrenan a la mitad y no pueden usar todas las skills).
+
 > ESI solo guarda unos 30 días del wallet. EVE Ledger acumula el historial desde el primer sync: cuanto antes lo instales, más historial tendrás. El programa tiene que estar abierto para sincronizar.
 
 ## Cambiar la configuración después

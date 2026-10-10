@@ -65,6 +65,7 @@ const SCOPE_LABELS: Record<string, string> = {
   'esi-assets.read_assets.v1': m.scopeInventory,
   'esi-killmails.read_killmails.v1': m.scopeLosses,
   'esi-contracts.read_character_contracts.v1': m.scopeContracts,
+  'esi-skills.read_skills.v1': m.scopeSkills,
 };
 const REQUIRED = Object.keys(SCOPE_LABELS);
 
@@ -173,7 +174,7 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     !apiError && (
       <ol class="roster">
         {rows.map((p) => (
-          <li class:list={['pilot', 'panel', { fresh: p.id === linkedId }]}>
+          <li class:list={['pilot', 'panel', { fresh: p.id === linkedId }]} id={`piloto-${p.id}`}>
             <div class="who">
               <img src={portrait(p.id)} alt="" width="56" height="56" loading="lazy" onerror="this.style.visibility='hidden'" />
               <div>
@@ -259,6 +260,13 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
             </dl>
 
             <div class="actions">
+              {/* Alfa u Omega: lo usan las Doctrinas (un Alfa entrena a la mitad y no usa todas las skills) */}
+              <form method="post" action="/clone" class="clone-toggle" role="group" aria-label={`${m.cloneToggle}: ${p.name}`} title={m.cloneHint}>
+                <input type="hidden" name="back" value="/pilotos" />
+                <input type="hidden" name="character" value={p.id} />
+                <button type="submit" name="clone" value="omega" aria-pressed={p.clone === 'alpha' ? 'false' : 'true'}>{m.cloneOmega}</button>
+                <button type="submit" name="clone" value="alpha" aria-pressed={p.clone === 'alpha' ? 'true' : 'false'}>{m.cloneAlpha}</button>
+              </form>
               {p.missingScopes.length > 0 || p.state.kind === 'error' ? (
                 <a class="secondary-button" href={loginUrl} title={m.relinkAs(p.name)} aria-label={m.relinkAs(p.name)}>
                   <Icon name="login" />
@@ -532,8 +540,37 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
   .figures dd.neg {
     color: var(--critical);
   }
+  /* Alfa | Omega sobre la acción: en fila ensanchaba la última columna (en alemán, la página desbordaba) */
   .actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
     justify-self: end;
+  }
+  /* Alfa | Omega: control segmentado discreto, como el de Patrimonio */
+  .clone-toggle {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .clone-toggle button {
+    min-height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    font: 550 13px var(--font);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .clone-toggle button:hover {
+    color: var(--text);
+  }
+  .clone-toggle button[aria-pressed='true'] {
+    background: #16304070;
+    color: #8addee;
   }
   .actions .secondary-button {
     padding: 7px 12px;
@@ -617,6 +654,8 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     }
     .actions {
       grid-area: 2 / 2;
+      flex-direction: row;
+      align-items: center;
     }
     .figures {
       grid-area: 3 / 1 / 4 / -1;
@@ -645,9 +684,16 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
       justify-self: stretch;
     }
     .actions .secondary-button,
-    .actions form {
-      width: 100%;
+    .actions .sync-form {
+      flex: 1;
       justify-content: center;
+    }
+    .actions .sync-form .secondary-button {
+      width: 100%;
+    }
+    .clone-toggle button {
+      min-height: 40px;
+      padding: 0 12px;
     }
     /* Objetivos táctiles de 40 px también aquí */
     .actions .secondary-button,

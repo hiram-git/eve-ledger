@@ -22,6 +22,7 @@ const FIRST_SYNC_GRACE_MS = 10 * 60_000;
 export const ASSETS_SCOPE = 'esi-assets.read_assets.v1';
 export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
 export const CONTRACTS_SCOPE = 'esi-contracts.read_character_contracts.v1';
+export const SKILLS_SCOPE = 'esi-skills.read_skills.v1';
 
 // Necesita atención: el sync no está al día o le falta algún permiso (ambas cosas se arreglan desde Pilotos).
 // Es lo que cuenta el punto ámbar de «Pilotos» en la navegación

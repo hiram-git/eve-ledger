@@ -15,7 +15,7 @@ import { LANG_NAMES, LANGS, getLang, t } from '../lib/i18n';
 
 interface Props {
   title?: string;
-  section: 'resumen' | 'indicadores' | 'balances' | 'pilotos';
+  section: 'resumen' | 'indicadores' | 'balances' | 'doctrinas' | 'pilotos';
   status?: SyncStatus;
   pilots?: number;
   // Pilotos con el sync roto, viejo o sin primer sync: un punto ámbar junto a «Pilotos»
@@ -68,6 +68,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
         <a href="/" aria-current={section === 'resumen' ? 'page' : undefined}>{m.summary}</a>
         <a href="/indicadores" aria-current={section === 'indicadores' ? 'page' : undefined}>{m.indicators}</a>
         <a href="/balances" aria-current={section === 'balances' ? 'page' : undefined}>{m.balances}</a>
+        <a href="/doctrinas" aria-current={section === 'doctrinas' ? 'page' : undefined}>{m.doctrines}</a>
         <a
           href="/pilotos"
           aria-current={section === 'pilotos' ? 'page' : undefined}
@@ -314,6 +315,26 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       width: 100%;
       margin: 0;
       height: 40px;
+    }
+    /* Cinco secciones en 358 px: menos aire entre ellas y, si aun así no caben (alemán), la fila se desliza */
+    .sections {
+      gap: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .sections a {
+      flex-shrink: 0;
+      padding: 0 7px;
+    }
+    /* El contador de pilotos sobra aquí: lo dice el aria-label y la página; el punto ámbar se queda */
+    .sections .count {
+      display: none;
+    }
+    /* Con overflow, la raya de 1 px por debajo se recortaría */
+    .sections a[aria-current='page']::after {
+      left: 7px;
+      right: 7px;
+      bottom: 0;
     }
     .sections a:first-child {
       padding-left: 0;

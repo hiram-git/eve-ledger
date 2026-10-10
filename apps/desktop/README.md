@@ -31,7 +31,7 @@ bun run tauri dev        # o: bun run tauri build  → src-tauri/target/release/
 
 Quien instala no crea ninguna app en el portal de desarrolladores de EVE (decisión del usuario): el instalador trae el Client ID de una app de EVE y el login usa PKCE, sin secreto. El asistente ya no tiene pasos ni campos para una app propia.
 
-1. Crea una vez la app en <https://developers.eveonline.com/applications> con los cuatro scopes (`esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`, `esi-killmails.read_killmails.v1`, `esi-contracts.read_character_contracts.v1`) y la Callback URL `http://127.0.0.1:47300/auth/callback`: cada uno la abre en su propio equipo, por eso el puerto de la API es fijo. La Secret Key no hace falta y no se debe repartir.
+1. Crea una vez la app en <https://developers.eveonline.com/applications> con los cinco scopes (`esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`, `esi-killmails.read_killmails.v1`, `esi-contracts.read_character_contracts.v1`, `esi-skills.read_skills.v1`) y la Callback URL `http://127.0.0.1:47300/auth/callback`: cada uno la abre en su propio equipo, por eso el puerto de la API es fijo. La Secret Key no hace falta y no se debe repartir. **Si añades un scope** (el último: `esi-skills.read_skills.v1`, para Doctrinas), añádelo a la app **antes** de repartir el instalador: el login lo pide y EVE rechaza un scope que la app no tiene. Quien ya tenía pilotos los revincula para concederlo.
 2. Compila con su Client ID en `EVE_LEDGER_CLIENT_ID` (es público: va en la URL del login):
    ```sh
    EVE_LEDGER_CLIENT_ID=tu-client-id bun run tauri build          # PowerShell: $env:EVE_LEDGER_CLIENT_ID="tu-client-id"; bun run tauri build

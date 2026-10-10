@@ -10,6 +10,7 @@ import { resolvePendingNames } from './names';
 import { resolvePendingTypes } from './types';
 import { refreshPricesIfStale } from './prices';
 import { refreshPlexQuote } from './quotes';
+import { fetchSkills, SKILLS_SCOPE } from './skills';
 
 // GET /characters/{id}/wallet/journal (solo los campos que guardamos)
 type EsiJournalEntry = {
@@ -38,7 +39,7 @@ type EsiTransaction = {
   journal_ref_id: number;
 };
 
-type Kind = 'journal' | 'transactions' | 'assets' | 'killmails' | 'contracts';
+type Kind = 'journal' | 'transactions' | 'assets' | 'killmails' | 'contracts' | 'skills';
 
 export type StepResult = { pages: number; fetched: number; inserted: number; error?: string };
 
@@ -51,6 +52,7 @@ export type SyncResult = {
   assets?: StepResult; // foto completa: inserted = ítems guardados, no "nuevos"
   killmails?: StepResult; // inserted = killmails nuevos (muertes y pérdidas)
   contracts?: StepResult; // foto de los contratos: inserted = contratos guardados
+  skills?: StepResult; // foto de las skills: inserted = skills guardadas
   skipped?: string[];
   namesResolved?: number;
   error?: string;
@@ -186,6 +188,8 @@ export const syncKillmails = (characterId: number) =>
 export const syncContracts = (characterId: number) =>
   logged(characterId, 'contracts', (r) => fetchContracts(characterId, r));
 
+export const syncSkills = (characterId: number) => logged(characterId, 'skills', (r) => fetchSkills(characterId, r));
+
 // Tareas públicas (sin token) tras sincronizar: fallan sin invalidar los datos ya guardados
 // y se reintentan en el próximo sync
 async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
@@ -223,10 +227,19 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
       else result.skipped.push(`pérdidas: falta el scope ${LOSSES_SCOPE}, vuelve a vincular el personaje`);
       if (scopes.includes(CONTRACTS_SCOPE)) result.contracts = await syncContracts(characterId);
       else result.skipped.push(`contratos: falta el scope ${CONTRACTS_SCOPE}, vuelve a vincular el personaje`);
+      if (scopes.includes(SKILLS_SCOPE)) result.skills = await syncSkills(characterId);
+      else result.skipped.push(`skills: falta el scope ${SKILLS_SCOPE}, vuelve a vincular el personaje`);
     }
     result.inserted = result.journal.inserted + (result.transactions?.inserted ?? 0);
 
-    const errors = [result.journal.error, result.transactions?.error, result.assets?.error, result.killmails?.error, result.contracts?.error].filter(Boolean);
+    const errors = [
+      result.journal.error,
+      result.transactions?.error,
+      result.assets?.error,
+      result.killmails?.error,
+      result.contracts?.error,
+      result.skills?.error,
+    ].filter(Boolean);
     if (errors.length) result.error = errors.join(' | ');
     else await db.update(characters).set({ lastSyncAt: new Date() }).where(eq(characters.id, characterId));
 

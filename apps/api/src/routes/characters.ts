@@ -16,6 +16,7 @@ async function listCharacters() {
       lastSyncAt: characters.lastSyncAt,
       createdAt: characters.createdAt,
       linkedAt: characters.linkedAt,
+      clone: characters.clone,
     })
     .from(characters);
 

@@ -16,6 +16,12 @@ export const characters = sqliteTable('characters', {
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
   // Último vínculo (también al revincular): los errores de sync anteriores ya no cuentan
   linkedAt: ts('linked_at'),
+  // Alfa u Omega: ESI no lo dice, lo marca el usuario en Pilotos. Un Alfa entrena a la mitad de velocidad
+  clone: text('clone', { enum: ['omega', 'alpha'] }).notNull().default('omega'),
+  // GET /characters/{id}/skills: SP totales y sin asignar (los de los skill injectors aún no repartidos)
+  totalSp: integer('total_sp'),
+  unallocatedSp: integer('unallocated_sp'),
+  skillsAt: ts('skills_at'),
 });
 
 export const walletJournal = sqliteTable(
@@ -78,7 +84,7 @@ export const names = sqliteTable('names', {
 export const syncLog = sqliteTable('sync_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   characterId: integer('character_id').notNull(),
-  kind: text('kind').notNull().default('journal'), // journal | transactions | assets | killmails | contracts
+  kind: text('kind').notNull().default('journal'), // journal | transactions | assets | killmails | contracts | skills
   startedAt: ts('started_at').notNull(),
   finishedAt: ts('finished_at'),
   rowsInserted: integer('rows_inserted').default(0),
@@ -200,4 +206,81 @@ export const types = sqliteTable('types', {
   groupId: integer('group_id').notNull(),
   marketGroupId: integer('market_group_id'), // null = no se vende en el mercado
   updatedAt: ts('updated_at').notNull(),
+});
+
+// Skills entrenadas de cada piloto (GET /characters/{id}/skills, scope esi-skills.read_skills.v1): una foto que
+// se reemplaza en cada sync. activeLevel es el que puede usar (un Alfa no usa las skills de Omega por encima de
+// su límite); trainedLevel y sp, lo entrenado
+export const characterSkills = sqliteTable(
+  'character_skills',
+  {
+    characterId: integer('character_id').notNull(),
+    skillId: integer('skill_id').notNull(),
+    trainedLevel: integer('trained_level').notNull(),
+    activeLevel: integer('active_level').notNull(),
+    sp: integer('sp').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.characterId, t.skillId] })],
+);
+
+// Atributos de cada piloto (GET /characters/{id}/attributes): ESI los da ya con los implantes sumados (EVEMon le
+// resta el bono de los implantes para obtener la base), así que son los que cuentan para la velocidad de entrenamiento
+export const characterAttributes = sqliteTable('character_attributes', {
+  characterId: integer('character_id').primaryKey(),
+  charisma: integer('charisma').notNull(),
+  intelligence: integer('intelligence').notNull(),
+  memory: integer('memory').notNull(),
+  perception: integer('perception').notNull(),
+  willpower: integer('willpower').notNull(),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+// Dogma de los tipos que usan las doctrinas (GET /universe/types/{id} y /universe/groups/{id}, públicos y estáticos):
+// categoría (nave, módulo, drone, munición…), skills requeridas (requiredSkill1…6) y, para las skills, su rango y
+// sus atributos primario y secundario
+export type RequiredSkill = { skillId: number; level: number };
+export const typeDogma = sqliteTable('type_dogma', {
+  typeId: integer('type_id').primaryKey(),
+  name: text('name').notNull(),
+  groupId: integer('group_id').notNull(),
+  categoryId: integer('category_id').notNull(),
+  rank: real('rank'),
+  primaryAttr: integer('primary_attr'),
+  secondaryAttr: integer('secondary_attr'),
+  required: text('required', { mode: 'json' }).$type<RequiredSkill[]>().notNull(),
+  updatedAt: ts('updated_at').notNull(),
+});
+
+// Doctrinas: fits pegados en formato EFT (eveworkbench, foros) con, opcionalmente, el plan de skills de la
+// comunidad (un .emp de EVEMon) para cada fit
+export const doctrines = sqliteTable('doctrines', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+});
+
+// section: el bloque del EFT (low, mid, high, rig, subsystem), la munición cargada (charge), la bodega de drones o
+// cazas (drone) o la carga (cargo). La carga no cuenta para poder volarla
+export type FitSection = 'low' | 'mid' | 'high' | 'rig' | 'subsystem' | 'charge' | 'drone' | 'cargo';
+export type FitItem = { typeId: number; quantity: number; section: FitSection };
+export const fits = sqliteTable('fits', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  doctrineId: integer('doctrine_id')
+    .notNull()
+    .references(() => doctrines.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  shipTypeId: integer('ship_type_id').notNull(),
+  eft: text('eft').notNull(),
+  items: text('items', { mode: 'json' }).$type<FitItem[]>().notNull(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+});
+
+// Plan de skills de un fit (el «óptimo» de la comunidad): skill y nivel objetivo
+export const fitPlans = sqliteTable('fit_plans', {
+  fitId: integer('fit_id')
+    .primaryKey()
+    .references(() => fits.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  skills: text('skills', { mode: 'json' }).$type<RequiredSkill[]>().notNull(),
+  createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
 });

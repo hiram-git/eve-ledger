@@ -3,7 +3,7 @@
 ## Arranque
 1. Crea la app en https://developers.eveonline.com
    - Callback: `http://localhost:3000/auth/callback`
-   - Scopes: `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`, `esi-killmails.read_killmails.v1`, `esi-contracts.read_character_contracts.v1`
+   - Scopes: `esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`, `esi-killmails.read_killmails.v1`, `esi-contracts.read_character_contracts.v1`, `esi-skills.read_skills.v1`
 2. `cp .env.example .env` y completa CLIENT_ID, CLIENT_SECRET y ENC_KEY
 3. `bun install`
 4. `bun run db:generate` si cambiaste el esquema (crea las migraciones). Se aplican solas al arrancar; para aplicarlas sin arrancar: `bun run db:migrate`
