@@ -1,7 +1,7 @@
 ---
 // Detalle por actividad (PvE, PvP, trading como margen, otros). El vistazo con el neto de cada una vive en la
 // tarjeta de Neto: aquí solo lo que hay detrás, por tipo de movimiento de ESI, sin repetir barras ni netos.
-import type { Summary } from '../lib/api';
+import { ACTIVITIES, type Activity, type Summary } from '../lib/api';
 import Donut from './Donut.astro';
 import { isk, iskFull, refTypeLabel } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
@@ -21,12 +21,17 @@ const out = (v: number) => (v ? -v : 0);
 // período, y que cada actividad lleve siempre el mismo color (la porción i de las tortas y la muestra de su fila)
 const rows = activities;
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
-const color = (i: number) => `var(--cat-${(i % 7) + 1})`;
+// El color va por la posición de la actividad en el orden fijo, no en la lista que llega (la API omite las
+// actividades sin movimientos: sin esto, Trading tomaba el color de PvP en un piloto que no hizo PvP)
+const color = (a: Activity) => `var(--cat-${ACTIVITIES.indexOf(a) + 1})`;
 // Tortas: de dónde vienen los ingresos y a dónde van los gastos (brutos), por actividad
 const totalIncome = rows.reduce((n, a) => n + a.income, 0);
 const totalExpenses = rows.reduce((n, a) => n + a.expenses, 0);
-const incomeSlices = rows.map((a) => ({ label: m.activityName[a.activity], value: a.income }));
-const expensesSlices = rows.map((a) => ({ label: m.activityName[a.activity], value: a.expenses }));
+// Las seis porciones siempre, en orden fijo (con 0 las que no tienen movimientos): la torta pinta la porción i con
+// el color i, el mismo que la muestra de la fila
+const byKey = new Map(rows.map((a) => [a.activity, a]));
+const incomeSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value: byKey.get(k)?.income ?? 0 }));
+const expensesSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value: byKey.get(k)?.expenses ?? 0 }));
 ---
 
 <section class="panel" id="por-actividad">
@@ -61,12 +66,12 @@ const expensesSlices = rows.map((a) => ({ label: m.activityName[a.activity], val
           <span>{m.expenses}</span>
         </div>
         <ul>
-          {rows.map((a, i) => (
+          {rows.map((a) => (
             <li>
               <details>
                 <summary>
                   <span class="name">
-                    <i class="swatch" style={`background: ${color(i)}`} aria-hidden="true" />
+                    <i class="swatch" style={`background: ${color(a.activity)}`} aria-hidden="true" />
                     {m.activityName[a.activity]}
                   </span>
                   <span class="hint">{m.activityHint[a.activity]}</span>

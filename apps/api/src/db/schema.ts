@@ -61,6 +61,8 @@ export const walletTransactions = sqliteTable(
     primaryKey({ columns: [t.transactionId, t.characterId] }),
     index('tx_char_date_idx').on(t.characterId, t.date),
     index('tx_type_idx').on(t.typeId),
+    // El journal busca su transacción (compras a otro de tus pilotos, transferencias por transacción)
+    index('tx_char_journal_idx').on(t.characterId, t.journalRefId),
   ],
 );
 

@@ -76,8 +76,11 @@ const lastSync = walletRows.map((c) => c.lastSyncAt).filter((x): x is string => 
 // ---- Balance general ----
 const o = indicators?.omega;
 const wallets = walletRows.reduce((n, c) => n + (c.balance ?? 0), 0);
-const openingKnown = walletRows.every((c) => c.openingBalance !== null);
-const opening = walletRows.reduce((n, c) => n + (c.openingBalance ?? 0), 0);
+// La conciliación suma los pilotos con movimientos guardados (como la tabla de pilotos del resumen): uno sin
+// primer sync no tiene saldo ni saldo anterior, y no debe dejar en «—» el de todos
+const recRows = walletRows.filter((c) => c.balance !== null);
+const openingKnown = recRows.length > 0 && recRows.every((c) => c.openingBalance !== null);
+const opening = recRows.reduce((n, c) => n + (c.openingBalance ?? 0), 0);
 const invValue = inventory?.value ?? 0;
 // PLEX guardado valorado a la media de ESI (como el inventario); solo se conoce en el consolidado
 const plexValue = !selected && o && o.plexOwned > 0 && o.plexAveragePrice !== null ? o.plexOwned * o.plexAveragePrice : 0;
@@ -104,7 +107,7 @@ const prev = summary?.previous;
 
 // ---- Conciliación del wallet ----
 const gap = openingKnown ? wallets - opening - walletChange : 0;
-const partialAt = walletRows
+const partialAt = recRows
   .filter((c) => c.openingPartial && c.openingAt)
   .map((c) => c.openingAt!)
   .sort()

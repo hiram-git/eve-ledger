@@ -4,6 +4,9 @@ export type Flow = { income: number; expenses: number; net: number };
 
 // accounts: PLEX comprado o vendido en el mercado (coste de las cuentas, aparte del resultado de juego)
 export type Activity = 'pve' | 'pvp' | 'trading' | 'logistics' | 'other' | 'accounts';
+// Orden fijo de las actividades (el de la API, apps/api/src/lib/activities.ts): fila y color de cada una no
+// cambian con el período ni con el piloto, aunque la API omita las que no tienen movimientos
+export const ACTIVITIES: readonly Activity[] = ['pve', 'pvp', 'trading', 'logistics', 'other', 'accounts'];
 
 // Revisión de mercado: por ítem, vendido y comprado en el período
 export type MarketItem = {
