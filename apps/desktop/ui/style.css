@@ -113,48 +113,6 @@ h2 {
   background: var(--panel);
 }
 
-.steps {
-  display: grid;
-  gap: 12px;
-  margin: 0 0 20px;
-  padding-left: 20px;
-  color: var(--text-secondary);
-}
-
-.steps li::marker {
-  color: var(--text-muted);
-  font-family: var(--mono);
-}
-
-.scopes {
-  margin: 6px 0;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel-2);
-  list-style: none;
-  font: 13px/1.7 var(--mono);
-  color: var(--text);
-}
-
-.bundled {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 16px;
-}
-
-.bundled button.link {
-  min-height: 40px;
-  padding-left: 0;
-}
-
-.bundled p {
-  max-width: 62ch;
-  margin: 0;
-  color: var(--text-secondary);
-}
-
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -215,17 +173,6 @@ input[readonly] {
 
 input[aria-invalid='true'] {
   border-color: var(--critical);
-}
-
-.copy-field,
-.secret {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-.secret {
-  margin-top: 0;
 }
 
 button {

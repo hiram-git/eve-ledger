@@ -27,18 +27,18 @@ bun run tauri dev        # o: bun run tauri build  → src-tauri/target/release/
 
 `prepare:server` hay que correrlo en cada sistema para el que se compila (copia el Bun de esa máquina como sidecar) y cada vez que cambian `apps/api` o `apps/web`.
 
-### Una app de EVE para toda la corp (opcional)
+### La app de EVE incluida (obligatoria)
 
-Sin secreto, el login de EVE usa PKCE, así que el Client ID de una app de EVE se puede incluir en el instalador y quien lo instala no tiene que crear la suya (el asistente lo dice y deja usar una propia):
+Quien instala no crea ninguna app en el portal de desarrolladores de EVE (decisión del usuario): el instalador trae el Client ID de una app de EVE y el login usa PKCE, sin secreto. El asistente ya no tiene pasos ni campos para una app propia.
 
-1. Crea una app en <https://developers.eveonline.com/applications> con los cuatro scopes y la Callback URL `http://127.0.0.1:47300/auth/callback` (el puerto por defecto: cada uno la abre en su propio equipo). La Secret Key no hace falta.
+1. Crea una vez la app en <https://developers.eveonline.com/applications> con los cuatro scopes (`esi-wallet.read_character_wallet.v1`, `esi-assets.read_assets.v1`, `esi-killmails.read_killmails.v1`, `esi-contracts.read_character_contracts.v1`) y la Callback URL `http://127.0.0.1:47300/auth/callback`: cada uno la abre en su propio equipo, por eso el puerto de la API es fijo. La Secret Key no hace falta y no se debe repartir.
 2. Compila con su Client ID en `EVE_LEDGER_CLIENT_ID` (es público: va en la URL del login):
    ```sh
    EVE_LEDGER_CLIENT_ID=tu-client-id bun run tauri build          # PowerShell: $env:EVE_LEDGER_CLIENT_ID="tu-client-id"; bun run tauri build
    ```
-   En GitHub Actions, crea la variable del repositorio `EVE_LEDGER_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables).
+   En GitHub Actions es la variable del repositorio `EVE_LEDGER_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables). **Sin ella, el workflow falla** con un mensaje que lo dice: un instalador sin app de EVE no podría vincular pilotos.
 
-Con esa app, el puerto de la API no se puede cambiar (la Callback URL es fija); quien quiera otro puerto usa su propia app.
+Quien configuró su propia app en una versión anterior la conserva: `ledger.env` guarda su Client ID (y su Secret Key, si la puso) y el asistente no los toca, así que sus pilotos no tienen que revincularse.
 
 Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) los compila en GitHub Actions. Se lanza solo cuando una versión nueva de `src-tauri/tauri.conf.json` llega a `main` (merge): compila los tres instaladores y deja un borrador de release «EVE Ledger x.y.z» con la etiqueta `desktop-vx.y.z` (si esa release ya existe, no hace nada: hay que subir la versión). También a mano (Actions → «Instaladores de escritorio» → Run workflow: los instaladores quedan como artefactos y, con la casilla «release», también el borrador) o con una etiqueta `desktop-v0.1.0` que coincida con la versión.
 

@@ -5,15 +5,18 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    /// App registrada en https://developers.eveonline.com: la del usuario o la que trae el instalador
+    /// App de EVE: la que trae el instalador (EVE_LEDGER_CLIENT_ID). El asistente ya no la pide (decisión del
+    /// usuario: nadie tiene que crear una en developers.eveonline.com); si ledger.env trae otra (quien la configuró
+    /// en una versión anterior), se conserva para no obligar a revincular los pilotos
     pub client_id: String,
-    /// Opcional: sin ella, el login de EVE usa PKCE (apps/api/src/lib/sso.ts)
+    /// Solo la de una app propia de versiones anteriores; la app incluida va sin secreto (PKCE, apps/api/src/lib/sso.ts)
     pub client_secret: String,
     /// 32 bytes en base64: cifra los tokens de EVE. Cambiarla obliga a revincular los pilotos
     pub enc_key: String,
@@ -120,8 +123,8 @@ impl Config {
     pub fn to_env(&self) -> String {
         format!(
             "# EVE Ledger: configuración (la escribe la app; se puede editar desde «Configuración…»)\n\
-             # App de EVE (https://developers.eveonline.com). Callback: {callback}\n\
-             # La Secret Key es opcional: sin ella, el login usa PKCE\n\
+             # App de EVE: la incluida en el instalador (no hace falta tocarla). Callback: {callback}\n\
+             # Sin Secret Key, el login usa PKCE\n\
              EVE_CLIENT_ID={}\nEVE_CLIENT_SECRET={}\n\
              # Cifra los tokens de EVE. Si cambia, hay que revincular los pilotos\n\
              ENC_KEY={}\n\
@@ -184,23 +187,48 @@ impl Config {
     }
 }
 
-/// None si aún no hay archivo (primer arranque)
+/// None si aún no hay archivo (primer arranque). Si el archivo no trae ENC_KEY (editado a mano), se genera una y se
+/// guarda en el acto: antes cada arranque usaba una clave nueva sin guardarla, y los pilotos vinculados se perdían
+/// una y otra vez. Con una clave nueva, los que estaban vinculados con la anterior hay que revincularlos
 pub fn load(path: &Path) -> Option<Config> {
-    fs::read_to_string(path).ok().map(|t| Config::from_map(&parse(&t)))
+    let map = parse(&fs::read_to_string(path).ok()?);
+    let c = Config::from_map(&map);
+    if map.get("ENC_KEY").map_or(true, |v| v.trim().is_empty()) {
+        if let Err(e) = save(path, &c) {
+            eprintln!("[config] no se pudo guardar la ENC_KEY nueva en {}: {e}", path.display());
+        }
+    }
+    Some(c)
 }
 
-/// Guarda el archivo; en Linux y macOS solo lo puede leer el usuario (lleva el secreto de la app de EVE)
+/// Guarda el archivo. En Linux y macOS solo lo puede leer el usuario desde que se crea (lleva ENC_KEY y, si la hay,
+/// la Secret Key). Se escribe en un temporal que se renombra encima: un corte de luz no deja el archivo a medias
+/// (con ENC_KEY truncada, los tokens de los pilotos ya no se podrían descifrar)
 pub fn save(path: &Path, c: &Config) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::write(path, c.to_env())?;
-    #[cfg(unix)]
+    let tmp = path.with_extension("env.tmp");
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        let mut opts = OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut file = opts.open(&tmp)?;
+        #[cfg(unix)]
+        {
+            // Por si el temporal ya existía con otros permisos (mode solo vale al crearlo)
+            use std::os::unix::fs::PermissionsExt;
+            file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        }
+        file.write_all(c.to_env().as_bytes())?;
+        file.sync_all()?;
     }
-    Ok(())
+    // En Windows, rename reemplaza el archivo existente (MoveFileExW con MOVEFILE_REPLACE_EXISTING)
+    fs::rename(&tmp, path)
 }
 
 #[cfg(test)]
@@ -264,6 +292,41 @@ mod tests {
         assert_eq!(env["WEB_URL"], format!("http://127.0.0.1:{DEFAULT_WEB_PORT}"));
         let web: BTreeMap<_, _> = valid().web_env("0.1.0").into_iter().collect();
         assert_eq!(web["APP_VERSION"], "0.1.0");
+    }
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("eve-ledger-config-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn sin_enc_key_genera_una_y_la_guarda() {
+        let path = temp_dir("sin-clave").join("ledger.env");
+        fs::write(&path, "EVE_CLIENT_ID=abc\nAPI_PORT=47300\n").unwrap();
+        let first = load(&path).unwrap();
+        assert_eq!(STANDARD.decode(&first.enc_key).unwrap().len(), 32);
+        // El siguiente arranque lee la misma clave (antes salía otra cada vez)
+        assert_eq!(load(&path).unwrap().enc_key, first.enc_key);
+        assert!(fs::read_to_string(&path).unwrap().contains(&format!("ENC_KEY={}", first.enc_key)));
+        // Lo demás se conserva
+        assert_eq!(load(&path).unwrap().client_id, "abc");
+    }
+
+    #[test]
+    fn guardar_no_deja_temporales_y_solo_lo_lee_el_usuario() {
+        let dir = temp_dir("guardar");
+        let path = dir.join("ledger.env");
+        save(&path, &valid()).unwrap();
+        save(&path, &Config { pilot_slots: 6, ..valid() }).unwrap();
+        assert_eq!(load(&path).unwrap().pilot_slots, 6);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        }
     }
 
     #[test]

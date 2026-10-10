@@ -162,8 +162,10 @@ export async function shipLosses(days: number, characterId?: number) {
   const missingContracts = pilots.filter(lacks(CONTRACTS_SCOPE)).map(({ id, name }) => ({ id, name }));
   const nameOf = new Map(pilots.map((p) => [p.id, p.name]));
 
-  // Todas las pérdidas de tus pilotos (no solo las de la vista): las compras y los couriers se reparten entre
-  // pérdidas en orden, y la vista de un piloto necesita saber qué pagó para las naves de los demás
+  // Todas las pérdidas guardadas de tus pilotos (no solo las de la vista ni las del período): las compras y los
+  // couriers se reparten entre pérdidas en orden, así que el estado de una pérdida no puede depender del período
+  // que se mire (con «30 días» una compra iba a la pérdida de hace 29 días; con «37», a la de hace 31). La vista de
+  // un piloto, además, necesita saber qué pagó para las naves de los demás. El período se aplica al final
   const rows = pilots.length
     ? await db
         .select({
@@ -178,12 +180,7 @@ export async function shipLosses(days: number, characterId?: number) {
         })
         .from(killmails)
         .leftJoin(names, eq(names.id, killmails.shipTypeId))
-        .where(
-          and(
-            inArray(killmails.victimCharacterId, linkedIds),
-            gte(killmails.time, from),
-          ),
-        )
+        .where(inArray(killmails.victimCharacterId, linkedIds))
         .orderBy(asc(killmails.time))
     : [];
 
@@ -482,12 +479,13 @@ export async function shipLosses(days: number, characterId?: number) {
   // En la vista de un piloto, además, el flujo de SU wallet por pérdidas va aparte (ownWallet): el seguro de sus
   // naves y lo que él pagó (también para las naves de sus otros pilotos); quién pagó por las suyas, en paidByOthers
   type Row = (typeof losses)[number];
-  const view = losses.filter((l) => !characterId || l.characterId === characterId);
+  const inPeriod = losses.filter((l) => l.time >= from);
+  const view = inPeriod.filter((l) => !characterId || l.characterId === characterId);
   const sum = (rows: Row[], f: (l: Row) => number) => rows.reduce((n, l) => n + f(l), 0);
   // Lo que pagó un piloto por una pérdida (reposición + courier)
   const paidBy = (l: Row, id: number) => (l.replacementBy[id] ?? 0) + (l.transportBy === id ? l.transport : 0);
   const forOthers = characterId
-    ? losses
+    ? inPeriod
         .filter((l) => l.characterId !== characterId && paidBy(l, characterId) > 0)
         .map((l) => ({ killmailId: l.killmailId, ship: l.ship, pilot: l.pilot, amount: paidBy(l, characterId) }))
     : [];
@@ -539,7 +537,13 @@ export async function shipLosses(days: number, characterId?: number) {
       // Lo firme: sin lo que falta por reponer (una estimación que aún puede cambiar)
       firmCost: insurance - replacement - transport - unreplaced,
       premiums: prem?.total ?? 0,
-      unpricedTypes: unpriced.size,
+      // Tipos sin precio de las pérdidas de la vista (el reparto mira todas, pero la nota habla de estas)
+      unpricedTypes: new Set(
+        rows
+          .filter((r) => r.time >= from && (!characterId || r.characterId === characterId))
+          .flatMap((r) => [r.shipTypeId, ...r.items.filter((i) => !i.copy).map((i) => i.typeId)])
+          .filter((t) => unpriced.has(t)),
+      ).size,
     },
     // Vista de un piloto: el flujo de su wallet por pérdidas, lo que pagó por naves de otros y quién pagó por las suyas
     ownWallet,

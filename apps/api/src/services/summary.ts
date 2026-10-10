@@ -7,13 +7,32 @@ import { marketReview } from './transactions';
 
 const DAY_MS = 86_400_000;
 
+// La transacción de mercado de un movimiento del journal (mismo piloto, journal_ref_id = journal_id): su
+// contraparte (client_id) y su id, que comparten los dos lados de una compraventa entre tus pilotos
+const linkedTx = (col: string) =>
+  sql.raw(
+    `(select t.${col} from wallet_transactions t where t.character_id = wallet_journal.character_id and t.journal_ref_id = wallet_journal.journal_id limit 1)`,
+  );
+const txClient = linkedTx('client_id');
+const txId = linkedTx('transaction_id');
+
 // Transferencias entre mis propios personajes: en el consolidado se anulan
 // (una sale de un wallet y entra en otro), así que no cuentan como ingreso ni gasto.
-// Dos pilotos DISTINTOS: en una compra de mercado (market_escrow) ESI pone al propio comprador como
-// primera y segunda parte, y eso es un gasto, no una transferencia
-export const isInternal = sql<number>`(case when ${walletJournal.firstPartyId} in (select id from characters)
-  and ${walletJournal.secondPartyId} in (select id from characters)
-  and ${walletJournal.firstPartyId} <> ${walletJournal.secondPartyId} then 1 else 0 end)`;
+// - Dos pilotos DISTINTOS en las partes: donaciones, contratos, trades y el lado del vendedor de una compraventa.
+// - Una compra de mercado (market_escrow) lleva al propio comprador en las dos partes: es un gasto salvo que su
+//   transacción tenga como contraparte a otro de tus pilotos (comprar la orden de venta de tu alter), y por el
+//   importe entero de esa transacción (una orden de compra que llenan varios vendedores no se anula)
+export const isInternal = sql<number>`(case
+  when ${walletJournal.firstPartyId} in (select id from characters)
+    and ${walletJournal.secondPartyId} in (select id from characters)
+    and ${walletJournal.firstPartyId} <> ${walletJournal.secondPartyId} then 1
+  when ${walletJournal.refType} = 'market_escrow' and exists (
+    select 1 from wallet_transactions t
+    where t.character_id = ${walletJournal.characterId} and t.journal_ref_id = ${walletJournal.journalId}
+      and t.client_id in (select id from characters) and t.client_id <> ${walletJournal.characterId}
+      and abs(t.quantity * t.unit_price + ${walletJournal.amount}) < 0.01
+  ) then 1
+  else 0 end)`;
 
 const income = sql<number>`coalesce(sum(case when ${walletJournal.amount} > 0 then ${walletJournal.amount} end), 0)`;
 const expenses = sql<number>`coalesce(sum(case when ${walletJournal.amount} < 0 then -${walletJournal.amount} end), 0)`;
@@ -173,15 +192,22 @@ export async function getSummary(days: number, characterId?: number) {
       date: walletJournal.date,
       firstPartyId: walletJournal.firstPartyId,
       secondPartyId: walletJournal.secondPartyId,
+      txClient: sql<number | null>`${txClient}`,
+      txId: sql<number | null>`${txId}`,
     })
     .from(walletJournal)
     .where(and(gte(walletJournal.date, previousFrom), eq(isInternal, 1)));
-  const transfers = new Map<number, { from: number; to: number; amount: number; date: Date }>();
+  // Una transferencia por clave: el id de la transacción en una compraventa de mercado (el escrow del comprador
+  // y el market_transaction del vendedor tienen ids de journal distintos), el del journal en lo demás
+  const transfers = new Map<string, { from: number; to: number; amount: number; date: Date }>();
   for (const r of internalRows) {
-    if (transfers.has(r.journalId) || !r.amount) continue;
-    const other = r.firstPartyId === r.characterId ? r.secondPartyId! : r.firstPartyId!;
+    const key = r.txId !== null ? `tx${r.txId}` : `j${r.journalId}`;
+    if (transfers.has(key) || !r.amount) continue;
+    // La otra parte: la que no es este piloto; en el escrow del comprador (él en las dos), el cliente de la transacción
+    const other =
+      r.firstPartyId !== r.characterId ? r.firstPartyId! : r.secondPartyId !== r.characterId ? r.secondPartyId! : r.txClient!;
     const [sender, receiver] = r.amount < 0 ? [r.characterId, other] : [other, r.characterId];
-    transfers.set(r.journalId, { from: sender, to: receiver, amount: Math.abs(r.amount), date: r.date });
+    transfers.set(key, { from: sender, to: receiver, amount: Math.abs(r.amount), date: r.date });
   }
   // Recibido y enviado por un piloto (o movido entre todos) entre dos instantes
   const internalBetween = (id: number | undefined, a: Date, b?: Date) => {
@@ -249,22 +275,31 @@ export async function getSummary(days: number, characterId?: number) {
   const refOf = new Map(
     (refIds.length
       ? await db
-          .select({ id: walletJournal.journalId, characterId: walletJournal.characterId, refType, activity })
+          .select({ id: walletJournal.journalId, characterId: walletJournal.characterId, amount: walletJournal.amount, refType, activity })
           .from(walletJournal)
           .where(and(inPeriod, inArray(walletJournal.journalId, refIds)))
       : []
     ).map((r) => [`${r.id}|${r.characterId}`, r]),
   );
-  // Lo que sale de cada fila (ref_type + actividad): una compra repartida entre dos pérdidas es un solo movimiento
-  const fromRows = new Map<string, { amount: number; ids: Set<string> }>();
+  // Lo que sale de cada fila (ref_type + actividad). Una compra repartida entre dos pérdidas es un solo movimiento,
+  // y una que repone solo en parte (dos Rifter, uno para la pérdida) se queda en su fila con lo que no es reposición:
+  // el contador de la fila solo pierde los asientos que se van enteros a PvP
+  const used = new Map<string, number>();
+  const fromRows = new Map<string, { amount: number; ids: Set<string>; whole: number }>();
   for (const s of replacementSpend) {
-    const r = s.journalRefId !== null ? refOf.get(`${s.journalRefId}|${s.characterId}`) : undefined;
+    const id = `${s.journalRefId}|${s.characterId}`;
+    const r = s.journalRefId !== null ? refOf.get(id) : undefined;
     if (!r) continue;
     const key = `${r.refType}|${r.activity}`;
-    const row = fromRows.get(key) ?? { amount: 0, ids: new Set<string>() };
+    const row = fromRows.get(key) ?? { amount: 0, ids: new Set<string>(), whole: 0 };
     row.amount += s.amount;
-    row.ids.add(`${s.journalRefId}|${s.characterId}`);
+    row.ids.add(id);
     fromRows.set(key, row);
+    used.set(id, (used.get(id) ?? 0) + s.amount);
+  }
+  for (const [id, amount] of used) {
+    const r = refOf.get(id)!;
+    if (amount >= Math.abs(r.amount) - 0.01) fromRows.get(`${r.refType}|${r.activity}`)!.whole += 1;
   }
   const replacementTotal = [...fromRows.values()].reduce((n, r) => n + r.amount, 0);
   const replacementCount = [...fromRows.values()].reduce((n, r) => n + r.ids.size, 0);
@@ -289,7 +324,7 @@ export async function getSummary(days: number, characterId?: number) {
     const repl = fromRows.get(`${r.refType}|${r.activity}`);
     if (repl && r.activity === a) {
       exp -= repl.amount;
-      count -= repl.ids.size;
+      count -= repl.whole;
     }
     const t = transportRows.find((x) => x.refType === r.refType && x.activity === r.activity);
     if (t && r.activity === a) {
@@ -369,8 +404,10 @@ export async function getSummary(days: number, characterId?: number) {
         ...byRefType.filter((r) => r.activity === a).map((r) => shift(a, r)),
         ...(a === 'pvp' ? shipRefTypes : []),
       ]
-        // Sin redondeo: una fila que queda en 0 (todas sus compras eran reposición) desaparece
-        .filter((r) => r.count > 0 && (Math.abs(r.income) > 0.005 || Math.abs(r.expenses) > 0.005))
+        // Sin redondeo: una fila que queda en 0 (todas sus compras eran reposición) desaparece; mientras le quede
+        // dinero se queda, para que la suma de las actividades sea siempre el total
+        .filter((r) => Math.abs(r.income) > 0.005 || Math.abs(r.expenses) > 0.005)
+        .map((r) => ({ ...r, count: Math.max(r.count, 1) }))
         .map(withNet)
         .sort((x, y) => Math.abs(y.net) - Math.abs(x.net));
       return withNet({

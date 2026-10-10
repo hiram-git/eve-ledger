@@ -1,0 +1,1 @@
+CREATE INDEX `tx_char_journal_idx` ON `wallet_transactions` (`character_id`,`journal_ref_id`);
