@@ -104,6 +104,7 @@ Proyecto personal, corre solo en localhost. Responder siempre en español neutro
 - [x] 31. App de escritorio con Tauri (`apps/desktop`) para compartir el ledger con la corp: asistente de configuración y «Configuración…», API y web con Bun como sidecar, instaladores por GitHub Actions y guía de instalación. Probado en Linux (paquete .deb instalado; asistente → dashboard con WebDriver, segundo arranque, cierre brusco sin procesos huérfanos, aislamiento de red e IPC); Windows y macOS solo por CI.
 - [x] 28. Indicadores nuevos: ISK por hora de ratting (por piloto y sistema), fondo de reposición con las pérdidas en horas de ratting, y comisiones e impuestos del mercado.
 - [x] 32. Indicadores con tortas: ratting por piloto y por sistema en dos tarjetas con su reparto, «Tus días» y «Dónde está tu ISK» (escritorio 0.1.10).
+- [x] 33. Revisión del proyecto (escritorio 0.1.11): cifras (compraventa entre tus pilotos, reposición parcial, pérdidas que no dependen del período, Balances con un piloto sin sync, color fijo por actividad) con `test/conciliation.test.ts`; solo `Host` local en la API y la web, redirecciones `back=` seguras, `ENC_KEY` que se guarda si falta y `ledger.env` atómico; el asistente solo usa la app de EVE incluida.
 - [x] 17. Sexta crítica de impeccable (29/40) resuelta entera: frescura por piloto con causa, primer sync que caduca, línea de salud con acciones, Indicadores a 600 px cerrando con el ETA, «Hoy» bajo el neto en móvil.
 
 ## Paso 4 — especificación
