@@ -22,53 +22,6 @@
         <p class="lead" data-t="setupLead"></p>
 
         <section class="panel">
-          <h2 data-t="appTitle"></h2>
-          <!-- Instalador compilado con EVE_LEDGER_CLIENT_ID: no hace falta crear una app de EVE -->
-          <div class="bundled" data-bundled hidden>
-            <p data-t="bundledText"></p>
-            <button type="button" class="link" data-own-app data-t="ownApp"></button>
-          </div>
-          <div data-own>
-          <ol class="steps">
-            <li>
-              <span data-t="step1"></span>
-              <button type="button" class="link" data-open="https://developers.eveonline.com/applications" data-t="openDevSite"></button>
-            </li>
-            <li data-t="step2"></li>
-            <li>
-              <span data-t="step3"></span>
-              <ul class="scopes" data-scopes></ul>
-              <button type="button" class="link" data-copy-scopes data-t="copyScopes"></button>
-            </li>
-            <li>
-              <span data-t="step4"></span>
-              <div class="copy-field">
-                <input id="callback" readonly aria-describedby="callback-hint" />
-                <button type="button" class="secondary" data-copy="#callback" data-t="copy"></button>
-              </div>
-              <p class="hint" id="callback-hint" data-t="callbackHint"></p>
-            </li>
-            <li data-t="step5"></li>
-          </ol>
-          <div class="grid">
-            <label>
-              <span data-t="clientId"></span>
-              <input name="clientId" autocomplete="off" spellcheck="false" required />
-            </label>
-            <label>
-              <span data-t="clientSecret"></span>
-              <span class="secret">
-                <input name="clientSecret" type="password" autocomplete="off" spellcheck="false" />
-                <button type="button" class="secondary" data-reveal data-t="show"></button>
-              </span>
-              <small data-t="clientSecretHint"></small>
-            </label>
-          </div>
-          <p class="hint warn" data-secret-removed hidden data-t="secretRemoved"></p>
-          </div>
-        </section>
-
-        <section class="panel">
           <h2 data-t="prefsTitle"></h2>
           <div class="grid">
             <label>
@@ -101,15 +54,12 @@
 
         <details class="panel advanced">
           <summary data-t="advancedTitle"></summary>
+          <!-- El puerto de la API es fijo (47300): la app de EVE incluida solo conoce esa Callback URL -->
           <div class="grid">
-            <label>
-              <span data-t="apiPort"></span>
-              <input name="apiPort" type="number" min="1024" max="65535" inputmode="numeric" />
-              <small data-t="apiPortHint"></small>
-            </label>
             <label>
               <span data-t="webPort"></span>
               <input name="webPort" type="number" min="1024" max="65535" inputmode="numeric" />
+              <small data-t="webPortHint"></small>
             </label>
           </div>
           <div class="enc">

@@ -96,6 +96,18 @@ jobs:
     env:
       UPDATER: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && vars.EVE_LEDGER_UPDATER_PUBKEY != '' }}
     steps:
+      # La app de EVE va incluida (el asistente ya no deja crear una propia): sin su Client ID, el instalador no
+      # podría vincular pilotos. Se crea en developers.eveonline.com (ver apps/desktop/README.md)
+      - name: Client ID de la app de EVE incluida
+        env:
+          CLIENT_ID: ${{ vars.EVE_LEDGER_CLIENT_ID }}
+        shell: bash
+        run: |
+          if [ -z "$CLIENT_ID" ]; then
+            echo "::error::Falta la variable del repositorio EVE_LEDGER_CLIENT_ID (Settings → Secrets and variables → Actions → Variables). Sin ella el instalador no puede vincular pilotos."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Dependencias de Tauri (Linux)

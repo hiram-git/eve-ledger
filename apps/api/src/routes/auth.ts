@@ -13,9 +13,11 @@ const STATE_TTL_MS = 10 * 60_000;
 // El resultado se muestra en el dashboard (apps/web/src/pages/pilotos.astro), con el tema del proyecto.
 // La app de escritorio abre el login en el navegador del sistema y lee esta línea de la salida de la API
 // para llevar su ventana al mismo resultado (apps/desktop/src-tauri/src/services.rs)
-const toPilots = (params: Record<string, string>) => {
+// Solo se avisa a la app (la línea [auth] result:, que trae su ventana al frente) si la vuelta corresponde a un
+// login que empezó aquí: cualquier web podría pedir /auth/callback sin code una y otra vez
+const toPilots = (params: Record<string, string>, notify = true) => {
   const query = new URLSearchParams(params).toString();
-  console.log(`[auth] result:${query}`);
+  if (notify) console.log(`[auth] result:${query}`);
   return `${env.webUrl}/${env.authDonePage ? 'vinculado' : 'pilotos'}?${query}`;
 };
 
@@ -32,16 +34,16 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   .get(
     '/callback',
     async ({ query, redirect }) => {
-      // El usuario canceló en la pantalla de EVE (o EVE devolvió un error)
-      if (!query.code) return redirect(toPilots({ error: 'denied' }));
-
       const pending = query.state ? pendingStates.get(query.state) : undefined;
       if (query.state) pendingStates.delete(query.state);
-      if (!pending || pending.exp < Date.now()) return redirect(toPilots({ error: 'state' }));
+      const known = !!pending && pending.exp >= Date.now();
+      // El usuario canceló en la pantalla de EVE (o EVE devolvió un error)
+      if (!query.code) return redirect(toPilots({ error: 'denied' }, known));
+      if (!known) return redirect(toPilots({ error: 'state' }, false));
 
       let characterId: number;
       try {
-        const tokens = await exchangeCode(query.code, pending.verifier);
+        const tokens = await exchangeCode(query.code, pending!.verifier);
         const id = await verifyAccessToken(tokens.access_token);
         characterId = id.characterId;
 
@@ -49,7 +51,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           name: id.name,
           ownerHash: id.ownerHash,
           scopes: id.scopes.join(' '),
-          authMethod: pending.verifier ? ('pkce' as const) : ('secret' as const),
+          authMethod: pending!.verifier ? ('pkce' as const) : ('secret' as const),
           refreshToken: await encrypt(tokens.refresh_token),
           accessToken: await encrypt(tokens.access_token),
           tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),

@@ -18,25 +18,9 @@ Los instaladores **no están firmados** (un certificado cuesta dinero), así que
 - **macOS:** si dice que la app «está dañada» o «no se puede abrir», ábrela con clic derecho → *Abrir*. Si no basta, en la Terminal: `xattr -cr "/Applications/EVE Ledger.app"`.
 - **Linux (.AppImage):** dale permiso de ejecución (`chmod +x`) y ábrelo.
 
-## 2. Crea tu aplicación de EVE (una vez, dos minutos)
+## 2. Configura y vincula tus pilotos
 
-Si el asistente dice «Este instalador ya trae una aplicación de EVE», sáltate este paso.
-
-EVE Ledger habla con EVE a través de una aplicación tuya en el portal de desarrolladores de CCP. Es gratis y solo la usas tú. Al abrir EVE Ledger por primera vez, el asistente te lo explica paso a paso:
-
-1. Entra en <https://developers.eveonline.com/applications> con tu cuenta de EVE y crea una aplicación.
-2. Ponle cualquier nombre (por ejemplo «EVE Ledger») y elige **Authentication & API Access**.
-3. Añade estos cuatro permisos (scopes). El asistente tiene un botón para copiarlos:
-   - `esi-wallet.read_character_wallet.v1`
-   - `esi-assets.read_assets.v1`
-   - `esi-killmails.read_killmails.v1`
-   - `esi-contracts.read_character_contracts.v1`
-4. Como **Callback URL**, pega exactamente la que te muestra el asistente: `http://127.0.0.1:47300/auth/callback` (cambia si cambias el puerto de la API).
-5. Crea la aplicación y copia su **Client ID** en el asistente. La **Secret Key** es opcional: sin ella, EVE Ledger inicia sesión con PKCE, el método para apps de escritorio que no necesita secreto. Si la pones, solo se guarda en tu equipo; si después la quitas, los pilotos que vinculaste con ella hay que revincularlos.
-
-## 3. Configura y vincula tus pilotos
-
-En el asistente, además de la aplicación de EVE, puedes ajustar:
+No hace falta crear nada en el portal de desarrolladores de EVE: el programa ya trae su aplicación de EVE. Al abrirlo por primera vez, el asistente solo te pide tus preferencias:
 
 - **Pilotos que vas a vincular:** las plazas de la página de pilotos.
 - **Sincronizar cada (minutos):** 60 por defecto; 0 = solo a mano.
@@ -51,7 +35,7 @@ Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vi
 
 Menú **EVE Ledger → Configuración…** (o `Ctrl+,`, `Cmd+,` en macOS). Al guardar, el ledger se reinicia con los nuevos valores.
 
-- Si cambias el **puerto de la API**, cambia también la Callback URL en tu aplicación de EVE.
+- El **puerto del dashboard** se puede cambiar en «Avanzado»; el de la API es fijo (47300), porque es el que conoce la aplicación de EVE incluida. Si otro programa lo usa, ciérralo.
 - La **clave de cifrado** solo se regenera si hace falta (por ejemplo, si se filtró tu archivo de configuración). Después hay que volver a vincular los pilotos.
 
 ## Actualizaciones
@@ -73,7 +57,8 @@ Para hacer una copia de seguridad, cierra el programa y copia `ledger.db`. Desin
 ## Privacidad
 
 - El dashboard y la API solo escuchan en tu equipo (`127.0.0.1`): nadie de tu red local puede verlos.
-- Los tokens de EVE van cifrados (AES-GCM) con la clave de tu `ledger.env`. Si pusiste la Secret Key de tu aplicación de EVE, también va en ese archivo: no lo compartas.
+- Los tokens de EVE van cifrados (AES-GCM) con la clave de tu `ledger.env`: no compartas ese archivo. En Linux y macOS solo lo puede leer tu usuario.
+- Solo responde a páginas de tu propio equipo: una web que visites no puede leer tu ledger ni lanzar un sync.
 - Nadie más (tampoco quien te pasó el instalador) ve tus datos.
 
 *EVE Online y sus marcas son de CCP hf. EVE Ledger no está afiliado a CCP.*
