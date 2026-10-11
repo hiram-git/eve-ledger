@@ -19,7 +19,8 @@
     "category": "Utility",
     "shortDescription": "Ingresos, gastos e inventario de tus pilotos de EVE Online",
     "longDescription": "EVE Ledger consolida los wallets y el inventario de tus pilotos de EVE Online vía ESI. Corre solo en tu equipo: los tokens se guardan cifrados y nada sale salvo las llamadas a ESI.",
-    "copyright": "EVE Online y sus marcas son de CCP hf. Este programa no está afiliado a CCP.",
+    "copyright": "© 2026 Sirrohan Yassavi · MIT. EVE Online y sus marcas son de CCP hf. Este programa no está afiliado a CCP.",
+    "license": "MIT",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
