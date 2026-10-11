@@ -1,4 +1,5 @@
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { join } = require('node:path');
+const { chromium } = require(require.resolve('@playwright/test', { paths: [join(__dirname, '../../apps/web')] }));
 // Las tres piezas en los dos idiomas: eve-ledger-<pieza>-<idioma>.png (2000 × 1000)
 (async () => { const b = await chromium.launch();
   for (const slide of ['portada', 'doctrinas', 'indicadores']) for (const lang of ['es', 'en']) {
