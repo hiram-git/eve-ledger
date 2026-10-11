@@ -56,7 +56,15 @@ En el menú: **Abrir la carpeta de datos** (tu historial, `ledger.db`) y **Abrir
 | macOS | `~/Library/Application Support/net.eveledger.desktop/` | ídem y `~/Library/Logs/net.eveledger.desktop/` |
 | Linux | `~/.config/net.eveledger.desktop/` | `~/.local/share/net.eveledger.desktop/` |
 
-Para hacer una copia de seguridad, cierra el programa y copia `ledger.db`. Desinstalar el programa **no borra** tus datos.
+Desinstalar el programa **no borra** tus datos.
+
+## Copias de seguridad
+
+ESI solo da unos 30 días de wallet: lo anterior está únicamente en `ledger.db`. Por eso EVE Ledger guarda **una copia al día** (y otra antes de cada actualización) en la carpeta `backups`, junto a `ledger.db`; se quedan las últimas 14 diarias.
+
+En **Pilotos → Copias de seguridad** puedes hacer una copia en el momento, **descargarla** y **restaurar** cualquiera (también un archivo descargado antes, por ejemplo al cambiar de equipo). Antes de restaurar, lo que hay se guarda como copia «Antes de restaurar». Si la copia viene de otro equipo, tendrás que revincular los pilotos (sus tokens van cifrados con la clave de aquel equipo); tu historial se conserva.
+
+Descarga una de vez en cuando y guárdala fuera de este equipo: si el disco falla, es lo único que conserva tu historial.
 
 ## Privacidad
 

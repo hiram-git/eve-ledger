@@ -409,7 +409,9 @@ async function write<T>(method: string, path: string, body?: unknown): Promise<T
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown };
-  if (res.status === 400 || res.status === 404) throw new ActionError(data.error ?? 'request', data.detail == null ? null : String(data.detail));
+  // 409: hay que esperar (restaurar una copia con un sync en marcha)
+  if (res.status === 400 || res.status === 404 || res.status === 409)
+    throw new ActionError(data.error ?? 'request', data.detail == null ? null : String(data.detail));
   if (!res.ok) throw new ApiError(res.status, `API ${res.status} en ${path}`);
   return data as T;
 }
@@ -424,3 +426,30 @@ export const refreshPrices = () => write<{ updated: number }>('POST', '/doctrine
 export const deletePlan = (fitId: number) => write('DELETE', `/fits/${fitId}/plan`);
 export const setClone = (characterId: number, clone: 'omega' | 'alpha') =>
   write('PUT', `/characters/${characterId}/clone`, { clone });
+
+// Copias de seguridad de la base (apps/api/src/services/backups.ts)
+export type BackupKind = 'auto' | 'manual' | 'restore' | 'update';
+export type Backup = { name: string; kind: BackupKind; createdAt: string; size: number };
+export type BackupsView = { dir: string; keep: Record<BackupKind, number>; backups: Backup[]; busy: boolean };
+export type BackupInfo = { pilots: number; entries: number; firstEntryAt: string | null; lastEntryAt: string | null };
+export type Restored = { info: BackupInfo; safety: Backup | null };
+// Solo nombres con el formato de las copias: lo mismo que acepta la API
+export const BACKUP_NAME = /^ledger-\d{8}-\d{6}-(auto|manual|restore|update)\.db$/;
+export const getBackups = () => call<BackupsView>('/backups');
+export const createBackup = () => write<Backup>('POST', '/backups');
+export const restoreBackup = (name: string) => write<Restored>('POST', `/backups/${encodeURIComponent(name)}/restore`);
+// La copia en crudo, para descargarla desde la web
+export const fetchBackup = (name: string) => fetch(`${API_URL}/backups/${encodeURIComponent(name)}`);
+export async function restoreUpload(bytes: ArrayBuffer): Promise<Restored> {
+  const res = await fetch(`${API_URL}/backups/upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: bytes,
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown };
+  if (res.status === 400 || res.status === 404 || res.status === 409)
+    throw new ActionError(data.error ?? 'request', data.detail == null ? null : String(data.detail));
+  if (res.status === 413) throw new ActionError('too_big', null);
+  if (!res.ok) throw new ApiError(res.status, `API ${res.status} en /backups/upload`);
+  return data as Restored;
+}

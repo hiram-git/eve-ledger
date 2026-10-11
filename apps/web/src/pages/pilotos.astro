@@ -1,21 +1,25 @@
 ---
 // Pilotos: vincular personajes (vuelta del login de EVE), su estado de sync, permisos y cifras
 import { PILOT_SLOTS } from 'astro:env/server';
+import ActionNotice from '../components/ActionNotice.astro';
 import Icon from '../components/Icon.astro';
 import Base from '../layouts/Base.astro';
 import {
+  getBackups,
   getInventory,
   getPilots,
   getSummary,
   getSyncStatus,
   loginUrl,
   syncLogUrl,
+  type BackupKind,
+  type BackupsView,
   type Inventory,
   type Pilot,
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { ago, isk, iskFull, longDate } from '../lib/format';
+import { ago, bytes, isk, iskFull, longDate, shortDateTime } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { hasIssue, pilotState } from '../lib/pilot-state';
 
@@ -32,14 +36,16 @@ let pilots: Pilot[] = [];
 let summary: Summary | undefined;
 let inventory: Inventory | undefined;
 let status: SyncStatus | undefined;
+let backups: BackupsView | undefined;
 let apiError: string | undefined;
 try {
   const optional = <T,>(p: Promise<T>) => p.catch((err) => (console.error(err), undefined));
-  [pilots, status, summary, inventory] = await Promise.all([
+  [pilots, status, summary, inventory, backups] = await Promise.all([
     getPilots(),
     getSyncStatus(),
     optional(getSummary(DAYS)),
     optional(getInventory()),
+    optional(getBackups()),
   ]);
 } catch (err) {
   apiError = err instanceof Error ? err.message : String(err);
@@ -76,6 +82,27 @@ const rows = pilots.map((p) => ({ ...p, state: stateOf(p) }));
 const pending = rows.some((r) => r.state.kind === 'pending');
 const freeSlots = Math.max(0, PILOT_SLOTS - pilots.length);
 const portrait = (id: number, size = 128) => `https://images.evetech.net/characters/${id}/portrait?size=${size}`;
+
+// Copias de seguridad: la última, cuántas y cuánto ocupan; el resultado de una acción vuelve con at=copias
+const backupList = backups?.backups ?? [];
+const latestBackup = backupList[0];
+const backupBytes = backupList.reduce((n, b) => n + b.size, 0);
+const KIND_LABEL: Record<BackupKind, string> = {
+  auto: m.backupKindAuto,
+  manual: m.backupKindManual,
+  restore: m.backupKindRestore,
+  update: m.backupKindUpdate,
+};
+const count = (n: number) => new Intl.NumberFormat(lang).format(n);
+const atBackups = q.get('at') === 'copias';
+const backupOk = !atBackups
+  ? null
+  : q.get('ok') === 'backup'
+    ? m.backupDone(q.get('name') ?? '')
+    : q.get('ok') === 'restored'
+      ? m.backupRestored(count(Number(q.get('pilots') ?? 0)), count(Number(q.get('entries') ?? 0)))
+      : null;
+const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!) : null;
 ---
 
 <Base
@@ -315,6 +342,116 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     )
   }
 
+  {
+    backups && (
+      <section class="panel backups" id="copias" aria-labelledby="copias-title">
+        <div class="panel-heading">
+          <h2 id="copias-title">{m.backupsTitle}</h2>
+          {latestBackup && (
+            <span class="meta" title={shortDateTime(latestBackup.createdAt, lang)}>
+              {m.backupsLast(rel(latestBackup.createdAt))}
+            </span>
+          )}
+        </div>
+        <div class="panel-body">
+          <ActionNotice ok={backupOk} extra={q.get('ok') === 'restored' ? m.backupRestoredExtra : null} error={backupError} />
+          <p class="lead">{m.backupsLead}</p>
+          <p class="backup-status">
+            <span>{backupList.length ? m.backupsCount(backupList.length, bytes(backupBytes, lang)) : m.backupsNone}</span>
+            <span class="folder">
+              {m.backupsFolder}: <code>{backups.dir}</code>
+            </span>
+          </p>
+          <div class="backup-actions">
+            <form method="post" action="/copias/accion" data-busy-note={m.backupsCreating}>
+              <input type="hidden" name="action" value="create" />
+              <button type="submit" class="secondary-button">
+                <Icon name="database" />
+                {m.backupsCreate}
+              </button>
+            </form>
+            {latestBackup && (
+              <a class="secondary-button" href={`/copias/${latestBackup.name}`} download={latestBackup.name}>
+                <Icon name="download" />
+                {m.backupsDownloadLatest}
+              </a>
+            )}
+          </div>
+          <p class="tip">{m.backupsTip}</p>
+          {backupList.length > 0 && (
+            <details class="backup-list">
+              <summary>{m.backupsList(backupList.length)}</summary>
+              <div class="table-scroll" role="group" aria-label={m.backupsTitle} tabindex="0">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">{m.backupsColDate}</th>
+                      <th scope="col">{m.backupsColKind}</th>
+                      <th scope="col" class="num">{m.backupsColSize}</th>
+                      <th scope="col">
+                        <span class="sr-only">{m.backupsColActions}</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backupList.map((b) => (
+                      <tr>
+                        <th scope="row">{shortDateTime(b.createdAt, lang)}</th>
+                        <td class="kind">{KIND_LABEL[b.kind]}</td>
+                        <td class="num">{bytes(b.size, lang)}</td>
+                        <td class="row-actions">
+                          <a class="inline-action" href={`/copias/${b.name}`} download={b.name} title={m.backupsDownloadTitle(shortDateTime(b.createdAt, lang))}>
+                            <Icon name="download" />
+                            {m.backupsDownload}
+                          </a>
+                          <form
+                            method="post"
+                            action="/copias/accion"
+                            data-confirm={m.backupsRestoreConfirm(shortDateTime(b.createdAt, lang))}
+                            data-busy-note={m.backupsRestoring}
+                          >
+                            <input type="hidden" name="action" value="restore" />
+                            <input type="hidden" name="name" value={b.name} />
+                            <button type="submit" class="inline-action" title={m.backupsRestoreTitle(shortDateTime(b.createdAt, lang))}>
+                              <Icon name="restore" />
+                              {m.backupsRestore}
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p class="keep">{m.backupsKeep(backups.keep.auto)}</p>
+            </details>
+          )}
+          <details class="backup-upload">
+            <summary>{m.backupsUpload}</summary>
+            <form
+              method="post"
+              action="/copias/accion"
+              enctype="multipart/form-data"
+              data-confirm={m.backupsUploadConfirm}
+              data-busy-note={m.backupsRestoring}
+            >
+              <input type="hidden" name="action" value="upload" />
+              <p class="hint">{m.backupsUploadHint}</p>
+              <label for="backup-file">{m.backupsUploadLabel}</label>
+              <div class="upload-row">
+                <input id="backup-file" type="file" name="file" accept=".db,application/vnd.sqlite3,application/x-sqlite3" required />
+                <button type="submit" class="secondary-button">
+                  <Icon name="upload" />
+                  {m.backupsUploadButton}
+                </button>
+              </div>
+            </form>
+          </details>
+        </div>
+      </section>
+    )
+  }
+
   <p class="privacy">
     <Icon name="info" />
     <span>
@@ -324,6 +461,44 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
 </Base>
 
 <script>
+  // Copias de seguridad: restaurar pide confirmación (data-confirm) y las acciones muestran que están trabajando
+  // (botón ocupado y una nota) hasta que vuelve la página. data-busy-note, no data-pending: ese atributo recarga Pilotos
+  document.addEventListener('submit', (e) => {
+    const form = e.target as HTMLFormElement;
+    const msg = form.dataset.confirm;
+    if (msg && !confirm(msg)) {
+      e.preventDefault();
+      return;
+    }
+    const note = form.dataset.busyNote;
+    if (!note) return;
+    const button = form.querySelector<HTMLButtonElement>('button[type=submit]');
+    // Después del envío: deshabilitarlo antes cancelaría el propio envío en algunos navegadores
+    setTimeout(() => {
+      if (button) {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+      }
+      const p = document.createElement('p');
+      p.className = 'pending-note';
+      p.setAttribute('role', 'status');
+      p.textContent = note;
+      form.append(p);
+    });
+  });
+  window.addEventListener('pageshow', () => {
+    document.querySelectorAll<HTMLButtonElement>('button[aria-busy=true]').forEach((b) => {
+      b.disabled = false;
+      b.removeAttribute('aria-busy');
+    });
+    document.querySelectorAll('.pending-note').forEach((n) => n.remove());
+  });
+  // Vuelta de una acción de copias: el aviso recibe el foco (el salto al ancla se lo quitaría)
+  if (new URLSearchParams(location.search).get('at') === 'copias') {
+    const focus = () => document.querySelector<HTMLElement>('#copias .action-notice')?.focus();
+    window.addEventListener('load', () => setTimeout(focus, 0));
+  }
+
   // Mientras algún piloto hace su primer sync, recargar cada 15 s (como mucho 2 min)
   if (document.querySelector('[data-pending]')) {
     const tries = Number(sessionStorage.getItem('pilotos-reload') ?? 0);
@@ -630,6 +805,176 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
     color: var(--text);
   }
   .hint {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* ───── Copias de seguridad ───── */
+  .backups {
+    margin-bottom: 24px;
+  }
+  .backups .lead {
+    max-width: 70ch;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .backup-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  /* La ruta de la carpeta puede ser larga (Windows): se parte donde haga falta en vez de desbordar */
+  .backup-status code {
+    font: 12px var(--mono);
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+  }
+  .backup-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .backup-actions form {
+    margin: 0;
+  }
+  .backups .tip {
+    max-width: 70ch;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .backups details {
+    margin-top: 16px;
+    padding-top: 4px;
+    border-top: 1px solid #26313b88;
+  }
+  .backups summary {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    font-size: 13px;
+    font-weight: 550;
+    color: var(--cyan);
+    cursor: pointer;
+  }
+  .table-scroll {
+    position: relative;
+    overflow-x: auto;
+  }
+  .backup-list table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .backup-list th,
+  .backup-list td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #26313b66;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .backup-list thead th {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  /* La fecha es un dato (cifras en mono) y el tipo, texto: sin las mayúsculas ni la mono globales de th/td */
+  .backup-list tbody th {
+    font: 500 13px var(--mono);
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text);
+  }
+  .backup-list td.kind {
+    font-family: var(--font);
+    color: var(--text-secondary);
+  }
+  .backup-list .num {
+    text-align: right;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .row-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 18px;
+    font-family: var(--font);
+  }
+  .row-actions form {
+    margin: 0;
+  }
+  .row-actions .inline-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .row-actions :global(.icon) {
+    width: 14px;
+    height: 14px;
+  }
+  .backups .keep,
+  .backups .hint {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .backup-upload label {
+    display: block;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .upload-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .upload-row input[type='file'] {
+    max-width: 100%;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  /* Móvil: cada copia en dos líneas (fecha, tipo y tamaño; debajo, las acciones) en vez de una tabla que se desliza */
+  @media (max-width: 600px) {
+    .backup-list thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .backup-list tbody tr {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: baseline;
+      gap: 4px 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #26313b66;
+    }
+    .backup-list th,
+    .backup-list td {
+      padding: 0;
+      border: 0;
+    }
+    /* «Vor dem Wiederherstellen» no cabe en una línea junto a la fecha y el tamaño */
+    .backup-list td.kind {
+      white-space: normal;
+    }
+    .row-actions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+    }
+  }
+  .backups :global(.pending-note) {
+    margin-top: 8px;
     font-size: 13px;
     color: var(--text-muted);
   }
