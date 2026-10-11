@@ -57,7 +57,8 @@ Cada versión va firmada; la app solo acepta lo firmado con tu clave. Solo se ac
    ```
 2. En GitHub → Settings → Secrets and variables → Actions:
    - **Secrets:** `TAURI_SIGNING_PRIVATE_KEY` = el contenido de `eve-ledger.key` y `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = su contraseña.
-   - **Variables:** `EVE_LEDGER_UPDATER_PUBKEY` = el contenido de `eve-ledger.key.pub`.
+   - **Variables:** `EVE_LEDGER_UPDATER_PUBKEY` = el contenido de `eve-ledger.key.pub` (no es secreta: va dentro de la app; como secreto también vale).
+   - Todo a nivel de repositorio, no en un environment. Con solo una de las dos claves el workflow falla (la release saldría sin `latest.json`); sin ninguna, avisa y compila sin actualizaciones.
 3. Guarda `eve-ledger.key` y la contraseña en un sitio seguro y no la subas al repositorio. Si la pierdes, las apps instaladas ya no aceptarán versiones nuevas y habrá que reinstalar a mano con una clave nueva.
 
 **Cada versión:**

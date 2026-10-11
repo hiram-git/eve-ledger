@@ -7,7 +7,7 @@
 # - Con una etiqueta desktop-v* (p. ej. desktop-v0.1.0): igual que al subir la versión (la etiqueta debe coincidir con ella).
 # Los instaladores no van firmados: Windows (SmartScreen) y macOS (Gatekeeper) avisan la primera vez (ver INSTALAR.md).
 # Actualizaciones automáticas: si el repositorio tiene el secreto TAURI_SIGNING_PRIVATE_KEY (y su contraseña) y la
-# variable EVE_LEDGER_UPDATER_PUBKEY, cada versión se firma y la release lleva latest.json; al publicar el borrador,
+# variable (o secreto) EVE_LEDGER_UPDATER_PUBKEY, cada versión se firma y la release lleva latest.json; al publicar el borrador,
 # las apps instaladas desde estas releases se actualizan solas (ver apps/desktop/README.md).
 name: Instaladores de escritorio
 
@@ -94,18 +94,32 @@ jobs:
             name: linux
     runs-on: ${{ matrix.os }}
     env:
-      UPDATER: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && vars.EVE_LEDGER_UPDATER_PUBKEY != '' }}
+      # La clave pública no es secreta (va dentro de la app), pero se acepta también como secreto del repositorio
+      UPDATER: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && (vars.EVE_LEDGER_UPDATER_PUBKEY != '' || secrets.EVE_LEDGER_UPDATER_PUBKEY != '') }}
     steps:
       # La app de EVE va incluida (el asistente ya no deja crear una propia): sin su Client ID, el instalador no
       # podría vincular pilotos. Se crea en developers.eveonline.com (ver apps/desktop/README.md)
-      - name: Client ID de la app de EVE incluida
+      # Las actualizaciones automáticas necesitan las dos claves: con solo una, la release saldría sin latest.json y las
+      # apps instaladas desde ella no buscarían nunca versiones nuevas, así que a medias es un error (sin ninguna, un aviso)
+      - name: Client ID de la app de EVE incluida y claves del actualizador
         env:
           CLIENT_ID: ${{ vars.EVE_LEDGER_CLIENT_ID }}
+          HAS_PRIVATE: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          HAS_PUBLIC: ${{ vars.EVE_LEDGER_UPDATER_PUBKEY != '' || secrets.EVE_LEDGER_UPDATER_PUBKEY != '' }}
         shell: bash
         run: |
           if [ -z "$CLIENT_ID" ]; then
             echo "::error::Falta la variable del repositorio EVE_LEDGER_CLIENT_ID (Settings → Secrets and variables → Actions → Variables). Sin ella el instalador no puede vincular pilotos."
             exit 1
+          fi
+          if [ "$HAS_PRIVATE" = true ] && [ "$HAS_PUBLIC" != true ]; then
+            echo "::error::Falta EVE_LEDGER_UPDATER_PUBKEY (el contenido de eve-ledger.key.pub) como variable o secreto del repositorio: sin ella, estos instaladores no se actualizarían solos."
+            exit 1
+          elif [ "$HAS_PRIVATE" != true ] && [ "$HAS_PUBLIC" = true ]; then
+            echo "::error::Falta el secreto del repositorio TAURI_SIGNING_PRIVATE_KEY (el contenido de eve-ledger.key): sin él, estos instaladores no se actualizarían solos."
+            exit 1
+          elif [ "$HAS_PRIVATE" != true ]; then
+            echo "::notice::Sin claves del actualizador: estos instaladores no buscarán versiones nuevas (ver apps/desktop/README.md)."
           fi
 
       - uses: actions/checkout@v4
@@ -136,7 +150,7 @@ jobs:
         if: env.UPDATER == 'true'
         working-directory: apps/desktop
         env:
-          PUBKEY: ${{ vars.EVE_LEDGER_UPDATER_PUBKEY }}
+          PUBKEY: ${{ vars.EVE_LEDGER_UPDATER_PUBKEY || secrets.EVE_LEDGER_UPDATER_PUBKEY }}
         run: >
           bun -e "await Bun.write('src-tauri/tauri.updater.conf.json', JSON.stringify({
           bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.PUBKEY.trim() } } }))"
