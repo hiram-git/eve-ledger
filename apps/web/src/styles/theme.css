@@ -161,6 +161,19 @@ a {
   align-items: center;
   gap: 14px;
 }
+/* Con cinco secciones, la cabecera ya no cabe en una fila por debajo de ~1280 px (en español, el estado del sync y
+   Sincronizar se salían por la derecha): las secciones bajan a una segunda fila, como en móvil */
+@media (max-width: 1279px) {
+  .utility {
+    height: auto;
+    min-height: 52px;
+    padding: 6px 0 0;
+    flex-wrap: wrap;
+  }
+  .utility-right {
+    margin-left: auto;
+  }
+}
 .status-badge {
   display: inline-flex;
   align-items: center;

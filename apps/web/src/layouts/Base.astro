@@ -309,6 +309,20 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     color: var(--text-secondary);
     text-align: center;
   }
+  @media (max-width: 1279px) {
+    .sections {
+      order: 3;
+      width: 100%;
+      margin: 0;
+      height: 44px;
+    }
+    .sections a:first-child {
+      padding-left: 0;
+    }
+    .sections a:first-child[aria-current='page']::after {
+      left: 0;
+    }
+  }
   @media (max-width: 750px) {
     .sections {
       order: 3;
