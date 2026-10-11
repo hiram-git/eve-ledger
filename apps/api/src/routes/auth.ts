@@ -3,11 +3,11 @@ import { db } from '../db/client';
 import { characters } from '../db/schema';
 import { encrypt } from '../lib/crypto';
 import { env } from '../lib/env';
-import { buildAuthorizeUrl, exchangeCode, loginMethod, newPkce, verifyAccessToken } from '../lib/sso';
+import { buildAuthorizeUrl, exchangeCode, newPkce, verifyAccessToken } from '../lib/sso';
 import { syncCharacter } from '../services/sync';
 
 // Estados pendientes en memoria (app local, un solo usuario), con el verificador de PKCE si el login lo usa
-const pendingStates = new Map<string, { exp: number; verifier?: string }>();
+const pendingStates = new Map<string, { exp: number; verifier: string }>();
 const STATE_TTL_MS = 10 * 60_000;
 
 // El resultado se muestra en el dashboard (apps/web/src/pages/pilotos.astro), con el tema del proyecto.
@@ -27,9 +27,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     for (const [s, { exp }] of pendingStates) if (exp < now) pendingStates.delete(s);
 
     const state = crypto.randomUUID();
-    const pkce = loginMethod() === 'pkce' ? await newPkce() : undefined;
-    pendingStates.set(state, { exp: now + STATE_TTL_MS, verifier: pkce?.verifier });
-    return redirect(buildAuthorizeUrl(state, pkce?.challenge));
+    // Siempre PKCE: solo el Client ID, sin secreto
+    const pkce = await newPkce();
+    pendingStates.set(state, { exp: now + STATE_TTL_MS, verifier: pkce.verifier });
+    return redirect(buildAuthorizeUrl(state, pkce.challenge));
   })
   .get(
     '/callback',
@@ -51,7 +52,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           name: id.name,
           ownerHash: id.ownerHash,
           scopes: id.scopes.join(' '),
-          authMethod: pending!.verifier ? ('pkce' as const) : ('secret' as const),
+          authMethod: 'pkce' as const,
           refreshToken: await encrypt(tokens.refresh_token),
           accessToken: await encrypt(tokens.access_token),
           tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),

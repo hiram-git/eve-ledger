@@ -166,7 +166,7 @@ const tauri = preview
         if (cmd === 'get_state')
           return {
             configured: location.search.includes('configured'),
-            config: { clientId: 'preview', clientSecret: '', encKey: 'x'.repeat(43) + '=', esiContact: '', syncIntervalMin: 60, pilotSlots: 5, omegaAccounts: 5, omegaPlexPerMonth: 500, apiPort: 47300, webPort: 47321 },
+            config: { clientId: 'preview', encKey: 'x'.repeat(43) + '=', esiContact: '', syncIntervalMin: 60, pilotSlots: 5, omegaAccounts: 5, omegaPlexPerMonth: 500, apiPort: 47300, webPort: 47321 },
             configPath: '~/.config/net.eveledger.desktop/ledger.env',
             dataDir: '~/.local/share/net.eveledger.desktop',
             logDir: '~/.local/share/net.eveledger.desktop/logs',
@@ -213,14 +213,13 @@ function fill(cfg) {
   originalKey = cfg.encKey;
 }
 
-// La app de EVE (Client ID, Secret Key si la hay) y el puerto de la API no se editan aquí: vienen de la
+// La app de EVE (solo el Client ID: sin Secret Key, PKCE) y el puerto de la API no se editan aquí: vienen de la
 // configuración guardada (la app incluida en el instalador, o la propia de quien la configuró en versiones anteriores)
 function readForm() {
   const f = form.elements;
   const num = (name) => Math.max(0, Math.floor(Number(f[name].value) || 0));
   return {
     clientId: state.config.clientId,
-    clientSecret: state.config.clientSecret,
     encKey: f.encKey.value.trim(),
     esiContact: f.esiContact.value.trim(),
     syncIntervalMin: num('syncIntervalMin'),

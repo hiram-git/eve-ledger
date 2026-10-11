@@ -31,6 +31,8 @@ Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vi
 
 > **¿Ya tenías pilotos de una versión anterior?** La pestaña **Doctrinas** necesita leer sus skills, un permiso nuevo. En Pilotos, los que no lo tienen dicen «Skills (doctrinas) · falta el permiso»: pulsa **Revincular** y entra con ese mismo personaje. Marca también en Pilotos qué cuentas son **Alfa** (entrenan a la mitad y no pueden usar todas las skills).
 
+> **¿Configuraste tu propia aplicación de EVE con una Secret Key en una versión anterior?** Desde la 0.1.13 la Secret Key no se usa (solo el Client ID). Los pilotos vinculados con ella salen como «Token caducado»: pulsa **Revincular** en cada uno.
+
 > ESI solo guarda unos 30 días del wallet. EVE Ledger acumula el historial desde el primer sync: cuanto antes lo instales, más historial tendrás. El programa tiene que estar abierto para sincronizar.
 
 ## Cambiar la configuración después

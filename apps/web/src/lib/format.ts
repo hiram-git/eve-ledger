@@ -9,7 +9,8 @@ const num = (digits: number, lang: Lang) =>
 // Notación de EVE: k / M / B (mil millones), igual en los tres idiomas porque es la del juego
 export function isk(value: number, { sign = false, lang = DEFAULT_LANG }: { sign?: boolean; lang?: Lang } = {}): string {
   const abs = Math.abs(value);
-  const [div, suffix] = abs >= 1e9 ? [1e9, ' B'] : abs >= 1e6 ? [1e6, ' M'] : abs >= 1e3 ? [1e3, ' k'] : [1, ''];
+  // Espacio duro entre la cifra y su unidad: «6,41 B» no se parte entre dos líneas
+  const [div, suffix] = abs >= 1e9 ? [1e9, '\u00a0B'] : abs >= 1e6 ? [1e6, '\u00a0M'] : abs >= 1e3 ? [1e3, '\u00a0k'] : [1, ''];
   const scaled = abs / div;
   // Por debajo de 1000 se muestran decimales si los hay (precios unitarios de minerales, p. ej.)
   const digits = div === 1 ? (Number.isInteger(abs) ? 0 : 2) : scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;

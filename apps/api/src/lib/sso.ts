@@ -29,12 +29,11 @@ export type EveIdentity = {
   scopes: string[];
 };
 
-// Con Client Secret, el canje y la renovación se firman con él (Basic). Sin secreto, PKCE: el login lleva el reto
-// de un verificador aleatorio que solo conoce la API, y canje y renovación van solo con el Client ID.
-// Cada piloto guarda con cuál se vinculó (`characters.auth_method`) y se renueva igual
+// Solo el Client ID, nunca un Client Secret (decisión del usuario: nadie tiene que crear una app en
+// developers.eveonline.com ni guardar un secreto): PKCE, el login lleva el reto de un verificador aleatorio que solo
+// conoce la API, y canje y renovación van con el Client ID. `characters.auth_method` = 'secret' queda para los
+// pilotos vinculados con secreto en versiones anteriores: ya no se pueden renovar y hay que revincularlos
 export type AuthMethod = 'secret' | 'pkce';
-
-export const loginMethod = (): AuthMethod => (env.clientSecret ? 'secret' : 'pkce');
 
 const base64url = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64url');
 
@@ -44,7 +43,7 @@ export async function newPkce(): Promise<{ verifier: string; challenge: string }
   return { verifier, challenge: base64url(new Uint8Array(digest)) };
 }
 
-export function buildAuthorizeUrl(state: string, codeChallenge?: string): string {
+export function buildAuthorizeUrl(state: string, codeChallenge: string): string {
   const params = new URLSearchParams({
     response_type: 'code',
     redirect_uri: env.callbackUrl,
@@ -52,36 +51,28 @@ export function buildAuthorizeUrl(state: string, codeChallenge?: string): string
     scope: SCOPES.join(' '),
     state,
   });
-  if (codeChallenge) {
-    params.set('code_challenge', codeChallenge);
-    params.set('code_challenge_method', 'S256');
-  }
+  params.set('code_challenge', codeChallenge);
+  params.set('code_challenge_method', 'S256');
   return `${AUTHORIZE_URL}?${params}`;
 }
 
-async function tokenRequest(body: Record<string, string>, method: AuthMethod): Promise<TokenResponse> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' };
-  if (method === 'secret') {
-    // El texto «refresh token» hace que el dashboard lo muestre como «Token caducado» con «Revincular»
-    if (!env.clientSecret) throw new Error('Sin Client Secret no se puede renovar el refresh token (se vinculó con secreto): revincúlalo');
-    headers.Authorization = `Basic ${Buffer.from(`${env.clientId}:${env.clientSecret}`).toString('base64')}`;
-  } else {
-    body = { ...body, client_id: env.clientId };
-  }
-  const res = await fetch(TOKEN_URL, { method: 'POST', headers, body: new URLSearchParams(body) });
+async function tokenRequest(body: Record<string, string>): Promise<TokenResponse> {
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  const res = await fetch(TOKEN_URL, { method: 'POST', headers, body: new URLSearchParams({ ...body, client_id: env.clientId }) });
   if (!res.ok) throw new Error(`SSO ${res.status}: ${await res.text()}`);
   return res.json() as Promise<TokenResponse>;
 }
 
-// Sin verificador, con el secreto; con él, PKCE
-export const exchangeCode = (code: string, codeVerifier?: string) =>
-  codeVerifier
-    ? tokenRequest({ grant_type: 'authorization_code', code, code_verifier: codeVerifier }, 'pkce')
-    : tokenRequest({ grant_type: 'authorization_code', code }, 'secret');
+export const exchangeCode = (code: string, codeVerifier: string) =>
+  tokenRequest({ grant_type: 'authorization_code', code, code_verifier: codeVerifier });
 
-// EVE rota el refresh token: siempre guardar el que venga en la respuesta
-export const refreshAccessToken = (refreshToken: string, method: AuthMethod) =>
-  tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken }, method);
+// EVE rota el refresh token: siempre guardar el que venga en la respuesta. Un piloto vinculado con Client Secret
+// (versiones anteriores) no se puede renovar sin él; el texto «refresh token» hace que el dashboard lo muestre como
+// «Token caducado» con «Revincular»
+export async function refreshAccessToken(refreshToken: string, method: AuthMethod) {
+  if (method === 'secret') throw new Error('Este piloto se vinculó con Client Secret, que ya no se usa: el refresh token no se puede renovar, revincúlalo');
+  return tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken });
+}
 
 export async function verifyAccessToken(token: string): Promise<EveIdentity> {
   const { payload } = await jwtVerify(token, JWKS, {

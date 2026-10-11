@@ -15,9 +15,9 @@ pub struct Config {
     /// App de EVE: la que trae el instalador (EVE_LEDGER_CLIENT_ID). El asistente ya no la pide (decisión del
     /// usuario: nadie tiene que crear una en developers.eveonline.com); si ledger.env trae otra (quien la configuró
     /// en una versión anterior), se conserva para no obligar a revincular los pilotos
+    /// Solo el Client ID: el login va con PKCE y la Secret Key ya no se usa (decisión del usuario). Un
+    /// `EVE_CLIENT_SECRET` de versiones anteriores se ignora y desaparece de ledger.env al guardar
     pub client_id: String,
-    /// Solo la de una app propia de versiones anteriores; la app incluida va sin secreto (PKCE, apps/api/src/lib/sso.ts)
-    pub client_secret: String,
     /// 32 bytes en base64: cifra los tokens de EVE. Cambiarla obliga a revincular los pilotos
     pub enc_key: String,
     /// Contacto para el User-Agent de ESI (CCP pide poder avisar a quien hace las llamadas)
@@ -44,7 +44,6 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             client_id: bundled_client_id().unwrap_or_default().into(),
-            client_secret: String::new(),
             enc_key: generate_enc_key(),
             esi_contact: String::new(),
             sync_interval_min: 60,
@@ -108,7 +107,6 @@ impl Config {
         let p = |k: &str, def: u16| m.get(k).and_then(|v| v.parse().ok()).unwrap_or(def);
         Config {
             client_id: m.get("EVE_CLIENT_ID").cloned().filter(|v| !v.is_empty()).unwrap_or(d.client_id),
-            client_secret: s("EVE_CLIENT_SECRET"),
             enc_key: m.get("ENC_KEY").cloned().filter(|v| !v.is_empty()).unwrap_or(d.enc_key),
             esi_contact: s("ESI_CONTACT"),
             sync_interval_min: n("SYNC_INTERVAL_MIN", d.sync_interval_min),
@@ -124,8 +122,8 @@ impl Config {
         format!(
             "# EVE Ledger: configuración (la escribe la app; se puede editar desde «Configuración…»)\n\
              # App de EVE: la incluida en el instalador (no hace falta tocarla). Callback: {callback}\n\
-             # Sin Secret Key, el login usa PKCE\n\
-             EVE_CLIENT_ID={}\nEVE_CLIENT_SECRET={}\n\
+             # Solo el Client ID: el login usa PKCE (sin Secret Key)\n\
+             EVE_CLIENT_ID={}\n\
              # Cifra los tokens de EVE. Si cambia, hay que revincular los pilotos\n\
              ENC_KEY={}\n\
              # Contacto para el User-Agent de ESI\n\
@@ -133,7 +131,6 @@ impl Config {
              SYNC_INTERVAL_MIN={}\nPILOT_SLOTS={}\nOMEGA_ACCOUNTS={}\nOMEGA_PLEX_PER_MONTH={}\n\
              API_PORT={}\nWEB_PORT={}\n",
             self.client_id.trim(),
-            self.client_secret.trim(),
             self.enc_key.trim(),
             self.esi_contact.trim(),
             self.sync_interval_min,
@@ -155,7 +152,6 @@ impl Config {
         };
         vec![
             ("EVE_CLIENT_ID".into(), self.client_id.trim().into()),
-            ("EVE_CLIENT_SECRET".into(), self.client_secret.trim().into()),
             ("EVE_CALLBACK_URL".into(), callback_url(self.api_port)),
             ("ENC_KEY".into(), self.enc_key.trim().into()),
             ("ESI_USER_AGENT".into(), ua),
@@ -201,8 +197,7 @@ pub fn load(path: &Path) -> Option<Config> {
     Some(c)
 }
 
-/// Guarda el archivo. En Linux y macOS solo lo puede leer el usuario desde que se crea (lleva ENC_KEY y, si la hay,
-/// la Secret Key). Se escribe en un temporal que se renombra encima: un corte de luz no deja el archivo a medias
+/// Guarda el archivo. En Linux y macOS solo lo puede leer el usuario desde que se crea (lleva ENC_KEY). Se escribe en un temporal que se renombra encima: un corte de luz no deja el archivo a medias
 /// (con ENC_KEY truncada, los tokens de los pilotos ya no se podrían descifrar)
 pub fn save(path: &Path, c: &Config) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
@@ -252,7 +247,6 @@ mod tests {
     fn ida_y_vuelta_por_el_archivo() {
         let mut c = valid();
         c.esi_contact = "Piloto Uno".into();
-        c.client_secret = "s3cr3t".into();
         c.sync_interval_min = 0;
         c.api_port = 48000;
         assert_eq!(Config::from_map(&parse(&c.to_env())), c);
@@ -260,9 +254,7 @@ mod tests {
 
     #[test]
     fn valida_lo_obligatorio() {
-        // La Secret Key es opcional (PKCE)
         assert!(validate(&valid()).is_empty());
-        assert!(validate(&Config { client_secret: "s3cr3t".into(), ..valid() }).is_empty());
         let c = Config { client_id: String::new(), ..Config::default() };
         assert_eq!(validate(&c), vec!["clientId"]);
         let mut c = valid();
@@ -327,6 +319,18 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
         }
+    }
+
+    #[test]
+    fn la_secret_key_de_versiones_anteriores_se_ignora_y_se_borra_al_guardar() {
+        let path = temp_dir("secreto").join("ledger.env");
+        fs::write(&path, format!("EVE_CLIENT_ID=abc\nEVE_CLIENT_SECRET=s3cr3t\nENC_KEY={}\n", generate_enc_key())).unwrap();
+        let c = load(&path).unwrap();
+        assert!(!c.api_env("0.1.0").iter().any(|(k, _)| k == "EVE_CLIENT_SECRET"));
+        save(&path, &c).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("EVE_CLIENT_SECRET") && !text.contains("s3cr3t"));
+        assert_eq!(load(&path).unwrap().client_id, "abc");
     }
 
     #[test]
