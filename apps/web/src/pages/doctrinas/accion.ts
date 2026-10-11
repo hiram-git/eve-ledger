@@ -25,6 +25,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     } else if (action === 'prices') {
       const r = await refreshPrices();
       ok('prices', { n: String(r.updated) });
+      anchor = 'fondos';
     } else if (action === 'delete-doctrine' && id) {
       await deleteDoctrine(id);
       ok('deleted');
@@ -59,5 +60,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     if (!(err instanceof ActionError)) console.error(err);
     anchor = action === 'add-fit' ? `doctrina-${id}` : action === 'plan' ? `fit-${id}` : '';
   }
+  // El aviso se pinta junto a lo que se tocó (`at`), no arriba del todo: con el ancla, quedaba fuera de la vista
+  if (anchor) back.searchParams.set('at', anchor);
   return redirect(back.pathname + back.search + (anchor ? `#${anchor}` : ''), 303);
 };

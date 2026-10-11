@@ -20,6 +20,8 @@ const REQUIRED = [
 const RANK = 275;
 const PRIMARY = 180;
 const SECONDARY = 181;
+// canNotBeTrainedOnTrial: la skill es solo Omega (los topes de nivel de Alfa no están en ESI: cloneGrades del SDE)
+const OMEGA_ONLY = 1047;
 
 type EsiType = { type_id: number; name: string; group_id: number; dogma_attributes?: { attribute_id: number; value: number }[] };
 type EsiGroup = { group_id: number; category_id: number };
@@ -47,6 +49,7 @@ export function dogmaRow(t: EsiType, categoryId: number): typeof typeDogma.$infe
     primaryAttr: attr.has(PRIMARY) ? Math.round(attr.get(PRIMARY)!) : null,
     secondaryAttr: attr.has(SECONDARY) ? Math.round(attr.get(SECONDARY)!) : null,
     required,
+    omegaOnly: categoryId === CATEGORY.skill ? attr.get(OMEGA_ONLY) === 1 : null,
     updatedAt: new Date(),
   };
 }
@@ -71,11 +74,15 @@ export async function ensureDogma(ids: number[]): Promise<Map<number, TypeInfo>>
     if (seen.has(id)) continue;
     seen.add(id);
     let row = known.get(id);
+    // Una skill guardada antes de leer el atributo 1047 se vuelve a pedir una vez
+    if (row && row.categoryId === CATEGORY.skill && row.omegaOnly === null) row = undefined;
     if (!row) {
       const stored = (await loadDogma([id])).get(id);
-      if (stored) row = stored;
+      const stale = !!stored && stored.categoryId === CATEGORY.skill && stored.omegaOnly === null;
+      if (stored && !stale) row = stored;
+      // Sin llamadas que gastar, la fila vieja sirve igual (solo le falta saber si es solo Omega)
+      else if (lookups >= MAX_LOOKUPS) row = stored;
       else {
-        if (lookups >= MAX_LOOKUPS) continue;
         try {
           lookups++;
           const { data } = await esiGet<EsiType>(`/universe/types/${id}`);
@@ -90,7 +97,9 @@ export async function ensureDogma(ids: number[]): Promise<Map<number, TypeInfo>>
           row = (await loadDogma([id])).get(id);
         } catch (err) {
           if (err instanceof EsiError && err.status === 404) continue;
-          throw err;
+          // ESI caído al refrescar una skill ya guardada: se sigue con la que había
+          if (!stored) throw err;
+          row = stored;
         }
       }
       if (row) known.set(id, row);

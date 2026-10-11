@@ -5,6 +5,7 @@
 // Entrega 2: coste del fit en Jita, inyectores para volarlo ya o completar el plan, y lo que falta del wallet
 // (con todo el saldo o reservando el Omega) en horas de ratting y días al ritmo actual
 import Base from '../layouts/Base.astro';
+import ActionNotice from '../components/ActionNotice.astro';
 import Icon from '../components/Icon.astro';
 import {
   getDoctrines,
@@ -65,6 +66,11 @@ const okText =
             : null;
 const ignored = q.get('ignored');
 const errorCode = q.get('error');
+const errorText = errorCode ? m.doctrineError(errorCode, q.get('detail')) : null;
+const extraText = ignored ? m.fitIgnored(ignored) : null;
+// Dónde va el aviso: junto a lo que se tocó (fondos, una doctrina o un fit); sin sitio, arriba
+const at = q.get('at');
+const noticeAt = (key: string) => !!at && at === key && (!!okText || !!errorText);
 
 // En cada fit, primero quien puede volarlo; luego quien solo necesita Omega y quien está más cerca
 const RANK: Record<FitPilotStatus, number> = { ok: 0, omega: 1, missing: 2, noData: 3, noScope: 4 };
@@ -76,18 +82,6 @@ const sorted = (fit: DoctrineFit) =>
       (pilotOf.get(a.characterId)?.name ?? '').localeCompare(pilotOf.get(b.characterId)?.name ?? ''),
   );
 const fitLabel = (f: DoctrineFit) => (f.ship ? `${f.ship} · ${f.name}` : f.name);
-const slotsText = (f: DoctrineFit) =>
-  [
-    f.slots.high && m.slotHigh(f.slots.high),
-    f.slots.mid && m.slotMid(f.slots.mid),
-    f.slots.low && m.slotLow(f.slots.low),
-    f.slots.rig && m.slotRig(f.slots.rig),
-    f.slots.subsystem && m.slotSub(f.slots.subsystem),
-    f.drones && m.fitDrones(qty.format(f.drones)),
-    f.cargo && m.fitCargo(qty.format(f.cargo)),
-  ]
-    .filter(Boolean)
-    .join(' · ');
 // Lo que tiene de un plan, en SP (el avance real: una skill de rango 10 pesa más que una de rango 1)
 const progress = (e: SkillEvaluation) => (e.targetSp ? Math.min(1, (e.haveSp ?? 0) / e.targetSp) : e.missing.length ? 0 : 1);
 const skillLine = (s: MissingSkill) =>
@@ -123,19 +117,90 @@ const shortText = (s: Shortfall) =>
       ]
         .filter(Boolean)
         .join(' · ');
-const costParts = (f: DoctrineFit) =>
-  [
-    f.cost.hull && m.costHull(money(f.cost.hull)),
-    f.cost.fitted && m.costFitted(money(f.cost.fitted)),
-    f.cost.drones && m.costDrones(money(f.cost.drones)),
-    f.cost.cargo && m.costCargo(money(f.cost.cargo)),
-  ]
-    .filter(Boolean)
-    .join(' · ');
 const funds = view?.funds;
 const allFits = view?.doctrines.flatMap((d) => d.fits) ?? [];
 // El precio más viejo de los que se usan: la frescura de toda la página
 const pricedAt = allFits.map((f) => f.cost.pricedAt).filter((d): d is string => !!d).sort()[0] ?? null;
+// «Para volarlo ya» en cuatro iconos: skills, clon (Ω/α), ISK del wallet e inyectores. Cada uno con su estado
+// (good / part / warn / info / off), una etiqueta corta visible y la frase completa para lectores y el title
+type ChipState = 'good' | 'part' | 'warn' | 'info' | 'off';
+type Chip = { key: string; state: ChipState; icon?: 'check' | 'clock' | 'info' | 'wallet' | 'syringe' | 'alert'; glyph?: string; label: string; full: string };
+type FitRow = DoctrineFit['pilots'][number];
+const farmText = (s: Shortfall) =>
+  [s.hours !== null && m.farmHours(hoursPlayed(s.hours, lang)), s.days !== null && m.farmDays(duration(s.days * 1440, lang))]
+    .filter(Boolean)
+    .map((t) => ` · ${t}`)
+    .join('');
+const chipsFor = (f: DoctrineFit, row: FitRow): Chip[] => {
+  const pilot = pilotOf.get(row.characterId);
+  const alpha = pilot?.clone === 'alpha';
+  const unsynced = row.status === 'noScope' || row.status === 'noData';
+  // Skills
+  const trainable = row.fly?.missing.filter((x) => !x.omegaOnly) ?? [];
+  const skills: Chip =
+    row.status === 'noScope'
+      ? { key: 'skills', state: 'off', icon: 'info', label: m.chipNoScope, full: m.statusNoScope }
+      : row.status === 'noData'
+        ? { key: 'skills', state: 'off', icon: 'info', label: m.chipNoData, full: m.statusNoData }
+        : row.status === 'ok'
+          ? { key: 'skills', state: 'good', icon: 'check', label: m.chipSkillsOk, full: m.chipSkillsOkFull }
+          : trainable.length === 0
+            ? { key: 'skills', state: 'good', icon: 'check', label: m.chipSkillsTrained, full: m.chipSkillsTrainedFull }
+            : {
+                key: 'skills',
+                state: 'info',
+                icon: 'clock',
+                label: time(row.fly?.minutes ?? null),
+                full: m.chipSkillsMissingFull(trainable.length, time(row.fly?.minutes ?? null)),
+              };
+  // Clon: lo que pide el fit frente a lo que es el piloto
+  const because = f.omegaSkills.length ? ` · ${m.omegaBecause(f.omegaSkills.slice(0, 3).join(', '))}` : '';
+  const clone: Chip =
+    f.clone === 'omega'
+      ? alpha
+        ? { key: 'clone', state: 'warn', glyph: 'Ω', label: m.chipCloneOmega, full: m.cloneOmegaBlocked + because }
+        : { key: 'clone', state: 'good', glyph: 'Ω', label: m.chipCloneOmega, full: m.cloneOmegaOk + because }
+      : f.clone === 'alpha'
+        ? { key: 'clone', state: 'good', glyph: 'α', label: m.chipCloneAlpha, full: m.cloneAlphaOk }
+        : f.clone === 'alphaUnsure'
+          ? { key: 'clone', state: 'off', glyph: 'α', label: m.chipCloneAlphaUnsure, full: m.cloneAlphaUnsure }
+          : { key: 'clone', state: 'off', glyph: '?', label: m.chipCloneUnknown, full: m.cloneUnknown };
+  // ISK: sin skills que mirar, el del fit solo
+  const b = row.budget ?? (unsynced ? f.budget : null);
+  const isk: Chip = !b
+    ? { key: 'isk', state: 'off', icon: 'wallet', label: m.chipIskUnknown, full: m.budgetNoInjectorPrice }
+    : b.wallet.short <= 0 && b.withOmega && b.withOmega.short <= 0
+      ? { key: 'isk', state: 'good', icon: 'wallet', label: m.chipIskOk, full: m.chipIskOkFull }
+      : b.wallet.short <= 0
+        ? {
+            key: 'isk',
+            state: 'part',
+            icon: 'wallet',
+            label: m.chipIskPart,
+            full: m.chipIskPartFull(b.withOmega ? money(b.withOmega.short) + farmText(b.withOmega) : m.noOmegaPrice),
+          }
+        : { key: 'isk', state: 'warn', icon: 'wallet', label: m.chipIskShort(money(b.wallet.short)), full: m.chipIskShortFull(money(b.wallet.short), farmText(b.wallet)) };
+  // Inyectores para volarlo ya
+  const inj = row.injectors?.fly;
+  const injectors: Chip = unsynced
+    ? { key: 'inj', state: 'off', icon: 'syringe', label: '—', full: row.status === 'noScope' ? m.statusNoScope : m.statusNoData }
+    : !inj || inj.sp <= 0
+      ? { key: 'inj', state: 'good', icon: 'syringe', label: m.chipInjNone, full: m.chipInjNoneFull }
+      : { key: 'inj', state: 'info', icon: 'syringe', label: m.chipInj(inj.large, inj.small), full: m.chipInjFull(injText(inj), costOr(inj.cost)) };
+  return [skills, clone, isk, injectors];
+};
+// Coste del fit por partes, para la barra de colores (misma paleta categórica que el resto: casco, módulos, drones, carga)
+const costShares = (f: DoctrineFit) =>
+  (
+    [
+      ['hull', f.cost.hull, m.costHull],
+      ['fitted', f.cost.fitted, m.costFitted],
+      ['drones', f.cost.drones, m.costDrones],
+      ['cargo', f.cost.cargo, m.costCargo],
+    ] as const
+  )
+    .filter(([, v]) => v > 0)
+    .map(([key, v, label]) => ({ key, v, share: f.cost.total ? v / f.cost.total : 0, label: label(money(v)) }));
 const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?size=64`;
 ---
 
@@ -147,7 +212,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     </div>
     {
       !apiError && (
-        <form method="post" action="/doctrinas/accion" class="new-doctrine">
+        <form method="post" action="/doctrinas/accion" class="new-doctrine" data-pending={m.pendingWorking}>
           <input type="hidden" name="action" value="create" />
           <label for="doctrine-name" class="sr-only">{m.doctrineName}</label>
           <input id="doctrine-name" name="name" type="text" maxlength="80" required placeholder={m.doctrineNamePlaceholder} autocomplete="off" />
@@ -160,25 +225,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     }
   </div>
 
-  {
-    okText && (
-      <div class="notice" role="status">
-        <Icon name="check" />
-        <div>
-          <p>{okText}</p>
-          {ignored && <p class="ignored">{m.fitIgnored(ignored)}</p>}
-        </div>
-      </div>
-    )
-  }
-  {
-    errorCode && (
-      <div class="notice error" role="alert">
-        <Icon name="alert" />
-        <p>{m.doctrineError(errorCode, q.get('detail'))}</p>
-      </div>
-    )
-  }
+  {!at && <ActionNotice ok={okText} extra={extraText} error={errorText} />}
   {
     apiError && (
       <div class="notice error" role="alert">
@@ -225,8 +272,9 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   {
     /* Con qué se paga: lo mismo para todos los fits (el saldo de todos tus pilotos, el Omega y tus ritmos) */
     funds && allFits.length > 0 && (
-      <section class="funds" aria-labelledby="funds-title">
+      <section class="funds" id="fondos" aria-labelledby="funds-title">
         <h2 id="funds-title" class="sr-only">{m.fundsTitle}</h2>
+        {noticeAt('fondos') && <ActionNotice ok={okText} error={errorText} />}
         <dl>
           <div>
             <dt>{m.fundsWallet}</dt>
@@ -259,7 +307,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
               </>
             )}
           </p>
-          <form method="post" action="/doctrinas/accion">
+          <form method="post" action="/doctrinas/accion" data-pending={m.pendingPrices}>
             <input type="hidden" name="action" value="prices" />
             <button type="submit" class="inline-action">
               <Icon name="refresh" />
@@ -267,6 +315,14 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
             </button>
           </form>
         </div>
+        {/* Qué dice cada icono de «Para volarlo ya» */}
+        <p class="legend">
+          <span class="legend-title">{m.legendTitle}</span>
+          <span><Icon name="check" /> {m.legendSkills}</span>
+          <span><b class="glyph" aria-hidden="true">Ω</b>/<b class="glyph" aria-hidden="true">α</b> {m.legendClone}</span>
+          <span><Icon name="wallet" /> {m.legendIsk}</span>
+          <span><Icon name="syringe" /> {m.legendInj}</span>
+        </p>
       </section>
     )
   }
@@ -287,6 +343,12 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
             </form>
           </div>
 
+          {noticeAt(`doctrina-${d.id}`) && (
+            <div class="panel-notice">
+              <ActionNotice ok={okText} extra={extraText} error={errorText} />
+            </div>
+          )}
+
           {/* Quién vuela la doctrina: cuántos de sus fits puede volar cada piloto (con skills sincronizadas) */}
           {d.fits.length > 0 && withData.length > 0 && (
             <div class="who-flies">
@@ -295,7 +357,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                 {withData.map((p) => {
                   const n = d.fits.filter((f) => f.pilots.find((x) => x.characterId === p.id)?.status === 'ok').length;
                   return (
-                    <li class:list={{ none: n === 0, all: n === d.fits.length }}>
+                    <li class:list={{ none: n === 0, some: n > 0 && n < d.fits.length, all: n === d.fits.length }}>
                       <span class="name">{p.name}</span>
                       <span class="count">{m.doctrineFlies(n, d.fits.length)}</span>
                     </li>
@@ -317,14 +379,36 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                     <span class="fit-name">{f.name}</span>
                   </h3>
                   <p class="fit-meta">
-                    {slotsText(f)}
-                    {f.required > 0 && <> · {m.fitRequired(f.required)}</>}
+                    {/* Colores = las partes del coste: módulos (ranuras), drones y carga */}
+                    {[
+                      [f.slots.high, m.slotHigh, 'fitted'],
+                      [f.slots.mid, m.slotMid, 'fitted'],
+                      [f.slots.low, m.slotLow, 'fitted'],
+                      [f.slots.rig, m.slotRig, 'fitted'],
+                      [f.slots.subsystem, m.slotSub, 'fitted'],
+                    ]
+                      .filter(([n]) => (n as number) > 0)
+                      .map(([n, label, part]) => (
+                        <span class:list={['slot', part as string]}>{(label as (n: number) => string)(n as number)}</span>
+                      ))}
+                    {f.drones > 0 && <span class="slot drones">{m.fitDrones(qty.format(f.drones))}</span>}
+                    {f.cargo > 0 && <span class="slot cargo">{m.fitCargo(qty.format(f.cargo))}</span>}
+                    {f.required > 0 && <span class="req">{m.fitRequired(f.required)}</span>}
                   </p>
                   <p class="fit-cost">
                     <strong title={iskFull(f.cost.total, lang)}>{m.fitCost(money(f.cost.total))}</strong>
-                    {costParts(f) && <span class="parts"> · {costParts(f)}</span>}
-                    {f.cost.unpriced > 0 && <span class="unpriced"> · {m.costUnpriced(f.cost.unpriced)}</span>}
+                    {costShares(f).map((c) => (
+                      <span class:list={['part', c.key]}>{c.label}</span>
+                    ))}
+                    {f.cost.unpriced > 0 && <span class="unpriced">{m.costUnpriced(f.cost.unpriced)}</span>}
                   </p>
+                  {f.cost.total > 0 && (
+                    <span class="cost-bar" aria-hidden="true">
+                      {costShares(f).map((c) => (
+                        <i class={c.key} style={`width:${(c.share * 100).toFixed(2)}%`} />
+                      ))}
+                    </span>
+                  )}
                 </div>
                 <form method="post" action="/doctrinas/accion" data-confirm={m.fitDeleteConfirm(fitLabel(f))}>
                   <input type="hidden" name="action" value="delete-fit" />
@@ -336,13 +420,15 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                 </form>
               </header>
 
+              {noticeAt(`fit-${f.id}`) && <ActionNotice ok={okText} extra={extraText} error={errorText} />}
+
               <div class="plan-line">
                 {f.plan ? (
                   <>
                     <span class="plan-name">{m.planName(f.plan.name, f.plan.skills)}</span>
                     <details class="plan-change">
                       <summary>{m.planReplace}</summary>
-                      <form method="post" action="/doctrinas/accion" enctype="multipart/form-data" class="plan-form">
+                      <form method="post" action="/doctrinas/accion" enctype="multipart/form-data" class="plan-form" data-pending={m.pendingPlan}>
                         <input type="hidden" name="action" value="plan" />
                         <input type="hidden" name="id" value={f.id} />
                         <label>
@@ -362,7 +448,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                     </form>
                   </>
                 ) : (
-                  <form method="post" action="/doctrinas/accion" enctype="multipart/form-data" class="plan-form">
+                  <form method="post" action="/doctrinas/accion" enctype="multipart/form-data" class="plan-form" data-pending={m.pendingPlan}>
                     <input type="hidden" name="action" value="plan" />
                     <input type="hidden" name="id" value={f.id} />
                     <span class="plan-none">{m.planNone}</span>
@@ -401,12 +487,14 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                               {p?.clone === 'alpha' && <span class="clone-tag">{m.cloneAlpha}</span>}
                             </th>
                             <td class="fly">
-                              <span class:list={['status', row.status]} title={row.status === 'omega' ? m.statusOmegaHint : undefined}>
+                              <span class:list={['status', row.status]}>
                                 <Icon name={STATUS_ICON[row.status]} />
                                 {statusText(row.status, row.fly)}
                               </span>
                               {row.status === 'missing' && row.fly && <span class="sub">{m.trainTime(time(row.fly.minutes))}</span>}
-                              {row.status === 'omega' && <span class="sub">{m.statusOmegaHint}</span>}
+                              {row.status === 'omega' && (
+                                <span class="sub">{row.fly?.needsOmega ? m.statusOmegaHint : m.statusOmegaBlocked}</span>
+                              )}
                               {row.fly && row.fly.missing.length > 0 && (
                                 <details class="skills">
                                   <summary>{m.missingList(row.fly.missing.length)}</summary>
@@ -432,7 +520,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                                     <span class="bar" aria-hidden="true">
                                       <i style={`width:${(progress(plan) * 100).toFixed(1)}%`} />
                                     </span>
-                                    <span class="num">
+                                    <span class:list={['num', { done: plan.missing.length === 0 }]}>
                                       {plan.missing.length === 0 ? m.planDone : m.planPercent(pct.format(Math.floor(progress(plan) * 100) / 100))}
                                     </span>
                                   </span>
@@ -465,16 +553,21 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                               )}
                             </td>
                             <td class="budget">
-                              {!row.budget ? (
-                                row.injectors?.fly ? (
-                                  <span class="sub">{m.budgetNoInjectorPrice}</span>
-                                ) : (
-                                  <span class="none">—</span>
-                                )
-                              ) : (
-                                <>
-                                  <span class="cell-label" aria-hidden="true">{m.colBudget}</span>
-                                  <span class="need" title={iskFull(row.budget.need, lang)}>{money(row.budget.need)}</span>
+                              <span class="cell-label" aria-hidden="true">{m.colBudget}</span>
+                              <ul class="checks">
+                                {chipsFor(f, row).map((c) => (
+                                  <li class:list={['check', c.key, c.state]} title={c.full}>
+                                    <span class="ico" aria-hidden="true">{c.glyph ? <b class="glyph">{c.glyph}</b> : <Icon name={c.icon!} />}</span>
+                                    <span class="lbl" aria-hidden="true">{c.label}</span>
+                                    <span class="sr-only">{c.full}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {row.budget && (
+                                <details class="sums">
+                                  <summary>
+                                    <span class="need" title={iskFull(row.budget.need, lang)}>{money(row.budget.need)}</span> · {m.budgetDetails}
+                                  </summary>
                                   <span class="sub">
                                     {row.injectors?.fly && row.injectors.fly.sp > 0
                                       ? m.budgetParts(money(f.cost.total), injText(row.injectors.fly), costOr(row.injectors.fly.cost))
@@ -490,7 +583,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                                       <dd>{row.budget.withOmega ? shortText(row.budget.withOmega) : m.noOmegaPrice}</dd>
                                     </div>
                                   </dl>
-                                </>
+                                </details>
                               )}
                             </td>
                           </tr>
@@ -503,12 +596,12 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
             </article>
           ))}
 
-          <details class="add-fit" open={d.fits.length === 0}>
+          <details class="add-fit" open={d.fits.length === 0 || (!!errorText && at === `doctrina-${d.id}`)}>
             <summary>
               <Icon name="add" />
               {m.fitAdd}
             </summary>
-            <form method="post" action="/doctrinas/accion" class="fit-form">
+            <form method="post" action="/doctrinas/accion" class="fit-form" data-pending={m.pendingFit} data-draft={`eft-${d.id}`}>
               <input type="hidden" name="action" value="add-fit" />
               <input type="hidden" name="id" value={d.id} />
               <label for={`eft-${d.id}`}>{m.fitPaste}</label>
@@ -524,7 +617,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                 placeholder="[Rifter, Rifter PvP]"></textarea>
               <button type="submit" class="secondary-button">
                 <Icon name="add" />
-                {m.fitAdd}
+                <span class="label">{m.fitAdd}</span>
               </button>
             </form>
           </details>
@@ -535,12 +628,65 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
 </Base>
 
 <script>
-  // Borrar pide confirmación (el texto viene en data-confirm de cada formulario)
+  // Borrar pide confirmación (data-confirm). Las acciones que llaman a ESI (data-pending) muestran que están
+  // trabajando: botón ocupado y una nota, hasta que vuelve la página con el resultado junto a lo que se tocó
   document.addEventListener('submit', (e) => {
     const form = e.target as HTMLFormElement;
     const msg = form.dataset.confirm;
-    if (msg && !confirm(msg)) e.preventDefault();
+    if (msg && !confirm(msg)) {
+      e.preventDefault();
+      return;
+    }
+    // El fit pegado se guarda por si vuelve con un error (la página se recarga y el textarea se vaciaría)
+    const draft = form.dataset.draft;
+    const area = form.querySelector('textarea');
+    try {
+      if (draft && area) sessionStorage.setItem(draft, area.value);
+    } catch {}
+    const pending = form.dataset.pending;
+    if (!pending) return;
+    const button = form.querySelector<HTMLButtonElement>('button[type=submit]');
+    // Después del envío: deshabilitarlo antes cancelaría el propio envío en algunos navegadores
+    setTimeout(() => {
+      if (button) {
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+      }
+      let note = form.querySelector<HTMLElement>('.pending-note');
+      if (!note) {
+        note = document.createElement('p');
+        note.className = 'pending-note';
+        note.setAttribute('role', 'status');
+        form.append(note);
+      }
+      note.textContent = pending;
+    });
   });
+  // Al volver atrás, el navegador restaura la página tal cual: sin botones ocupados
+  window.addEventListener('pageshow', () => {
+    document.querySelectorAll<HTMLButtonElement>('button[aria-busy=true]').forEach((b) => {
+      b.disabled = false;
+      b.removeAttribute('aria-busy');
+    });
+    document.querySelectorAll('.pending-note').forEach((n) => n.remove());
+  });
+  // Vuelta con error: se recupera el fit pegado; con éxito, se olvida
+  const params = new URLSearchParams(location.search);
+  const at = params.get('at') ?? '';
+  try {
+    if (params.get('error') && at.startsWith('doctrina-')) {
+      const area = document.querySelector<HTMLTextAreaElement>(`#eft-${at.slice(9)}`);
+      const saved = sessionStorage.getItem(`eft-${at.slice(9)}`);
+      if (area && saved && !area.value) area.value = saved;
+    } else if (params.get('ok') === 'fit') {
+      for (const k of Object.keys(sessionStorage)) if (k.startsWith('eft-')) sessionStorage.removeItem(k);
+    }
+  } catch {}
+  // El aviso del resultado recibe el foco: el lector de pantalla lo anuncia y queda a la vista. Tras la carga: el
+  // salto al ancla (#fit-3) le quitaba el foco si se ponía antes
+  const focusNotice = () => setTimeout(() => document.querySelector<HTMLElement>('.action-notice')?.focus({ preventScroll: !!location.hash }));
+  if (document.readyState === 'complete') focusNotice();
+  else window.addEventListener('load', focusNotice, { once: true });
 </script>
 
 <style>
@@ -1043,6 +1189,259 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     margin-top: 4px;
   }
 
+  /* ───── Color (entrega 3) ─────
+     Partes del coste con la paleta categórica de las tortas (--cat-6 casco, --cat-1 módulos, --cat-3 drones,
+     --cat-4 carga): las mismas en los chips de ranuras, el desglose y la barra. Estados de los iconos con los tokens:
+     verde = listo, ámbar = falta o bloquea, cian = se puede resolver (entrenar, inyectar), gris = sin dato */
+  .doctrine,
+  .funds {
+    --part-hull: #9085e9;
+    --part-fitted: #3987e5;
+    --part-drones: #199e70;
+    --part-cargo: #c98500;
+  }
+  .fit-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    margin-top: 6px;
+  }
+  .slot {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: #14232f;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .slot::before,
+  .fit-cost .part::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: var(--dot);
+  }
+  .fitted {
+    --dot: var(--part-fitted);
+  }
+  .drones {
+    --dot: var(--part-drones);
+  }
+  .cargo {
+    --dot: var(--part-cargo);
+  }
+  .hull {
+    --dot: var(--part-hull);
+  }
+  .fit-meta .req {
+    margin-left: 4px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .fit-cost {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 12px;
+  }
+  .fit-cost .part {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .cost-bar {
+    display: flex;
+    gap: 2px;
+    max-width: 420px;
+    height: 6px;
+    margin-top: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .cost-bar i {
+    min-width: 2px;
+    background: var(--dot);
+  }
+
+  /* Estado de la fila: un punto de color junto al nombre (verde puede, ámbar necesita Omega, cian entrenando) */
+  .pilot-name::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: var(--line-strong);
+    vertical-align: 1px;
+  }
+  tr.ok .pilot-name::before {
+    background: var(--positive);
+  }
+  tr.omega .pilot-name::before {
+    background: var(--warning);
+  }
+  tr.missing .pilot-name::before {
+    background: var(--cyan);
+  }
+  .fit-pilots td.budget {
+    width: 30%;
+  }
+  .plan .bar i {
+    background: var(--cyan);
+  }
+  .plan:has(.done) .bar i {
+    background: var(--positive);
+  }
+
+  /* Quién la vuela: todos los fits en verde, algunos en cian, ninguno en gris */
+  .who-flies li.all {
+    border-color: #2f5a4b;
+    background: #13261f;
+  }
+  .who-flies li.all .count {
+    color: var(--positive);
+  }
+  .who-flies li.some {
+    border-color: #2c5566;
+  }
+  .who-flies li.some .count {
+    color: var(--cyan);
+  }
+
+  /* Los cuatro iconos de «Para volarlo ya» */
+  .checks {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .check {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    min-width: 0;
+    text-align: center;
+    --tone: var(--text-muted);
+    --tint: transparent;
+    --ring: var(--line);
+  }
+  .check .ico {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--ring);
+    border-radius: 50%;
+    background: var(--tint);
+    color: var(--tone);
+  }
+  .check .ico :global(.icon) {
+    width: 16px;
+    height: 16px;
+  }
+  .glyph {
+    font: 600 16px/1 var(--font);
+  }
+  .check .lbl {
+    max-width: 100%;
+    font-size: 12px;
+    line-height: 1.25;
+    color: var(--tone);
+    overflow-wrap: anywhere;
+  }
+  .check.good {
+    --tone: var(--positive);
+    --tint: #13261f;
+    --ring: #2f5a4b;
+  }
+  .check.warn {
+    --tone: var(--warning);
+    --tint: #2a2216;
+    --ring: #6b5530;
+  }
+  .check.part {
+    --tone: var(--warning);
+    --ring: #6b5530;
+  }
+  .check.info {
+    --tone: var(--cyan);
+    --tint: #102633;
+    --ring: #2c5566;
+  }
+  .check.off .ico {
+    border-style: dashed;
+  }
+  .sums {
+    margin-top: 8px;
+  }
+  .sums summary {
+    width: fit-content;
+    color: var(--cyan);
+    cursor: pointer;
+  }
+  .sums .need {
+    display: inline;
+    font-size: 13px;
+  }
+
+  /* Leyenda de los iconos, al pie de la franja de fondos */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 16px;
+    padding-top: 10px;
+    border-top: 1px solid #26313b88;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .legend .legend-title {
+    color: var(--text-secondary);
+  }
+  .legend :global(.icon) {
+    width: 14px;
+    height: 14px;
+    color: var(--cyan-dim);
+  }
+  .legend .glyph {
+    font-size: 14px;
+    color: var(--cyan-dim);
+  }
+
+  /* Aviso del resultado y estado de carga */
+  .panel-notice {
+    padding: 0 22px;
+  }
+  .fit-form :global(.pending-note),
+  .plan-form :global(.pending-note),
+  .funds :global(.pending-note),
+  .new-doctrine :global(.pending-note) {
+    flex-basis: 100%;
+    font-size: 13px;
+    color: var(--cyan);
+  }
+  button[aria-busy='true'] {
+    opacity: 0.6;
+    cursor: progress;
+  }
+  .fit:target,
+  .doctrine:target {
+    outline: 1px solid #2c5566;
+    outline-offset: -1px;
+  }
+
   @media (max-width: 600px) {
     .new-doctrine {
       width: 100%;
@@ -1098,6 +1497,12 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     }
     .fit-pilots td.budget:has(> .none) {
       display: none;
+    }
+    .panel-notice {
+      padding: 0 16px;
+    }
+    .checks {
+      max-width: 360px;
     }
     .funds {
       padding: 12px 16px;

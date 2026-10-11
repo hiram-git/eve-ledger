@@ -165,6 +165,18 @@ export function budget(need: number, f: Funds) {
 type MissingView = Evaluation['missing'][number] & { name: string | null };
 export type EvaluationView = Omit<Evaluation, 'missing'> & { missing: MissingView[]; required: number };
 export type PilotStatus = 'ok' | 'missing' | 'omega' | 'noScope' | 'noData';
+// Qué clon pide el fit: omega (alguna skill es solo Omega, o un Alfa la tiene entrenada y no puede usarla), alpha
+// (un piloto Alfa ya lo vuela, o ninguna skill es solo Omega y no pide nivel V), alphaUnsure (ninguna es solo Omega
+// pero pide nivel V: los topes de Alfa por nivel no están en ESI) o unknown (skills aún sin el dato)
+export type CloneNeed = 'omega' | 'alpha' | 'alphaUnsure' | 'unknown';
+
+// Tipos de las doctrinas y sus skills: el sync los repasa para que las skills guardadas antes sepan si son solo Omega
+export async function refreshDoctrineDogma() {
+  const rows = await db.select({ ship: fits.shipTypeId, items: fits.items }).from(fits);
+  const plans = await db.select({ skills: fitPlans.skills }).from(fitPlans);
+  const ids = [...new Set([...rows.flatMap((r) => [r.ship, ...r.items.map((i) => i.typeId)]), ...plans.flatMap((p) => p.skills.map((s) => s.skillId))])];
+  if (ids.length) await ensureDogma(ids);
+}
 
 export async function listDoctrines() {
   const pilots = await db
@@ -243,6 +255,36 @@ export async function listDoctrines() {
           const planReq = plan ? withPrerequisites(plan.skills, info) : null;
           const cost = fitCost(f.shipTypeId, f.items, prices);
           const count = (s: FitSection) => f.items.filter((i) => i.section === s).reduce((n, i) => n + i.quantity, 0);
+          const pilotRows = pilots.map((p) => {
+            const ps = pilotSkills.get(p.id)!;
+            const none = { fly: null, plan: null, injectors: null, budget: null };
+            if (!p.scopes.split(' ').includes(SKILLS_SCOPE)) return { characterId: p.id, status: 'noScope' as PilotStatus, ...none };
+            if (!p.skillsAt) return { characterId: p.id, status: 'noData' as PilotStatus, ...none };
+            const flyView = view(fly, ps);
+            const planView = planReq ? view(planReq, ps) : null;
+            const status: PilotStatus = !flyView.missing.length ? 'ok' : flyView.alphaBlocked ? 'omega' : 'missing';
+            // Inyectores para volarlo ya y para completar el plan (si se conocen los SP que faltan)
+            const inject = (e: EvaluationView | null): InjectorPlan | null =>
+              e && e.missingSp !== null && e.missingSp > 0 ? injectorsFor(e.missingSp, p.totalSp ?? 0, p.unallocatedSp ?? 0, injectorPrice) : null;
+            const injectors = { fly: inject(flyView), plan: inject(planView) };
+            // Volarlo ya: el fit más los inyectores que le faltan (un Alfa que solo necesita Omega: el fit)
+            const need = injectors.fly && injectors.fly.cost === null ? null : cost.total + (injectors.fly?.cost ?? 0);
+            return { characterId: p.id, status, fly: flyView, plan: planView, injectors, budget: need === null ? null : budget(need, funds) };
+          });
+          // Qué clon pide: lo que dice EVE de cada skill (solo Omega) y lo que demuestran tus pilotos Alfa
+          const flySkills = [...fly.entries()];
+          const omegaSkills = flySkills.filter(([id]) => dogma.get(id)?.omegaOnly === true).map(([id]) => nameOf(id) ?? String(id));
+          const alphas = pilotRows.filter((r) => pilots.find((p) => p.id === r.characterId)?.clone === 'alpha');
+          const clone: CloneNeed =
+            omegaSkills.length || alphas.some((r) => r.fly?.missing.some((m) => m.omegaOnly))
+              ? 'omega'
+              : alphas.some((r) => r.status === 'ok')
+                ? 'alpha'
+                : flySkills.some(([id]) => dogma.get(id)?.omegaOnly == null)
+                  ? 'unknown'
+                  : flySkills.some(([, level]) => level >= 5)
+                    ? 'alphaUnsure'
+                    : 'alpha';
           return {
             id: f.id,
             name: f.name,
@@ -256,22 +298,9 @@ export async function listDoctrines() {
             cost,
             // Sin skills que mirar, el presupuesto es solo el fit
             budget: budget(cost.total, funds),
-            pilots: pilots.map((p) => {
-              const ps = pilotSkills.get(p.id)!;
-              const none = { fly: null, plan: null, injectors: null, budget: null };
-              if (!p.scopes.split(' ').includes(SKILLS_SCOPE)) return { characterId: p.id, status: 'noScope' as PilotStatus, ...none };
-              if (!p.skillsAt) return { characterId: p.id, status: 'noData' as PilotStatus, ...none };
-              const flyView = view(fly, ps);
-              const planView = planReq ? view(planReq, ps) : null;
-              const status: PilotStatus = !flyView.missing.length ? 'ok' : flyView.needsOmega ? 'omega' : 'missing';
-              // Inyectores para volarlo ya y para completar el plan (si se conocen los SP que faltan)
-              const inject = (e: EvaluationView | null): InjectorPlan | null =>
-                e && e.missingSp !== null && e.missingSp > 0 ? injectorsFor(e.missingSp, p.totalSp ?? 0, p.unallocatedSp ?? 0, injectorPrice) : null;
-              const injectors = { fly: inject(flyView), plan: inject(planView) };
-              // Volarlo ya: el fit más los inyectores que le faltan (un Alfa que solo necesita Omega: el fit)
-              const need = injectors.fly && injectors.fly.cost === null ? null : cost.total + (injectors.fly?.cost ?? 0);
-              return { characterId: p.id, status, fly: flyView, plan: planView, injectors, budget: need === null ? null : budget(need, funds) };
-            }),
+            clone,
+            omegaSkills,
+            pilots: pilotRows,
           };
         }),
     })),

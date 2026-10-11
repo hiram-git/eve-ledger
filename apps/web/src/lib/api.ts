@@ -318,7 +318,9 @@ export type MissingSkill = {
   // SP y minutos que faltan; null si no se conoce el rango o los atributos
   sp: number | null;
   minutes: number | null;
+  // Entrenada pero sin poder usarla como Alfa / skill que un Alfa no puede entrenar
   omegaOnly: boolean;
+  omegaSkill: boolean;
 };
 export type SkillEvaluation = {
   missing: MissingSkill[];
@@ -328,7 +330,11 @@ export type SkillEvaluation = {
   haveSp: number | null;
   needsOmega: boolean;
   required: number;
+  alphaBlocked: boolean;
 };
+// Qué clon pide un fit: omega (seguro), alpha (lo vuela un Alfa, o nada es solo Omega ni pide nivel V),
+// alphaUnsure (nada es solo Omega pero pide nivel V) o unknown (skills aún sin el dato)
+export type CloneNeed = 'omega' | 'alpha' | 'alphaUnsure' | 'unknown';
 // ok: puede volarlo; missing: le faltan skills; omega: las tiene pero un Alfa no puede usarlas;
 // noScope: falta el permiso de skills; noData: aún sin sync de skills
 export type FitPilotStatus = 'ok' | 'missing' | 'omega' | 'noScope' | 'noData';
@@ -347,6 +353,9 @@ export type DoctrineFit = {
   drones: number;
   cargo: number;
   required: number;
+  clone: CloneNeed;
+  // Skills del fit que solo puede entrenar un Omega
+  omegaSkills: string[];
   plan: { name: string; skills: number } | null;
   // A la venta más baja de Jita; unpriced = tipos sin precio (no suman)
   cost: { total: number; hull: number; fitted: number; drones: number; cargo: number; unpriced: number; pricedAt: string | null };
