@@ -93,6 +93,7 @@ bun install && bun run dev          # http://localhost:3000
 cd ../web
 bun install && bun run dev          # http://localhost:4321
 bun test                            # in apps/api: SSO, reconciliation, doctrines, backups
+bun run test:e2e                    # in apps/web: builds and runs the end-to-end tests (Playwright, demo data)
 ```
 
 **Desktop app:**
