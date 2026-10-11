@@ -30,12 +30,13 @@
 ## Privacy and security
 
 - **Everything stays on your machine.** There is no server and no account; your data lives in a local SQLite database. The app only listens on `127.0.0.1` and refuses requests addressed to any other host name, so websites you visit can't reach it.
-- **Read-only access.** The EVE login asks for five scopes, all read-only:
+- **Read-only access.** The EVE login asks for these scopes, all read-only:
   - `esi-wallet.read_character_wallet.v1`
   - `esi-assets.read_assets.v1`
   - `esi-killmails.read_killmails.v1`
   - `esi-contracts.read_character_contracts.v1`
   - `esi-skills.read_skills.v1`
+  - `esi-universe.read_structures.v1` (optional: shows the names of the citadels where you keep items or trade)
 
   You can revoke access at any time from your EVE account's third-party applications page.
 - **Login without secrets.** The login uses EVE SSO with PKCE: there is no client secret to steal, and you don't have to register anything at developers.eveonline.com. Access and refresh tokens are stored encrypted (AES-GCM) with a key generated on your computer.
@@ -76,7 +77,7 @@ The repository has three parts:
 Requirements: [Bun](https://bun.sh) 1.3, and for the desktop app [Rust](https://rustup.rs) plus the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your system.
 
 **An EVE application.** Create one at <https://developers.eveonline.com/applications>:
-- add the five scopes listed above;
+- add the six scopes listed above;
 - set the callback URL:
   - `http://localhost:3000/auth/callback` for the API in development;
   - `http://127.0.0.1:47300/auth/callback` for the desktop app.

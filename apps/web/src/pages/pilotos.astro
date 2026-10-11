@@ -74,6 +74,8 @@ const SCOPE_LABELS: Record<string, string> = {
   'esi-skills.read_skills.v1': m.scopeSkills,
 };
 const REQUIRED = Object.keys(SCOPE_LABELS);
+// Permiso opcional: nombres y sistema de las citadelas (la API lo da aparte, en missingOptionalScopes)
+const STRUCTURES_SCOPE = 'esi-universe.read_structures.v1';
 
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 const stateOf = (p: Pilot) => pilotState(p, m, staleAfterMs, status?.running);
@@ -249,6 +251,16 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
                     <span class="scope-missing">· {m.scopeMissingShort}</span>
                   </li>
                 ))
+              )}
+              {/* Opcional (nombres de las citadelas): sin ámbar; el chip entero lleva al login de EVE para concederlo */}
+              {(p.missingOptionalScopes ?? []).includes(STRUCTURES_SCOPE) && (
+                <li class="optional">
+                  <a href={loginUrl} title={`${m.scopeStructuresHint} ${m.relinkAs(p.name)}`}>
+                    <Icon name="pin" />
+                    {m.scopeStructures}
+                    <span class="scope-missing">· {m.scopeOptional}</span>
+                  </a>
+                </li>
               )}
             </ul>
 
@@ -699,6 +711,23 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
   }
   .scopes li.missing .icon {
     color: var(--warning);
+  }
+  /* Opcional: borde discontinuo y texto apagado; no es un problema, es una mejora a un clic */
+  .scopes li.optional {
+    padding: 0;
+    border: 1px dashed #2d4556;
+    background: none;
+  }
+  .scopes li.optional a {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 8px;
+    color: var(--text-muted);
+    text-decoration: none;
+  }
+  .scopes li.optional a:hover {
+    color: var(--cyan);
   }
 
   .figures dd.stale {

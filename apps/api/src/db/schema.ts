@@ -157,6 +157,16 @@ export const stationSystems = sqliteTable('station_systems', {
   systemId: integer('system_id').notNull(),
 });
 
+// Estructuras de jugadores (citadelas, IDs > 1e12): GET /universe/structures/{id} con el scope
+// esi-universe.read_structures.v1 de un piloto que tenga acceso (src/services/structures.ts). El nombre va a `names` y
+// el sistema a `station_systems`; aquí, cuándo se preguntó y qué dijo ESI, para no repetir un 403 en cada sync
+// ok: resuelta · forbidden: ningún piloto con el permiso tiene acceso (se reintenta a los 7 días) · missing: 404
+export const structureLookups = sqliteTable('structure_lookups', {
+  id: integer('id').primaryKey(),
+  status: text('status').notNull(),
+  checkedAt: ts('checked_at').notNull(),
+});
+
 // Ítem del killmail aplanado (los contenedores de la bodega traen sus ítems anidados)
 // copy: copia de blueprint (vale 0, como en el inventario)
 // flag: dónde iba (ranura, bahía de drones, bodega…; ver FITTED_FLAGS en losses.ts). Los ítems dentro de un

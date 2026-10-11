@@ -219,6 +219,8 @@ export type Pilot = {
   name: string;
   scopes: string[];
   missingScopes: string[];
+  // Permisos opcionales que no concedió (los nombres de las citadelas): no son un problema, solo una mejora
+  missingOptionalScopes: string[];
   lastSyncAt: string | null;
   createdAt: string;
   // Último vínculo (el primero o el de la última revinculación)

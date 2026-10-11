@@ -8,6 +8,7 @@ import { CONTRACTS_SCOPE, fetchContracts } from './contracts';
 import { fetchLosses, LOSSES_SCOPE } from './losses';
 import { resolvePendingGeo } from './geo';
 import { resolvePendingNames } from './names';
+import { resolvePendingStructures } from './structures';
 import { resolvePendingTypes } from './types';
 import { refreshPricesIfStale } from './prices';
 import { refreshDoctrineDogma } from './doctrines';
@@ -263,6 +264,8 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
       // Valoran el inventario y las naves perdidas
       if ((result.assets && !result.assets.error) || result.killmails?.inserted) await bestEffort('prices', refreshPricesIfStale);
       result.namesResolved = await bestEffort('names', resolvePendingNames);
+      // Citadelas: nombre y sistema con el permiso de estructuras (antes de geo, que sitúa su sistema en el mapa)
+      await bestEffort('structures', () => resolvePendingStructures());
       await bestEffort('geo', resolvePendingGeo);
       // Grupo de mercado de lo perdido y lo comprado: reconoce el equipo equivalente al reponer una nave
       await bestEffort('types', resolvePendingTypes);

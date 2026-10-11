@@ -4,7 +4,7 @@ import { db } from '../db/client';
 import { characters, syncLog } from '../db/schema';
 import { env } from '../lib/env';
 import { esiGet } from '../lib/esi';
-import { SCOPES } from '../lib/sso';
+import { OPTIONAL_SCOPES, SCOPES } from '../lib/sso';
 
 // Personajes vinculados con su estado: permisos que faltan y último error de sync (si es posterior al último éxito)
 async function listCharacters() {
@@ -35,7 +35,8 @@ async function listCharacters() {
       ...c,
       linkedAt,
       scopes: granted,
-      missingScopes: SCOPES.filter((s) => !granted.includes(s)),
+      missingScopes: SCOPES.filter((s) => !granted.includes(s) && !OPTIONAL_SCOPES.includes(s)),
+      missingOptionalScopes: OPTIONAL_SCOPES.filter((s) => !granted.includes(s)),
       lastError,
     };
   });

@@ -13,7 +13,12 @@ export const SCOPES = [
   'esi-contracts.read_character_contracts.v1',
   // Doctrinas: qué fits puede volar cada piloto y cuánto le falta de un plan (skills y atributos)
   'esi-skills.read_skills.v1',
+  // Opcional: nombres y sistema de las citadelas donde guardas cosas o comercias (GET /universe/structures/{id})
+  'esi-universe.read_structures.v1',
 ];
+// Los que no faltan «de verdad»: sin ellos todo funciona (las citadelas salen como «Estructura #id»). No encienden
+// la línea de salud ni el aviso de Pilotos; /characters los da aparte (missingOptionalScopes)
+export const OPTIONAL_SCOPES = ['esi-universe.read_structures.v1'];
 
 export type TokenResponse = {
   access_token: string;
