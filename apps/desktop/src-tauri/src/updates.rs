@@ -1,6 +1,6 @@
 //! Actualizaciones automáticas (tauri-plugin-updater) desde las releases de GitHub (`latest.json`, ver tauri.conf.json).
 //! Solo si el instalador se compiló con la clave pública de firma (`plugins.updater.pubkey`, que pone el workflow
-//! desde la variable `EVE_LEDGER_UPDATER_PUBKEY`): cada versión va firmada con la clave privada, que solo tiene
+//! desde la variable `EVE_LEDGER_UPDATER_PUBKEY`, junto con `endpoints`: las releases del repositorio que compila): cada versión va firmada con la clave privada, que solo tiene
 //! GitHub Actions, y el plugin rechaza lo que no esté firmado con ella. Una compilación local no se actualiza sola.
 //! Al arrancar y cada 6 h busca una versión nueva y la descarga en segundo plano; luego pregunta si reiniciar ahora
 //! o instalarla al cerrar la app. Los datos y `ledger.env` están en las carpetas del usuario: la actualización no los toca.

@@ -153,7 +153,8 @@ jobs:
           PUBKEY: ${{ vars.EVE_LEDGER_UPDATER_PUBKEY || secrets.EVE_LEDGER_UPDATER_PUBKEY }}
         run: >
           bun -e "await Bun.write('src-tauri/tauri.updater.conf.json', JSON.stringify({
-          bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.PUBKEY.trim() } } }))"
+          bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.PUBKEY.trim(),
+          endpoints: ['https://github.com/' + process.env.GITHUB_REPOSITORY + '/releases/latest/download/latest.json'] } } }))"
 
       - name: Compilar los instaladores
         uses: tauri-apps/tauri-action@v0

@@ -2,7 +2,7 @@
 
 **Are your characters making or losing ISK?** EVE Ledger is a free desktop app that pulls the wallets, assets, lost ships and skills of all your EVE Online characters from ESI and answers that at a glance. It runs entirely on your computer.
 
-[Español](#español) · [Download](https://github.com/hiram-git/eve-ledger/releases/latest) · Windows · macOS (Apple Silicon) · Linux · English / Español / Deutsch
+[Español](#español) · [Download](../../releases/latest) · Windows · macOS (Apple Silicon) · Linux · English / Español / Deutsch
 
 ![EVE Ledger dashboard: net result for the period, today, net by activity and lost ships](docs/brochure/shot-dashboard-en.jpg)
 
@@ -47,7 +47,7 @@
 
 ## Install
 
-1. Download the installer for your system from [Releases](https://github.com/hiram-git/eve-ledger/releases/latest):
+1. Download the installer for your system from [Releases](../../releases/latest):
    - **Windows:** `.exe` or `.msi`
    - **macOS** (Apple Silicon): `.dmg`
    - **Linux:** `.deb` or `.AppImage`
@@ -108,7 +108,7 @@ GitHub Actions builds the Windows, macOS and Linux installers when a new version
 
 ## Contributing
 
-Bug reports and ideas are welcome in [Issues](https://github.com/hiram-git/eve-ledger/issues). To report a bug that depends on your data, `bun run export:debug` (in `apps/api`) writes an anonymized export with no tokens and no character names, so it can be reproduced without sharing your database.
+Bug reports and ideas are welcome in [Issues](../../issues). To report a bug that depends on your data, `bun run export:debug` (in `apps/api`) writes an anonymized export with no tokens and no character names, so it can be reproduced without sharing your database.
 
 ## License
 
@@ -126,7 +126,7 @@ The figures in the screenshots are demo data.
 
 EVE Ledger es una app de escritorio gratuita que consolida los wallets, el inventario, las naves perdidas y las skills de todos tus personajes de EVE Online, vía ESI, para responder de un vistazo a la pregunta «¿gano o pierdo ISK?». Corre solo en tu equipo: sin servidor ni cuenta, y con los tokens cifrados.
 
-- **Descarga:** [Releases](https://github.com/hiram-git/eve-ledger/releases/latest) (Windows, macOS con Apple Silicon y Linux).
+- **Descarga:** [Releases](../../releases/latest) (Windows, macOS con Apple Silicon y Linux).
 - **Guía de instalación:** [apps/desktop/INSTALAR.md](apps/desktop/INSTALAR.md).
 - **Compilar y publicar versiones:** [apps/desktop/README.md](apps/desktop/README.md).
 - **Licencia:** [MIT](LICENSE) © 2026 Sirrohan Yassavi. EVE Online y sus marcas son de CCP hf.; este programa no está afiliado a CCP.

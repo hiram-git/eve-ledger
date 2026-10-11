@@ -43,9 +43,7 @@
   "plugins": {
     "updater": {
       "pubkey": "",
-      "endpoints": [
-        "https://github.com/hiram-git/eve-ledger/releases/latest/download/latest.json"
-      ],
+      "endpoints": [],
       "windows": {
         "installMode": "passive"
       }
