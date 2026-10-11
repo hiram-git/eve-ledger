@@ -1,0 +1,50 @@
+---
+// Resultado de una acción de Doctrinas (crear, añadir un fit, importar un plan, precios…). Se pinta junto a lo que
+// se tocó: con el ancla de la vuelta, un aviso arriba del todo quedaba fuera de la vista y parecía que no pasó nada
+import Icon from './Icon.astro';
+
+interface Props {
+  ok?: string | null;
+  extra?: string | null;
+  error?: string | null;
+}
+const { ok, extra, error } = Astro.props;
+---
+
+{
+  ok && (
+    <div class="notice success action-notice" role="status" tabindex="-1">
+      <Icon name="check" />
+      <div>
+        <p>{ok}</p>
+        {extra && <p class="extra">{extra}</p>}
+      </div>
+    </div>
+  )
+}
+{
+  error && (
+    <div class="notice error action-notice" role="alert" tabindex="-1">
+      <Icon name="alert" />
+      <p>{error}</p>
+    </div>
+  )
+}
+
+<style>
+  .action-notice {
+    margin: 12px 0;
+  }
+  .notice.success {
+    border-color: #2f5a4b;
+    background: #13261f;
+    color: #cfeee2;
+  }
+  .notice.success :global(.icon) {
+    color: var(--positive);
+  }
+  .extra {
+    margin-top: 4px;
+    color: var(--text-secondary);
+  }
+</style>

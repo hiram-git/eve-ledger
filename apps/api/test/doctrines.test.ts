@@ -13,7 +13,7 @@ Bun.env.EVE_CLIENT_ID ||= 'test';
 Bun.env.EVE_CALLBACK_URL ||= 'http://127.0.0.1/auth/callback';
 
 // Tipos de prueba: [nombre, grupo, categoría, rango, primario, secundario, [skill, nivel]…]
-type Fake = [string, number, number, number | null, number | null, number | null, [number, number][]];
+type Fake = [string, number, number, number | null, number | null, number | null, [number, number][], boolean?];
 const TYPES: Record<number, Fake> = {
   587: ['Rifter', 25, 6, null, null, null, [[3329, 1]]],
   2048: ['Damage Control II', 60, 7, null, null, null, [[3394, 3]]],
@@ -26,6 +26,9 @@ const TYPES: Record<number, Fake> = {
   24241: ['Light Drone Operation', 273, 16, 1, 166, 167, [[3436, 1]]],
   3436: ['Drones', 273, 16, 1, 166, 167, []],
   3423: ['Capacitor Emission Systems', 255, 16, 2, 165, 166, []],
+  // Solo Omega (atributo 1047) y una nave que la pide
+  16591: ['Heavy Assault Cruisers', 257, 16, 6, 167, 168, [[3329, 1]], true],
+  12015: ['Muninn', 358, 6, null, null, null, [[16591, 1]]],
 };
 // Venta más baja en Jita (el neutralizador no tiene órdenes: queda sin precio); 40520/45635 = inyectores
 const JITA: Record<number, number> = { 587: 500_000, 2048: 1_200_000, 2488: 300_000, 40520: 800_000_000, 45635: 180_000_000 };
@@ -49,11 +52,12 @@ mock.module(`${API}/lib/esi.ts`, () => ({
     if (type) {
       const t = TYPES[Number(type[1])];
       if (!t) throw new FakeEsiError(404);
-      const [name, group, , rank, pri, sec, req] = t;
+      const [name, group, , rank, pri, sec, req, omegaOnly] = t;
       const dogma_attributes = req.flatMap(([s, l], i) => [
         { attribute_id: REQ_ATTRS[i][0], value: s },
         { attribute_id: REQ_ATTRS[i][1], value: l },
       ]);
+      if (omegaOnly) dogma_attributes.push({ attribute_id: 1047, value: 1 });
       if (rank) dogma_attributes.push({ attribute_id: 275, value: rank }, { attribute_id: 180, value: pri! }, { attribute_id: 181, value: sec! });
       return { data: { type_id: Number(type[1]), name, group_id: group, dogma_attributes }, headers: new Headers() };
     }
@@ -81,7 +85,7 @@ const s = await import(`${API}/db/schema.ts`);
 const { parseEft } = await import(`${API}/lib/eft.ts`);
 const { parseEmp } = await import(`${API}/lib/emp.ts`);
 const { spForLevel, withPrerequisites, evaluate } = await import(`${API}/lib/skill-math.ts`);
-const { addFit, budget, createDoctrine, listDoctrines, setPlan, DoctrineError } = await import(`${API}/services/doctrines.ts`);
+const { addFit, budget, createDoctrine, listDoctrines, refreshDoctrineDogma, setPlan, DoctrineError } = await import(`${API}/services/doctrines.ts`);
 const { injectorsFor, largeYield } = await import(`${API}/lib/injectors.ts`);
 const { inArray } = await import('drizzle-orm');
 runMigrations();
@@ -278,8 +282,32 @@ test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   expect(by.get(9101)!.budget!.need).toBe(3_200_000);
   expect(by.get(9102)!.budget!.need).toBe(3_200_000);
   expect(by.get(9104)!.budget).toBeNull();
+  // El Alfa tiene Light Drone Operation II entrenada pero solo usa el nivel I: el fit pide Omega
+  expect(f.clone).toBe('omega');
+  expect(f.omegaSkills).toEqual([]);
+
+  // Una nave que pide una skill solo Omega: Omega aunque nadie la haya entrenado, y el Alfa sale como «omega»
+  const muninn = await addFit(id, '[Muninn, Prueba]\nDamage Control II');
+  const m = (await listDoctrines()).doctrines.find((d) => d.id === id)!.fits.find((x) => x.id === muninn.id)!;
+  expect(m.clone).toBe('omega');
+  expect(m.omegaSkills).toEqual(['Heavy Assault Cruisers']);
+  expect(m.pilots.find((x) => x.characterId === 9102)!.status).toBe('omega');
+  expect(m.pilots.find((x) => x.characterId === 9101)!.status).toBe('missing');
   // Cada tipo se pide a ESI una sola vez: la segunda importación ya no llama a /universe/types
   const before = esiCalls.filter((c) => c.startsWith('/universe/types')).length;
   await addFit(id, EFT);
   expect(esiCalls.filter((c) => c.startsWith('/universe/types')).length).toBe(before);
+});
+
+test('las skills guardadas sin saber si son solo Omega se vuelven a pedir una vez', async () => {
+  const { eq } = await import('drizzle-orm');
+  await db.update(s.typeDogma).set({ omegaOnly: null }).where(eq(s.typeDogma.typeId, 16591));
+  const before = esiCalls.filter((c) => c === '/universe/types/16591').length;
+  await refreshDoctrineDogma();
+  const [row] = await db.select().from(s.typeDogma).where(eq(s.typeDogma.typeId, 16591));
+  expect(row.omegaOnly).toBe(true);
+  expect(esiCalls.filter((c) => c === '/universe/types/16591').length).toBe(before + 1);
+  // Ya con el dato, no se vuelve a pedir
+  await refreshDoctrineDogma();
+  expect(esiCalls.filter((c) => c === '/universe/types/16591').length).toBe(before + 1);
 });

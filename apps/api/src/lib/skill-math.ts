@@ -8,7 +8,14 @@ export type Attributes = Record<(typeof ATTRIBUTE_BY_ID)[keyof typeof ATTRIBUTE_
 // SP para tener una skill a un nivel: 250 × rango × √32^(nivel − 1) (nivel 5 de una de rango 1 = 256.000)
 export const spForLevel = (rank: number, level: number) => (level <= 0 ? 0 : Math.ceil(250 * rank * Math.pow(2, 2.5 * (level - 1))));
 
-export type SkillInfo = { rank: number | null; primaryAttr: number | null; secondaryAttr: number | null; required: RequiredSkill[] };
+export type SkillInfo = {
+  rank: number | null;
+  primaryAttr: number | null;
+  secondaryAttr: number | null;
+  required: RequiredSkill[];
+  // Solo Omega (un Alfa no puede entrenarla); null = no se sabe
+  omegaOnly?: boolean | null;
+};
 
 // Lo que pide un fit o un plan, con los prerrequisitos de cada skill (y los de esos) al nivel que piden
 export function withPrerequisites(targets: Iterable<RequiredSkill>, info: (skillId: number) => SkillInfo | undefined): Map<number, number> {
@@ -37,7 +44,10 @@ export type MissingSkill = {
   // SP que faltan (0 si ya está entrenada pero un Alfa no puede usarla) y minutos de entrenamiento
   sp: number | null;
   minutes: number | null;
+  // Entrenada a ese nivel, pero como Alfa no puede usarla (el tope de Alfa está por debajo)
   omegaOnly: boolean;
+  // Skill que un Alfa no puede entrenar en absoluto
+  omegaSkill: boolean;
 };
 
 export type Evaluation = {
@@ -49,6 +59,8 @@ export type Evaluation = {
   haveSp: number | null;
   // Le falta solo ser Omega: tiene entrenado todo, pero como Alfa no puede usarlo
   needsOmega: boolean;
+  // Un Alfa no puede volarlo: le falta una skill solo Omega o un nivel por encima de su tope
+  alphaBlocked: boolean;
 };
 
 // SP por minuto en una skill: primario + secundario / 2; un Alfa, la mitad
@@ -81,10 +93,18 @@ export function evaluate(required: Map<number, number>, pilot: PilotSkills, info
     const sp = omegaOnly ? 0 : target === null ? null : Math.max(0, target - s.sp);
     const rate = spPerMinute(i, pilot);
     const m = sp === null ? null : sp === 0 ? 0 : rate ? sp / rate : null;
-    missing.push({ skillId, active: s.active, trained: s.trained, need, sp, minutes: m, omegaOnly });
+    missing.push({ skillId, active: s.active, trained: s.trained, need, sp, minutes: m, omegaOnly, omegaSkill: i?.omegaOnly === true });
     missingSp = missingSp === null || sp === null ? null : missingSp + sp;
     minutes = minutes === null || m === null ? null : minutes + m;
   }
   missing.sort((a, b) => (b.minutes ?? 0) - (a.minutes ?? 0));
-  return { missing, missingSp, minutes, targetSp, haveSp, needsOmega: missing.length > 0 && missing.every((m) => m.omegaOnly) };
+  return {
+    missing,
+    missingSp,
+    minutes,
+    targetSp,
+    haveSp,
+    needsOmega: missing.length > 0 && missing.every((m) => m.omegaOnly),
+    alphaBlocked: pilot.clone === 'alpha' && missing.some((m) => m.omegaOnly || m.omegaSkill),
+  };
 }

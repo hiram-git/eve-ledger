@@ -1,0 +1,1 @@
+ALTER TABLE `type_dogma` ADD `omega_only` integer;

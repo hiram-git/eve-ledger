@@ -9,6 +9,7 @@ import { resolvePendingGeo } from './geo';
 import { resolvePendingNames } from './names';
 import { resolvePendingTypes } from './types';
 import { refreshPricesIfStale } from './prices';
+import { refreshDoctrineDogma } from './doctrines';
 import { refreshDoctrinePrices } from './jita';
 import { refreshPlexQuote } from './quotes';
 import { fetchSkills, SKILLS_SCOPE } from './skills';
@@ -248,6 +249,8 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
     await bestEffort('quotes', refreshPlexQuote);
     // Venta más baja en Jita de lo que llevan las doctrinas y de los inyectores (como mucho cada hora: una vez por ronda)
     await bestEffort('jita', refreshDoctrinePrices);
+    // Skills de las doctrinas guardadas antes de saber si son solo Omega (público; solo pide las que faltan)
+    await bestEffort('dogma', refreshDoctrineDogma);
 
     if (tokenOk) {
       // Solo llaman a ESI si hace falta: precios de más de 1 h, IDs sin nombre (reintenta fallos anteriores)

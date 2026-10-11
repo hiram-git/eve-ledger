@@ -257,6 +257,8 @@ export const typeDogma = sqliteTable('type_dogma', {
   primaryAttr: integer('primary_attr'),
   secondaryAttr: integer('secondary_attr'),
   required: text('required', { mode: 'json' }).$type<RequiredSkill[]>().notNull(),
+  // Skills: un Alfa no puede entrenarla (atributo 1047, canNotBeTrainedOnTrial); null = pedida antes de guardarlo
+  omegaOnly: integer('omega_only', { mode: 'boolean' }),
   updatedAt: ts('updated_at').notNull(),
 });
 
