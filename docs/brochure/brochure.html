@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<title>EVE Ledger · brochure</title>
+<title>EVE Ledger brochure</title>
 <style>
 @font-face { font-family: 'Inter'; src: url('../../apps/web/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; }
 @font-face { font-family: 'Barlow Condensed'; src: url('../../apps/web/node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff2') format('woff2'); font-weight: 700; }
@@ -52,18 +52,25 @@ li::before { content: ''; flex: none; width: 16px; height: 16px; border: 3px sol
 .box .t2 { font: 500 27px var(--mono); color: var(--cyan); margin-top: 2px; }
 .box .t3 { font-size: 24px; color: var(--text-secondary); margin-top: 4px; }
 .foot { position: absolute; left: 96px; width: 880px; bottom: 26px; font-size: 19px; line-height: 1.35; color: var(--text-muted); }
-/* capturas */
+/* capturas: cada pieza coloca las suyas (back = detrás, front = delante) */
 .shots { position: absolute; left: 1000px; top: 0; right: 0; bottom: 0; }
 .shot { position: absolute; border: 2px solid #2d4556; border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: 0 30px 80px -30px #000; }
 .shot img { display: block; width: 100%; }
-.shot.back { left: 150px; top: 56px; width: 1000px; height: 600px; opacity: .8; border-color: #26384a; }
-.shot.back img { width: 1000px; }
+.shot.back { left: 150px; top: 56px; width: 1000px; height: 600px; opacity: .82; border-color: #26384a; }
 .shot.front { left: 20px; top: 270px; width: 1100px; height: 700px; border-color: #3b7f94; box-shadow: 0 0 0 1px #61cce522, 0 40px 100px -30px #000; }
-.shot.front img { width: 1100px; }
 .bracket { position: absolute; width: 44px; height: 44px; border: 3px solid var(--corner); }
 .bracket.tl { left: 130px; top: 36px; border-right: 0; border-bottom: 0; }
 .bracket.tr { right: 26px; top: 36px; border-left: 0; border-bottom: 0; }
 .bracket.fl { left: 0; top: 250px; border-right: 0; border-bottom: 0; border-color: var(--cyan-dim); }
+/* Doctrinas: la franja «Con qué se paga» arriba y la doctrina grande delante */
+body[data-slide='doctrinas'] .shot.back { left: 120px; top: 64px; width: 860px; height: auto; opacity: .9; }
+body[data-slide='doctrinas'] .shot.front { left: 20px; top: 250px; width: 960px; height: 730px; }
+body[data-slide='doctrinas'] .bracket.fl { top: 230px; }
+body[data-slide='doctrinas'] .bracket.tl { left: 100px; top: 44px; }
+/* La novedad: chip junto a la viñeta */
+.new { margin-left: 14px; font: 600 18px var(--mono); letter-spacing: .06em; color: #0a131d; background: var(--cyan); border-radius: 8px; padding: 3px 10px; }
+li.hl { color: var(--text); }
+li.hl::before { border-color: var(--cyan); background: #61cce522; }
 </style>
 </head>
 <body>
@@ -87,39 +94,83 @@ li::before { content: ''; flex: none; width: 16px; height: 16px; border: 3px sol
 </div>
 <div class="shots">
   <i class="bracket tl"></i><i class="bracket tr"></i>
-  <div class="shot back"><img src="shot-losses.png" /></div>
+  <div class="shot back"><img data-shot="back" alt="" /></div>
   <i class="bracket fl"></i>
-  <div class="shot front"><img src="shot-dashboard.png" /></div>
+  <div class="shot front"><img data-shot="front" alt="" /></div>
 </div>
 <p class="foot" data-t="foot"></p>
 <script>
+// Tres piezas: ?slide=portada|doctrinas|indicadores, ?lang=es|en y ?v= (versión)
+const NEW = { es: 'NUEVO', en: 'NEW' };
 const T = {
+  portada: {
+    shots: ['doctrine', 'dashboard'],
+    es: {
+      tagline: 'Contabilidad de tus pilotos de EVE Online',
+      headline: '¿Ganas o pierdes ISK?<br>Tus pilotos, <em>una economía</em>.',
+      bullets: ['Wallets e inventario de todos tus personajes, consolidados', 'Neto por actividad: PvE, PvP, trading y logística', 'Naves perdidas: lo que te costaron de verdad', ['Doctrinas: quién vuela cada fit y cuánto le falta'], 'Balances, ISK/h de ratting y Omega de todas las cuentas', '100 % local: sin crear apps en developers ni claves'],
+    },
+    en: {
+      tagline: 'A ledger for your EVE Online pilots',
+      headline: 'Making or losing ISK?<br>Your pilots, <em>one economy</em>.',
+      bullets: ['Wallets and assets of all your characters, consolidated', 'Net by activity: PvE, PvP, trading, logistics', 'Lost ships: what they really cost you', ['Doctrines: who flies each fit and what they lack'], 'Balance sheets, ratting ISK/h, Omega for all accounts', '100% local: no developer apps or keys to create'],
+    },
+  },
+  doctrinas: {
+    shots: ['funds', 'doctrine'],
+    es: {
+      tagline: 'Doctrinas · nuevo en EVE Ledger',
+      headline: '¿Quién puede volar<br>la <em>doctrina</em>?',
+      bullets: ['Pega el fit EFT y el plan de skills de EVEMon', 'Quién lo vuela ya y cuánto entrenamiento falta', 'Omega o Alfa, según las skills del fit', 'Coste en Jita e inyectores para volarlo ya', 'ISK del wallet, con y sin el Omega reservado'],
+    },
+    en: {
+      tagline: 'Doctrines · new in EVE Ledger',
+      headline: 'Who can fly<br>the <em>doctrine</em>?',
+      bullets: ['Paste the EFT fit and the EVEMon skill plan', 'Who can fly it now and how much training is left', 'Omega or Alpha, from the fit’s skills', 'Jita cost and injectors to fly it now', 'Wallet ISK, with and without Omega set aside'],
+    },
+  },
+  indicadores: {
+    shots: ['balances', 'indicators'],
+    es: {
+      tagline: 'Indicadores y Balances',
+      headline: 'Tu economía,<br><em>como un libro</em>.',
+      bullets: ['ISK/h de ratting por piloto y por sistema', 'Omega de todas las cuentas: ¿tu ritmo lo paga?', 'Balance general y estado de resultados', 'Comisiones, impuestos y lo que cuestan tus pérdidas', 'Tortas y tablas que se ordenan'],
+    },
+    en: {
+      tagline: 'Indicators and Balances',
+      headline: 'Your economy,<br><em>as a ledger</em>.',
+      bullets: ['Ratting ISK/h by pilot and by system', 'Omega for all accounts: does your pace pay for it?', 'Balance sheet and income statement', 'Fees, taxes and what your losses cost', 'Pie charts and sortable tables'],
+    },
+  },
+};
+const COMMON = {
   es: {
-    tagline: 'Contabilidad de tus pilotos de EVE Online',
-    headline: '¿Ganas o pierdes ISK?<br>Tus pilotos, <em>una economía</em>.',
-    bullets: ['Wallets e inventario de todos tus personajes, consolidados', 'Neto por actividad: PvE, PvP, trading y logística', 'Naves perdidas: lo que te costaron de verdad', 'ISK/h de ratting, Omega de todas las cuentas y comisiones', '100 % local y parametrizable'],
     box1: 'App de escritorio, <b>gratis</b>',
     box3: 'Windows · macOS · Linux · Español / English / Deutsch',
     foot: 'EVE Online y todo lo relacionado son marcas de CCP hf. EVE Ledger es una herramienta de terceros, no afiliada a CCP. Capturas con datos de demostración.',
   },
   en: {
-    tagline: 'A ledger for your EVE Online pilots',
-    headline: 'Making or losing ISK?<br>Your pilots, <em>one economy</em>.',
-    bullets: ['Wallets and assets of all your characters, consolidated', 'Net by activity: PvE, PvP, trading, logistics', 'Lost ships: what they really cost you', 'Ratting ISK/h, Omega for all accounts, fees & taxes', '100% local and configurable'],
     box1: 'Desktop app, <b>free</b>',
     box3: 'Windows · macOS · Linux · Español / English / Deutsch',
     foot: 'EVE Online and all related marks are trademarks of CCP hf. EVE Ledger is a third-party tool, not affiliated with CCP. Screenshots: demo data.',
   },
 };
 const q = new URLSearchParams(location.search);
-const t = T[q.get('lang') || 'es'];
-document.documentElement.lang = q.get('lang') || 'es';
-document.querySelector('[data-version]').textContent = q.get('v') || '0.1.8';
+const lang = q.get('lang') === 'en' ? 'en' : 'es';
+const slide = T[q.get('slide')] ? q.get('slide') : 'portada';
+const t = { ...T[slide][lang], ...COMMON[lang] };
+document.documentElement.lang = lang;
+document.body.dataset.slide = slide;
+document.querySelector('[data-version]').textContent = q.get('v') || '0.1.13';
 for (const el of document.querySelectorAll('[data-t]')) {
   const k = el.dataset.t;
-  if (k === 'bullets') el.innerHTML = t.bullets.map((b) => '<li>' + b + '</li>').join('');
+  // Una viñeta entre corchetes es la novedad: chip «NUEVO»
+  if (k === 'bullets') el.innerHTML = t.bullets.map((b) => (Array.isArray(b) ? '<li class="hl">' + b[0] + '<span class="new">' + NEW[lang] + '</span></li>' : '<li>' + b + '</li>')).join('');
   else el.innerHTML = t[k];
 }
+const [back, front] = T[slide].shots;
+document.querySelector('[data-shot=back]').src = 'shot-' + back + '-' + lang + '.jpg';
+document.querySelector('[data-shot=front]').src = 'shot-' + front + '-' + lang + '.jpg';
 // Estrellas deterministas
 let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
 const stars = document.getElementById('stars');
