@@ -146,20 +146,31 @@ test('restaurar un archivo subido y negarse mientras otra restauración está en
 test('una copia de una versión anterior (con menos migraciones) se restaura y queda al día', async () => {
   await pilot(X, 2);
   const b = backups.createBackup('manual');
-  // La copia «antigua»: sin la última migración (la columna omega_only de type_dogma, 0014)
+  // La copia «antigua»: sin la última migración. Se deshace lo que crea su SQL (tablas, columnas, índices) y se
+  // borra su fila (por created_at: Drizzle deja el id de __drizzle_migrations a NULL)
   const old = join(tmp, 'old.db');
   copyFileSync(join(backups.BACKUP_DIR, b.name), old);
+  const journal = JSON.parse(readFileSync(join(Bun.env.MIGRATIONS_DIR!, 'meta', '_journal.json'), 'utf8'));
+  const last = journal.entries.at(-1).tag;
+  const sqlText = readFileSync(join(Bun.env.MIGRATIONS_DIR!, `${last}.sql`), 'utf8');
+  const undo: string[] = [];
+  for (const m of sqlText.matchAll(/CREATE TABLE `([^`]+)`/g)) undo.push(`drop table \`${m[1]}\``);
+  for (const m of sqlText.matchAll(/ALTER TABLE `([^`]+)` ADD `([^`]+)`/g)) undo.push(`alter table \`${m[1]}\` drop column \`${m[2]}\``);
+  for (const m of sqlText.matchAll(/CREATE (?:UNIQUE )?INDEX `([^`]+)`/g)) undo.unshift(`drop index \`${m[1]}\``);
+  expect(undo.length).toBeGreaterThan(0);
   const o = new Database(old);
-  o.exec('alter table type_dogma drop column omega_only');
-  o.exec('delete from __drizzle_migrations where id = (select max(id) from __drizzle_migrations)');
+  for (const stmt of undo) o.exec(stmt);
+  o.exec('delete from __drizzle_migrations where created_at = (select max(created_at) from __drizzle_migrations)');
+  expect(appliedMigrations(o)).toBe(knownMigrations() - 1);
   o.close();
   await pilot(Y, 1);
   backups.restoreUpload(new Uint8Array(readFileSync(old)));
   expect((await db.select().from(s.walletJournal).where(eq(s.walletJournal.characterId, X))).length).toBe(2);
   expect(await db.query.characters.findFirst({ where: eq(s.characters.id, Y) })).toBeUndefined();
-  // La base sigue con el esquema de esta versión
+  // La base sigue con el esquema de esta versión y con todas las migraciones registradas
   expect(appliedMigrations()).toBe(knownMigrations());
   await db.select({ o: s.typeDogma.omegaOnly }).from(s.typeDogma).limit(1);
+  await db.select().from(s.structureLookups).limit(1);
 });
 
 test('antes de migrar solo copia si hay migraciones pendientes', async () => {
