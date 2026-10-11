@@ -2,6 +2,7 @@ import { desc } from 'drizzle-orm';
 import { db } from '../db/client';
 import { syncLog } from '../db/schema';
 import { env } from '../lib/env';
+import { maybeAutoBackup } from './backups';
 import { syncAll } from './sync';
 
 // Margen al arrancar para no sincronizar en mitad del arranque (o de cada recarga de `bun --watch`)
@@ -49,6 +50,8 @@ async function run() {
   } finally {
     state.running = false;
     schedule(startedAt.getTime() + intervalMs());
+    // Con los datos de esta ronda ya guardados
+    maybeAutoBackup();
   }
 }
 

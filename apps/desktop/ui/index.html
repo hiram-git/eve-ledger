@@ -52,6 +52,28 @@
           </div>
         </section>
 
+        <!-- Segundo plano: ESI solo da ~30 días de wallet; si la app no está abierta, esos días se pierden -->
+        <section class="panel">
+          <h2 data-t="backgroundTitle"></h2>
+          <p class="hint" data-t="backgroundLead"></p>
+          <div class="checks">
+            <label class="check">
+              <input name="startAtLogin" type="checkbox" />
+              <span>
+                <span data-t="startAtLogin"></span>
+                <small data-t="startAtLoginHint"></small>
+              </span>
+            </label>
+            <label class="check">
+              <input name="closeToTray" type="checkbox" />
+              <span>
+                <span data-t="closeToTray"></span>
+                <small data-t="closeToTrayHint"></small>
+              </span>
+            </label>
+          </div>
+        </section>
+
         <details class="panel advanced">
           <summary data-t="advancedTitle"></summary>
           <!-- El puerto de la API es fijo (47300): la app de EVE incluida solo conoce esa Callback URL -->

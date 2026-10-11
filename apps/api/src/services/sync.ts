@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
+import { maintenance } from '../lib/maintenance';
 import { characters, syncLog, walletJournal, walletTransactions } from '../db/schema';
 import { esiGet } from '../lib/esi';
 import { ASSETS_SCOPE, fetchAssets } from './assets';
@@ -71,6 +72,9 @@ const TX_MAX_PAGES = 20;
 // Evita dos syncs simultáneos del mismo personaje; los pedidos con queue (al revincular) se repiten al acabar
 const running = new Set<number>();
 const rerun = new Set<number>();
+
+// Algún sync en marcha: restaurar una copia de seguridad espera a que acabe (src/services/backups.ts)
+export const syncBusy = () => running.size > 0;
 
 type Table = typeof walletJournal | typeof walletTransactions;
 
@@ -208,6 +212,8 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
   if (!ch) throw new Error(`Personaje ${characterId} no vinculado`);
 
   const result: SyncResult = { characterId, name: ch.name, inserted: 0 };
+  // Restaurando una copia de seguridad: la base se está cambiando
+  if (maintenance.active()) return { ...result, error: 'Restaurando una copia de seguridad; vuelve a sincronizar en un momento' };
   if (running.has(characterId)) {
     if (opts.queue) rerun.add(characterId);
     return { ...result, error: 'Ya hay una sincronización en curso para este personaje' };

@@ -2,6 +2,7 @@
   "name": "eve-ledger-api",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "db:generate": "drizzle-kit generate",

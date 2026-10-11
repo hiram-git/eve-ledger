@@ -97,12 +97,13 @@ const tot = summary?.totals ?? { income: 0, expenses: 0, net: 0 };
 const incomeGroups = acts.filter((a) => a.income > 0.5).map((a) => ({ a, lines: a.refTypes.filter((r) => r.income > 0.5) }));
 const expenseGroups = acts.filter((a) => a.expenses > 0.5).map((a) => ({ a, lines: a.refTypes.filter((r) => r.expenses > 0.5) }));
 const walletResult = tot.income - tot.expenses;
-// Vista de un piloto: su neto incluye lo movido con tus otros pilotos (es lo que cambió su wallet)
+// Vista de un piloto: lo movido con tus otros pilotos no es resultado (no se ganó en juego), pero cambia su wallet:
+// va en la conciliación. En el consolidado se anula
 const internal = selected ? (summary?.internalReceived ?? 0) - (summary?.internalSent ?? 0) : 0;
-const walletChange = selected ? tot.net : walletResult;
+const walletChange = walletResult + internal;
 const accountsNet = acts.find((a) => a.activity === 'accounts')?.net ?? 0;
 const unreplaced = losses?.totals.unreplaced ?? 0;
-const gameResult = walletChange - accountsNet - unreplaced - toReplace;
+const gameResult = walletResult - accountsNet - unreplaced - toReplace;
 const prev = summary?.previous;
 
 // ---- Conciliación del wallet ----
@@ -399,33 +400,6 @@ const partialAt = recRows
                     </td>
                     <td class="share" />
                   </tr>
-                  {selected && (
-                    <>
-                      <tr>
-                        <th scope="row">
-                          {m.isInternal}
-                          <span class="row-meta">{m.isInternalMeta(fmt(summary.internalReceived), fmt(summary.internalSent))}</span>
-                        </th>
-                        <td class="op">
-                          <span aria-hidden="true">{internal < 0 ? '−' : '+'}</span>
-                          <span class="sr-only">{internal < 0 ? m.opMinus : m.opPlus}</span>
-                        </td>
-                        <td title={full(Math.abs(internal))}>{fmt(Math.abs(internal))}</td>
-                        <td class="share" />
-                      </tr>
-                      <tr class="result">
-                        <th scope="row">{m.isWalletChange}</th>
-                        <td class="op">
-                          <span aria-hidden="true">=</span>
-                          <span class="sr-only">{m.opEquals}</span>
-                        </td>
-                        <td class:list={[sign(walletChange)]} title={fullNet(walletChange)}>
-                          {fmt(walletChange, { sign: true })}
-                        </td>
-                        <td class="share" />
-                      </tr>
-                    </>
-                  )}
 
                   {(Math.abs(accountsNet) > 0.5 || unreplaced > 0.5 || toReplace > 0) && (
                     <>
@@ -504,13 +478,29 @@ const partialAt = recRows
                     <td title={openingKnown ? full(opening) : undefined}>{openingKnown ? fmt(opening) : '—'}</td>
                   </tr>
                   <tr>
-                    <th scope="row">{m.isWalletChange}</th>
+                    <th scope="row">
+                      {m.isWalletResult}
+                      <span class="row-meta">{m.isWalletResultMeta}</span>
+                    </th>
                     <td class="op">
-                      <span aria-hidden="true">{walletChange < 0 ? '−' : '+'}</span>
-                      <span class="sr-only">{walletChange < 0 ? m.opMinus : m.opPlus}</span>
+                      <span aria-hidden="true">{walletResult < 0 ? '−' : '+'}</span>
+                      <span class="sr-only">{walletResult < 0 ? m.opMinus : m.opPlus}</span>
                     </td>
-                    <td title={full(Math.abs(walletChange))}>{fmt(Math.abs(walletChange))}</td>
+                    <td title={full(Math.abs(walletResult))}>{fmt(Math.abs(walletResult))}</td>
                   </tr>
+                  {selected && Math.abs(internal) >= 0.5 && (
+                    <tr>
+                      <th scope="row">
+                        {m.isInternal}
+                        <span class="row-meta">{m.isInternalMeta(fmt(summary.internalReceived), fmt(summary.internalSent))}</span>
+                      </th>
+                      <td class="op">
+                        <span aria-hidden="true">{internal < 0 ? '−' : '+'}</span>
+                        <span class="sr-only">{internal < 0 ? m.opMinus : m.opPlus}</span>
+                      </td>
+                      <td title={full(Math.abs(internal))}>{fmt(Math.abs(internal))}</td>
+                    </tr>
+                  )}
                   {openingKnown && Math.abs(gap) >= 1 && (
                     <tr>
                       <th scope="row">

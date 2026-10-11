@@ -2,6 +2,7 @@
   "name": "eve-ledger-web",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "astro dev --port 4321",
     "build": "astro build",

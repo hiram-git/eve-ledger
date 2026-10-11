@@ -32,6 +32,23 @@ export const shortDateTime = (iso: string, lang: Lang = DEFAULT_LANG) =>
     new Date(iso),
   );
 
+// Tamaño de un archivo con el formato del idioma («12,4 MB», «860 kB»)
+export function bytes(n: number, lang: Lang = DEFAULT_LANG): string {
+  const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte'];
+  let value = n;
+  let i = 0;
+  while (value >= 1000 && i < units.length - 1) {
+    value /= 1000;
+    i++;
+  }
+  return new Intl.NumberFormat(LOCALE[lang], {
+    style: 'unit',
+    unit: units[i],
+    unitDisplay: 'short',
+    maximumFractionDigits: i > 0 && value < 10 ? 1 : 0,
+  }).format(value);
+}
+
 export const longDate = (iso: string, lang: Lang = DEFAULT_LANG) =>
   new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
     new Date(iso),

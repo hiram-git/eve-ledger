@@ -1,6 +1,7 @@
 {
   "name": "eve-ledger-desktop",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "prepare:server": "bun scripts/prepare-server.ts",
