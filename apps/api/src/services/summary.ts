@@ -110,12 +110,12 @@ async function plexTraded(from: Date, characterId?: number) {
   return { plexBought: row?.bought ?? 0, plexSold: row?.sold ?? 0 };
 }
 
-// characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos siguen
-// sin contar (mover ISK no es ganarlo); la lista de pilotos se devuelve siempre completa.
+// characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos no cuentan en
+// ningún neto (mover ISK no es ganarlo); la lista de pilotos se devuelve siempre completa.
 // Saldo = el balance del último movimiento sincronizado del personaje
 // Saldo anterior: el balance con el que el piloto entró en el período (el de su último movimiento antes de
 // `from`). Si su historial empieza dentro del período, el balance de su primer movimiento menos ese movimiento,
-// y `partial` lo dice. Saldo anterior + neto del wallet = saldo, salvo movimientos que ESI ya no daba
+// y `partial` lo dice. Saldo anterior + variación del wallet = saldo, salvo movimientos que ESI ya no daba
 export async function openingBalance(characterId: number, from: Date) {
   const [before] = await db
     .select({ balance: walletJournal.balance, date: walletJournal.date })
@@ -179,11 +179,11 @@ export async function getSummary(days: number, characterId?: number) {
   // El período anterior solo es comparable si el historial lo cubre entero
   const previousComplete = !!firstEntryAt && firstEntryAt <= previousFrom;
 
-  // Movido entre tus pilotos (desde el período anterior, para la comparación): quién envió y quién recibió cada
+  // Movido entre tus pilotos en el período: quién envió y quién recibió cada
   // transferencia. ESI da el mismo id a los dos lados y basta uno para saberlo (el signo dice quién paga; la otra
   // parte es el otro piloto), así que cuadra también con movimientos de antes de que el journal guardara los dos
-  // lados (migración 0007). En el consolidado se anulan; en el neto de cada piloto cuentan (decisión del usuario:
-  // el neto de un piloto es lo que cambió su wallet, y saldo anterior + neto = saldo)
+  // lados (migración 0007). No cuentan en ningún neto (decisión del usuario: el neto de un piloto es lo ganado en
+  // juego; mover ISK no es ganarlo). Van aparte para la conciliación: saldo anterior + neto + entre tus pilotos = saldo
   const internalRows = await db
     .select({
       journalId: walletJournal.journalId,
@@ -196,7 +196,7 @@ export async function getSummary(days: number, characterId?: number) {
       txId: sql<number | null>`${txId}`,
     })
     .from(walletJournal)
-    .where(and(gte(walletJournal.date, previousFrom), eq(isInternal, 1)));
+    .where(and(gte(walletJournal.date, from), eq(isInternal, 1)));
   // Una transferencia por clave: el id de la transacción en una compraventa de mercado (el escrow del comprador
   // y el market_transaction del vendedor tienen ids de journal distintos), el del journal en lo demás
   const transfers = new Map<string, { from: number; to: number; amount: number; date: Date }>();
@@ -234,14 +234,9 @@ export async function getSummary(days: number, characterId?: number) {
     r.received += t.amount;
     internalByCharacter.set(t.to, r);
   }
-  // Vista de un piloto: su neto, «Hoy», el período anterior y cada día incluyen lo movido con tus otros pilotos
+  // Vista de un piloto: lo movido con tus otros pilotos cada día (para el gráfico; no está en el neto del día)
   const internalDay = new Map<string, number>();
   if (characterId) {
-    totals.net += internal.received - internal.sent;
-    const t = internalBetween(characterId, todayStart);
-    today.net += t.received - t.sent;
-    const p = internalBetween(characterId, previousFrom, from);
-    previous.net += p.received - p.sent;
     for (const x of transfers.values()) {
       if (x.date < from) continue;
       const d = isoDay(x.date);
@@ -349,9 +344,8 @@ export async function getSummary(days: number, characterId?: number) {
     const d = isoDay(new Date(from.getTime() + i * DAY_MS));
     // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos: el gráfico lo señala
     const row = withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0, accounts: dailyMap.get(d)?.accounts ?? 0 });
-    // Vista de un piloto: el neto del día incluye lo movido con tus otros pilotos (las barras siguen siendo juego)
-    const internal = internalDay.get(d) ?? 0;
-    return { ...row, internal, net: row.net + internal };
+    // internal: en la vista de un piloto, lo movido con tus otros pilotos ese día (aparte del neto)
+    return { ...row, internal: internalDay.get(d) ?? 0 };
   });
 
   // Saldo = el balance del último movimiento sincronizado de cada personaje
@@ -379,9 +373,10 @@ export async function getSummary(days: number, characterId?: number) {
         expenses,
         internalReceived,
         internalSent,
-        // El neto de un piloto es lo que cambió su wallet: juego más lo movido con tus otros pilotos
-        // (en la suma de todos se anula, así que el Total sigue siendo el consolidado)
-        net: income - expenses + internalReceived - internalSent,
+        // El neto de un piloto es lo ganado en juego (decisión del usuario): la suma de los pilotos es el consolidado.
+        // Lo que cambió su wallet suma además lo movido con tus otros pilotos (saldo anterior + walletChange = saldo)
+        net: income - expenses,
+        walletChange: income - expenses + internalReceived - internalSent,
       };
     }),
   );

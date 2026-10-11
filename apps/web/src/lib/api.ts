@@ -42,17 +42,18 @@ export type Summary = {
     openingBalance: number | null;
     openingAt: string | null;
     openingPartial: boolean;
-    // Recibido de tus otros pilotos y enviado a ellos en el período. net = income − expenses + recibido − enviado:
-    // lo que cambió su wallet (openingBalance + net = balance); en la suma de todos se anula
+    // Recibido de tus otros pilotos y enviado a ellos en el período. net = income − expenses (lo ganado en juego);
+    // walletChange = net + recibido − enviado, lo que cambió su wallet (openingBalance + walletChange = balance)
     internalReceived: number;
     internalSent: number;
+    walletChange: number;
   })[];
   // Brutos por actividad (totals también es bruto); el neto del trading es su margen
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
   // «PvP con naves»: compras de reposición y couriers de naves perdidas movidos a PvP (ship_replacement, ship_transport)
   shipFlow: { replacement: number; transport: number };
   // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos
-  // internal: en la vista de un piloto, lo movido con tus otros pilotos ese día (ya incluido en net, no en income/expenses)
+  // internal: en la vista de un piloto, lo movido con tus otros pilotos ese día (no está en net ni en income/expenses)
   daily: (Flow & { date: string; accounts: number; internal: number })[];
   today: Flow;
   previous: Flow & { complete: boolean };

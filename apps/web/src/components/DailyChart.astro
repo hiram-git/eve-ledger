@@ -32,8 +32,8 @@ function niceStep(range: number, count = 4) {
   return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
 }
 
-// El eje cubre también el punto del neto: en la vista de un piloto incluye lo movido con tus otros pilotos, que no
-// está en las barras, y un día que recibió 6 B dejaba el punto fuera del gráfico (encima de la tarjeta de Neto)
+// El eje cubre también el punto del neto (hoy siempre está entre las dos barras; antes, en la vista de un piloto,
+// incluía lo movido con tus otros pilotos y un día que recibió 6 B dejaba el punto fuera del gráfico)
 const maxIn = Math.max(0, ...daily.map((d) => Math.max(d.income, d.net)));
 const maxOut = Math.max(0, ...daily.map((d) => Math.max(d.expenses, -d.net)));
 const step = niceStep(maxIn + maxOut, 8);

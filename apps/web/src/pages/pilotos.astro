@@ -248,14 +248,26 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
                   {invByPilot.has(p.id) ? fmt(invByPilot.get(p.id)!) : '—'}
                 </dd>
               </div>
+              {/* Neto = lo ganado en juego (el mismo que en el Resumen); lo movido con tus otros pilotos va debajo, sin color */}
               <div>
                 <dt>{m.net30(DAYS)}</dt>
                 <dd
                   class:list={{ pos: (flows.get(p.id)?.net ?? 0) > 0, neg: (flows.get(p.id)?.net ?? 0) < 0 }}
-                  title={flows.has(p.id) ? full(flows.get(p.id)!.net) : undefined}
+                  title={
+                    flows.has(p.id)
+                      ? m.pilotNetBreakdown(
+                          full(flows.get(p.id)!.net),
+                          full(flows.get(p.id)!.internalReceived - flows.get(p.id)!.internalSent),
+                          full(flows.get(p.id)!.walletChange),
+                        )
+                      : undefined
+                  }
                 >
                   {flows.has(p.id) && p.lastSyncAt ? fmt(flows.get(p.id)!.net, { sign: true }) : '—'}
                 </dd>
+                {flows.has(p.id) && p.lastSyncAt && Math.abs(flows.get(p.id)!.internalReceived - flows.get(p.id)!.internalSent) >= 0.5 && (
+                  <dd class="between">{m.pilotBetween(fmt(flows.get(p.id)!.internalReceived - flows.get(p.id)!.internalSent, { sign: true }))}</dd>
+                )}
               </div>
             </dl>
 
@@ -539,6 +551,13 @@ const portrait = (id: number, size = 128) => `https://images.evetech.net/charact
   }
   .figures dd.neg {
     color: var(--critical);
+  }
+  /* Lo movido con tus otros pilotos: nota bajo el neto, sin verde/rojo (no es ganancia ni pérdida) */
+  .figures dd.between {
+    font: 400 13px var(--font);
+    letter-spacing: 0;
+    color: var(--text-muted);
+    white-space: normal;
   }
   /* Alfa | Omega sobre la acción: en fila ensanchaba la última columna (en alemán, la página desbordaba) */
   .actions {

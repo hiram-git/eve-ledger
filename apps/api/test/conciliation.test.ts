@@ -76,7 +76,8 @@ async function expectReconciles(days = 7) {
   expect(sum.byActivity.reduce((n, a) => n + a.expenses, 0)).toBeCloseTo(sum.totals.expenses, 2);
   for (const c of sum.characters) {
     if (c.openingBalance === null || c.balance === null) continue;
-    expect(c.openingBalance + c.net).toBeCloseTo(c.balance, 2);
+    expect(c.openingBalance + c.walletChange).toBeCloseTo(c.balance, 2);
+    expect(c.walletChange).toBeCloseTo(c.net + c.internalReceived - c.internalSent, 2);
   }
   return sum;
 }
@@ -104,13 +105,20 @@ test('una compraventa de mercado entre tus pilotos suma cero en el consolidado',
   expect(sum.totals).toEqual({ income: 1000, expenses: 0, net: 1000 });
   const a = sum.characters.find((c) => c.id === A)!;
   const b = sum.characters.find((c) => c.id === B)!;
-  // Cada wallet cambió lo que cambió: A −100 + 1.000, B +100
-  expect(a.net).toBeCloseTo(900, 2);
+  // El neto de cada piloto es lo ganado en juego (A la recompensa, B nada); su wallet cambió además lo movido:
+  // A −100 + 1.000, B +100
+  expect(a.net).toBeCloseTo(1000, 2);
+  expect(a.walletChange).toBeCloseTo(900, 2);
   expect(a.internalSent).toBeCloseTo(100, 2);
-  expect(b.net).toBeCloseTo(100, 2);
+  expect(b.net).toBeCloseTo(0, 2);
+  expect(b.walletChange).toBeCloseTo(100, 2);
   expect(b.internalReceived).toBeCloseTo(100, 2);
-  // En la vista de un piloto, su neto también es lo que cambió su wallet
-  expect((await getSummary(7, A)).totals.net).toBeCloseTo(900, 2);
+  // En la vista de un piloto, su neto (y el de cada día) tampoco cuenta lo movido con tus otros pilotos
+  const viewA = await getSummary(7, A);
+  expect(viewA.totals.net).toBeCloseTo(1000, 2);
+  expect(viewA.daily.reduce((n, d) => n + d.net, 0)).toBeCloseTo(1000, 2);
+  expect(viewA.daily.reduce((n, d) => n + d.internal, 0)).toBeCloseTo(-100, 2);
+  expect(viewA.internalSent).toBeCloseTo(100, 2);
 });
 
 test('una compra que repone una nave solo en parte no desaparece de «Por actividad»', async () => {

@@ -182,8 +182,8 @@ const healthShown = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id
 const staleNetPilots = !selected
   ? (summary?.characters ?? []).filter((c) => c.lastSyncAt && c.net !== 0 && pilotStates.get(c.id) && pilotStates.get(c.id)!.kind !== 'ok')
   : [];
-// Sin lo movido con tus otros pilotos: eso no sale del consolidado, solo cambia de wallet
-const staleNet = staleNetPilots.reduce((n, c) => n + c.net - (c.internalReceived - c.internalSent), 0);
+// El neto de cada piloto ya es sin lo movido con tus otros pilotos: eso no sale del consolidado, solo cambia de wallet
+const staleNet = staleNetPilots.reduce((n, c) => n + c.net, 0);
 const staleNetOldest = staleNetPilots.map((c) => c.lastSyncAt!).sort()[0];
 // «hace 3 d» no se parte en dos líneas
 const nbsp = (text: string) => text.replace(/ /g, '\u00a0');
@@ -238,7 +238,8 @@ const showResult = !!summary && ((!!losses && notBack + toReplace >= 0.5) || has
 const headline = summary ? summary.totals.net - (showResult ? accountsNet + notBack + toReplace : 0) : 0;
 // Las actividades de la tarjeta son las de juego: el PLEX va en su propia línea al pie
 const cardActivities = summary?.byActivity.filter((a) => a.activity !== 'accounts') ?? [];
-// Movido con tus otros pilotos: en la vista de un piloto, en los dos sentidos (lo que recibió y lo que envió)
+// Movido con tus otros pilotos: no está en ningún neto. En la vista de un piloto, en los dos sentidos (lo que recibió
+// y lo que envió) y lo que cambió su wallet con ello, que es lo que ve en el juego
 const internalNote = !summary
   ? null
   : selected
@@ -246,6 +247,7 @@ const internalNote = !summary
       ? m.internalPilotBoth(
           summary.internalReceived ? fmt(summary.internalReceived) : null,
           summary.internalSent ? fmt(summary.internalSent) : null,
+          fmt(selected.walletChange, { sign: true }),
         )
       : null
     : summary.internalTransfers > 0
@@ -309,12 +311,13 @@ const pilotTotals = (summary?.characters ?? []).reduce(
   }),
   { balance: 0, inventory: 0, income: 0, expenses: 0, net: 0, between: 0, opening: 0 },
 );
-// Entre tus pilotos (recibido − enviado): en el neto de cada piloto (es lo que cambió su wallet), 0 en el Total
+// Entre tus pilotos (recibido − enviado): no es neto (no se ganó en juego), pero cambia el wallet; 0 en el Total
 const between = (c: { internalReceived: number; internalSent: number }) => c.internalReceived - c.internalSent;
 const betweenText = (v: number) => (Math.abs(v) < 0.5 ? '0' : fmt(v, { sign: true }));
-// Saldo anterior + neto = saldo; si no cuadra (movimientos que ESI ya no daba al primer sync), la nota lo dice
-const gapOf = (c: { openingBalance: number | null; balance: number | null; net: number }) =>
-  c.openingBalance === null || c.balance === null ? 0 : c.balance - c.openingBalance - c.net;
+// Saldo anterior + neto + entre tus pilotos = saldo; si no cuadra (movimientos que ESI ya no daba al primer sync),
+// la nota lo dice
+const gapOf = (c: { openingBalance: number | null; balance: number | null; walletChange: number }) =>
+  c.openingBalance === null || c.balance === null ? 0 : c.balance - c.openingBalance - c.walletChange;
 const reconcileGaps = (summary?.characters ?? []).filter((c) => c.lastSyncAt && Math.abs(gapOf(c)) >= 1);
 // En la vista de un piloto la fila Total sigue siendo el consolidado: la etiqueta lo dice
 const withData = (summary?.characters ?? []).filter((c) => c.lastSyncAt).length;
@@ -331,8 +334,8 @@ const sortCols = [
   { key: 'opening', label: m.openingBalance, cls: 'opening' },
   { key: 'income', label: m.income, cls: '' },
   { key: 'expenses', label: m.expenses, cls: '' },
-  { key: 'between', label: m.betweenPilots, cls: '' },
   { key: 'net', label: m.net, cls: '' },
+  { key: 'between', label: m.betweenPilots, cls: '' },
   { key: 'balance', label: m.balance, cls: 'now-start' },
   ...(withInv ? [{ key: 'inventory', label: m.inventory, cls: '' }] : []),
   { key: 'sync', label: m.lastSync, cls: '' },
@@ -616,7 +619,7 @@ const worthNote =
                         /* De dónde sale: el neto del wallet (lo que miden las actividades, «Hoy» y el gráfico) menos
                            el patrimonio de las naves que no volvió; lo estimado, en gris */
                         <p class="versus result-note">
-                          {m.resultWallet}{' '}
+                          {selected ? m.resultWalletPilot : m.resultWallet}{' '}
                           <span class="num" title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</span>
                           {hasAccounts && (
                             <>
@@ -642,7 +645,7 @@ const worthNote =
                         delta !== undefined ? (
                           <p class="versus compare">
                             {/* La comparación es del neto del wallet (del período anterior no hay resultado) */}
-                            {showResult && <span class="compare-of">{m.resultCompareOf} </span>}
+                            {showResult && <span class="compare-of">{selected ? m.resultCompareOfPilot : m.resultCompareOf} </span>}
                             {delta === 0 ? (
                               m.versusSame(days)
                             ) : (
@@ -999,11 +1002,11 @@ const worthNote =
                         </td>
                         <td title={c.lastSyncAt ? full(c.income) : undefined}>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
                         <td title={c.lastSyncAt ? full(out(c.expenses)) : undefined}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</td>
-                        <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
-                          {c.lastSyncAt ? betweenText(between(c)) : '—'}
-                        </td>
                         <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
                           {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
+                        </td>
+                        <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
+                          {c.lastSyncAt ? betweenText(between(c)) : '—'}
                         </td>
                         <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
                           {c.balance === null ? '—' : fmt(c.balance)}
@@ -1026,10 +1029,10 @@ const worthNote =
                       <td class="opening" title={full(pilotTotals.opening)}>{fmt(pilotTotals.opening)}</td>
                       <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
                       <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
-                      <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
                       <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
                         {fmt(pilotTotals.net, { sign: true })}
                       </td>
+                      <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
                       <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
                       {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
                       <td />
