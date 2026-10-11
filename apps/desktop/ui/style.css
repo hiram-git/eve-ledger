@@ -129,6 +129,34 @@ label {
   align-content: start;
 }
 
+/* Casillas: la casilla a la izquierda y el texto con su pista al lado; toda la fila es el objetivo táctil */
+.checks {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+label.check {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
+  min-height: 40px;
+  cursor: pointer;
+}
+label.check input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--cyan);
+}
+label.check > span {
+  display: grid;
+  gap: 4px;
+}
+label.check > span > span {
+  font-size: 14px;
+  color: var(--text);
+}
+
 label > span:first-child {
   font-size: 13px;
   font-weight: 500;

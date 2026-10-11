@@ -28,6 +28,11 @@ pub struct Config {
     pub omega_plex_per_month: u32,
     pub api_port: u16,
     pub web_port: u16,
+    /// Abrir la app al iniciar sesión, en la bandeja y sin ventana: así sincroniza aunque no se abra (ESI solo da
+    /// ~30 días de wallet). El sistema (registro, LaunchAgent, autostart de XDG) se pone de acuerdo con esto al arrancar
+    pub start_at_login: bool,
+    /// Cerrar la ventana la deja en la bandeja del sistema, sincronizando; «Salir» (bandeja o menú) la cierra del todo
+    pub close_to_tray: bool,
 }
 
 // Puertos poco habituales para no chocar con otros programas (3000 y 4321 los usan muchos servidores de desarrollo)
@@ -52,6 +57,9 @@ impl Default for Config {
             omega_plex_per_month: 500,
             api_port: DEFAULT_API_PORT,
             web_port: DEFAULT_WEB_PORT,
+            // El asistente lo propone marcado; quien ya tenía ledger.env de antes no se apunta solo (from_map)
+            start_at_login: true,
+            close_to_tray: true,
         }
     }
 }
@@ -105,6 +113,7 @@ impl Config {
         let s = |k: &str| m.get(k).cloned().unwrap_or_default();
         let n = |k: &str, def: u32| m.get(k).and_then(|v| v.parse().ok()).unwrap_or(def);
         let p = |k: &str, def: u16| m.get(k).and_then(|v| v.parse().ok()).unwrap_or(def);
+        let b = |k: &str, def: bool| m.get(k).map_or(def, |v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"));
         Config {
             client_id: m.get("EVE_CLIENT_ID").cloned().filter(|v| !v.is_empty()).unwrap_or(d.client_id),
             enc_key: m.get("ENC_KEY").cloned().filter(|v| !v.is_empty()).unwrap_or(d.enc_key),
@@ -115,6 +124,9 @@ impl Config {
             omega_plex_per_month: n("OMEGA_PLEX_PER_MONTH", d.omega_plex_per_month),
             api_port: p("API_PORT", d.api_port),
             web_port: p("WEB_PORT", d.web_port),
+            // Sin la clave (ledger.env de una versión anterior): no se añade al inicio del sistema sin preguntar
+            start_at_login: b("START_AT_LOGIN", false),
+            close_to_tray: b("CLOSE_TO_TRAY", d.close_to_tray),
         }
     }
 
@@ -129,7 +141,9 @@ impl Config {
              # Contacto para el User-Agent de ESI\n\
              ESI_CONTACT={}\n\
              SYNC_INTERVAL_MIN={}\nPILOT_SLOTS={}\nOMEGA_ACCOUNTS={}\nOMEGA_PLEX_PER_MONTH={}\n\
-             API_PORT={}\nWEB_PORT={}\n",
+             API_PORT={}\nWEB_PORT={}\n\
+             # Segundo plano: abrir al iniciar sesión (en la bandeja) y seguir en la bandeja al cerrar la ventana\n\
+             START_AT_LOGIN={}\nCLOSE_TO_TRAY={}\n",
             self.client_id.trim(),
             self.enc_key.trim(),
             self.esi_contact.trim(),
@@ -139,6 +153,8 @@ impl Config {
             self.omega_plex_per_month,
             self.api_port,
             self.web_port,
+            u8::from(self.start_at_login),
+            u8::from(self.close_to_tray),
             callback = callback_url(self.api_port),
         )
     }
@@ -331,6 +347,17 @@ mod tests {
         let text = fs::read_to_string(&path).unwrap();
         assert!(!text.contains("EVE_CLIENT_SECRET") && !text.contains("s3cr3t"));
         assert_eq!(load(&path).unwrap().client_id, "abc");
+    }
+
+    #[test]
+    fn segundo_plano_ida_y_vuelta_y_sin_apuntarse_solo() {
+        let c = Config { start_at_login: false, close_to_tray: false, ..valid() };
+        assert_eq!(Config::from_map(&parse(&c.to_env())), c);
+        assert!(Config::from_map(&parse(&valid().to_env())).start_at_login);
+        // Un ledger.env de antes (sin las claves): al cerrar sigue en la bandeja, pero no arranca con el sistema
+        let old = Config::from_map(&parse("EVE_CLIENT_ID=abc\n"));
+        assert!(!old.start_at_login);
+        assert!(old.close_to_tray);
     }
 
     #[test]

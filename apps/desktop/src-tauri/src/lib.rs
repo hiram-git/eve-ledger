@@ -3,6 +3,9 @@
 //! - Después: arranca la API y la web (services.rs) y la ventana principal navega al dashboard
 //!   (http://127.0.0.1:<puerto web>), que no tiene acceso a ningún comando de Tauri.
 //! - «Configuración…» (menú, Ctrl/Cmd+,) abre la misma página en otra ventana; al guardar, reinicia los servicios.
+//! - Segundo plano: un icono en la bandeja del sistema; cerrar la ventana la deja ahí, sincronizando, y con
+//!   «Iniciar con el sistema» la app arranca al iniciar sesión sin ventana (`--hidden`). ESI solo da ~30 días de
+//!   wallet: si la app no se abre en un mes, esos días se pierden.
 
 mod config;
 mod services;
@@ -14,9 +17,21 @@ use services::Services;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::menu::{CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Listener, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
+
+/// Argumento con el que el sistema abre la app al iniciar sesión: arranca en la bandeja, sin ventana
+const HIDDEN_ARG: &str = "--hidden";
+const TRAY_ID: &str = "main";
+
+/// La casilla «Iniciar con el sistema» de la bandeja, para marcarla cuando cambia desde «Configuración…»
+struct Tray {
+    autostart: CheckMenuItem<Wry>,
+}
 
 /// Estado de los servicios para la interfaz: starting | ready | error (con el motivo) | setup
 #[derive(Clone, Serialize, Default)]
@@ -108,6 +123,7 @@ fn save_config(app: AppHandle, config: Config) -> Result<Vec<&'static str>, Stri
         return Ok(errors);
     }
     config::save(&config_path(&app)?, &config).map_err(|e| e.to_string())?;
+    apply_autostart(&app, config.start_at_login);
     launch(&app, config);
     Ok(vec![])
 }
@@ -158,6 +174,142 @@ fn show_settings(app: &AppHandle) {
         .inner_size(720.0, 860.0)
         .min_inner_size(420.0, 560.0)
         .build();
+}
+
+/// Muestra la ventana principal (desde la bandeja, otro arranque o el Dock). Si estaba oculta en la bandeja, el
+/// dashboard es el de cuando se ocultó, quizá de hace horas: se recarga para que enseñe lo sincronizado desde entonces
+fn show_main(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("main") else { return };
+    let was_hidden = !w.is_visible().unwrap_or(true);
+    let _ = w.show();
+    let _ = w.unminimize();
+    let _ = w.set_focus();
+    if was_hidden && w.url().is_ok_and(|u| u.scheme() == "http") {
+        let _ = w.eval("location.reload()");
+    }
+}
+
+/// Inicio con el sistema según ledger.env: el sistema (registro de Windows, LaunchAgent de macOS, autostart de
+/// XDG en Linux) se pone de acuerdo con la configuración, y la casilla de la bandeja también
+fn apply_autostart(app: &AppHandle, enabled: bool) {
+    let launcher = app.autolaunch();
+    if launcher.is_enabled().unwrap_or(!enabled) != enabled {
+        let result = if enabled { launcher.enable() } else { launcher.disable() };
+        if let Err(e) = result {
+            eprintln!("[autostart] {e}");
+        }
+    }
+    if let Some(tray) = app.try_state::<Tray>() {
+        let _ = tray.autostart.set_checked(enabled);
+    }
+}
+
+/// La casilla de la bandeja cambió: se guarda en ledger.env (sin reiniciar los servicios: no les afecta)
+fn toggle_autostart(app: &AppHandle) {
+    let Some(tray) = app.try_state::<Tray>() else { return };
+    let checked = tray.autostart.is_checked().unwrap_or(false);
+    let (Some(mut cfg), Ok(path)) = (load_config(app), config_path(app)) else {
+        // Aún en el asistente: se decide allí
+        let _ = tray.autostart.set_checked(!checked);
+        return;
+    };
+    cfg.start_at_login = checked;
+    if let Err(e) = config::save(&path, &cfg) {
+        eprintln!("[autostart] no se pudo guardar ledger.env: {e}");
+    }
+    apply_autostart(app, checked);
+}
+
+fn set_tray_tooltip(app: &AppHandle, text: &str) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(text));
+    }
+}
+
+/// POST a la API local y la línea de estado de la respuesta (la API solo contesta cuando terminó: un sync de todos
+/// los pilotos puede tardar minutos). Sin dependencias HTTP: es una sola petición a 127.0.0.1
+fn post_local(port: u16, path: &str) -> std::io::Result<String> {
+    use std::io::{Read, Write};
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
+    stream.set_read_timeout(Some(Duration::from_secs(30 * 60)))?;
+    write!(stream, "POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")?;
+    let mut line = Vec::new();
+    let mut byte = [0u8; 1];
+    while stream.read(&mut byte)? == 1 && byte[0] != b'\n' {
+        line.push(byte[0]);
+    }
+    Ok(String::from_utf8_lossy(&line).trim().to_string())
+}
+
+/// «Sincronizar ahora» de la bandeja: todos los pilotos, como el botón del dashboard
+fn sync_now(app: &AppHandle) {
+    let Some(cfg) = load_config(app) else { return };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        set_tray_tooltip(&app, menu_text("traySyncing"));
+        let ok = post_local(cfg.api_port, "/sync/all").is_ok_and(|status| status.split(' ').nth(1).is_some_and(|c| c.starts_with('2')));
+        set_tray_tooltip(&app, if ok { menu_text("trayTooltip") } else { menu_text("traySyncFailed") });
+        // Con el dashboard a la vista, que enseñe lo nuevo
+        if let Some(w) = app.get_webview_window("main") {
+            if w.is_visible().unwrap_or(false) && w.url().is_ok_and(|u| u.scheme() == "http") {
+                let _ = w.eval("location.reload()");
+            }
+        }
+    });
+}
+
+/// La primera vez que la ventana se cierra a la bandeja, un aviso: si no, parece que la app se cerró
+fn tray_hint_once(app: &AppHandle) {
+    let Ok(dir) = app.path().app_config_dir() else { return };
+    let marker = services::plain(dir.join("tray-hint-shown"));
+    if marker.exists() {
+        return;
+    }
+    let _ = std::fs::create_dir_all(services::plain(dir));
+    let _ = std::fs::write(&marker, "1");
+    app.dialog()
+        .message(menu_text("trayHint"))
+        .title(menu_text("trayHintTitle"))
+        .kind(MessageDialogKind::Info)
+        .show(|_| {});
+}
+
+/// El icono de la bandeja: abrir, sincronizar, iniciar con el sistema y salir. Clic en el icono: abre la ventana
+/// (en Linux, el icono solo abre el menú)
+fn build_tray(app: &AppHandle, start_at_login: bool) -> tauri::Result<()> {
+    let autostart = CheckMenuItemBuilder::with_id("tray-autostart", menu_text("trayAutostart"))
+        .checked(start_at_login)
+        .build(app)?;
+    let menu = MenuBuilder::new(app)
+        .item(&MenuItemBuilder::with_id("tray-open", menu_text("trayOpen")).build(app)?)
+        .item(&MenuItemBuilder::with_id("tray-sync", menu_text("traySync")).build(app)?)
+        .separator()
+        .item(&autostart)
+        .separator()
+        .item(&MenuItemBuilder::with_id("tray-quit", menu_text("quit")).build(app)?)
+        .build()?;
+    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
+        .tooltip(menu_text("trayTooltip"))
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "tray-open" => show_main(app),
+            "tray-sync" => sync_now(app),
+            "tray-autostart" => toggle_autostart(app),
+            "tray-quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_main(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    app.manage(Tray { autostart });
+    Ok(())
 }
 
 /// Qué se abre dentro de la ventana: el asistente, el dashboard y la API (todo en 127.0.0.1).
@@ -227,6 +379,14 @@ fn menu_text(key: &str) -> &'static str {
         ("en", "quit") => "Quit",
         ("en", "loginNotice") => "EVE login opened in your browser. When you finish there, this window shows the linked pilot (you can close that tab).",
         ("en", "close") => "Close",
+        ("en", "trayTooltip") => "EVE Ledger",
+        ("en", "trayOpen") => "Open EVE Ledger",
+        ("en", "traySync") => "Sync now",
+        ("en", "traySyncing") => "EVE Ledger · syncing…",
+        ("en", "traySyncFailed") => "EVE Ledger · the last sync failed (see Pilots)",
+        ("en", "trayAutostart") => "Start with the system",
+        ("en", "trayHintTitle") => "EVE Ledger keeps running",
+        ("en", "trayHint") => "EVE Ledger is still in the system tray and keeps syncing your pilots. To quit completely, use Quit in its tray icon. You can change this in Settings…",
         ("de", "menu") => "EVE Ledger",
         ("de", "settings") => "Einstellungen…",
         ("de", "settingsTitle") => "EVE Ledger · Einstellungen",
@@ -237,6 +397,14 @@ fn menu_text(key: &str) -> &'static str {
         ("de", "quit") => "Beenden",
         ("de", "loginNotice") => "Der EVE-Login wurde in deinem Browser geöffnet. Wenn du dort fertig bist, zeigt dieses Fenster den verknüpften Piloten (den Tab kannst du schließen).",
         ("de", "close") => "Schließen",
+        ("de", "trayTooltip") => "EVE Ledger",
+        ("de", "trayOpen") => "EVE Ledger öffnen",
+        ("de", "traySync") => "Jetzt synchronisieren",
+        ("de", "traySyncing") => "EVE Ledger · synchronisiert…",
+        ("de", "traySyncFailed") => "EVE Ledger · die letzte Synchronisierung schlug fehl (siehe Piloten)",
+        ("de", "trayAutostart") => "Mit dem System starten",
+        ("de", "trayHintTitle") => "EVE Ledger läuft weiter",
+        ("de", "trayHint") => "EVE Ledger bleibt im Infobereich und synchronisiert deine Piloten weiter. Zum vollständigen Beenden: Beenden im Symbol im Infobereich. Ändern kannst du das unter Einstellungen…",
         (_, "menu") => "EVE Ledger",
         (_, "settings") => "Configuración…",
         (_, "settingsTitle") => "EVE Ledger · Configuración",
@@ -247,6 +415,14 @@ fn menu_text(key: &str) -> &'static str {
         (_, "quit") => "Salir",
         (_, "loginNotice") => "Se abrió el login de EVE en tu navegador. Al terminar allí, esta ventana muestra el piloto vinculado (puedes cerrar esa pestaña).",
         (_, "close") => "Cerrar",
+        (_, "trayTooltip") => "EVE Ledger",
+        (_, "trayOpen") => "Abrir EVE Ledger",
+        (_, "traySync") => "Sincronizar ahora",
+        (_, "traySyncing") => "EVE Ledger · sincronizando…",
+        (_, "traySyncFailed") => "EVE Ledger · el último sync falló (mira Pilotos)",
+        (_, "trayAutostart") => "Iniciar con el sistema",
+        (_, "trayHintTitle") => "EVE Ledger sigue abierto",
+        (_, "trayHint") => "EVE Ledger sigue en la bandeja del sistema y continúa sincronizando tus pilotos. Para salir del todo, usa «Salir» en su icono. Puedes cambiarlo en Configuración…",
         _ => "",
     }
 }
@@ -255,12 +431,9 @@ fn menu_text(key: &str) -> &'static str {
 pub fn run() {
     let app = tauri::Builder::default()
         // Una sola instancia: los puertos son fijos y la base de datos, una
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
+        // Al iniciar sesión, en la bandeja y sin ventana (`--hidden`)
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![HIDDEN_ARG])))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -331,13 +504,18 @@ pub fn run() {
                 _ => {}
             });
 
+            // Abierta por el sistema al iniciar sesión: sin ventana (salvo que falte configurarla: el asistente se ve)
+            let saved = load_config(handle).filter(|c| config::validate(c).is_empty());
+            let hidden = saved.is_some() && std::env::args().any(|a| a == HIDDEN_ARG);
             let nav = handle.clone();
             WebviewWindowBuilder::new(handle, "main", WebviewUrl::App("index.html".into()))
                 .on_navigation(move |url| on_navigation(&nav, url))
                 .title("EVE Ledger")
                 .inner_size(1320.0, 900.0)
                 .min_inner_size(380.0, 560.0)
+                .visible(!hidden)
                 .build()?;
+            build_tray(handle, saved.as_ref().is_some_and(|c| c.start_at_login))?;
 
             // La API terminó un login de EVE (en el navegador): la ventana muestra el resultado en Pilotos
             let linked = handle.clone();
@@ -351,9 +529,12 @@ pub fn run() {
                 }
             });
 
-            match load_config(handle) {
-                Some(cfg) if config::validate(&cfg).is_empty() => launch(handle, cfg),
-                _ => set_status(handle, "setup", None),
+            match saved {
+                Some(cfg) => {
+                    apply_autostart(handle, cfg.start_at_login);
+                    launch(handle, cfg);
+                }
+                None => set_status(handle, "setup", None),
             }
             updates::start(handle);
             Ok(())
@@ -361,11 +542,58 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("no se pudo iniciar EVE Ledger");
 
-    app.run(|app, event| {
-        if let RunEvent::Exit = event {
+    app.run(|app, event| match event {
+        // Cerrar la ventana principal la deja en la bandeja, sincronizando (si está configurada y así se quiere;
+        // en el asistente, cerrar sale). «Salir» de la bandeja o del menú cierra la app del todo
+        RunEvent::WindowEvent { label, event: WindowEvent::CloseRequested { api, .. }, .. } if label == "main" => {
+            if load_config(app).is_some_and(|c| c.close_to_tray && config::validate(&c).is_empty()) {
+                api.prevent_close();
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+                tray_hint_once(app);
+            }
+        }
+        // macOS: clic en el Dock con la ventana oculta
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { has_visible_windows: false, .. } => show_main(app),
+        RunEvent::Exit => {
             app.state::<Services>().stop();
-            // Una actualización descargada que se dejó «al cerrar la app»
+            // Una actualización descargada que se dejó «al salir de la app»
             updates::install(app, false);
         }
+        _ => {}
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    #[test]
+    fn sincronizar_ahora_hace_un_post_local_y_no_espera_a_que_cierren_la_conexion() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut conn, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0u8; 256];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = conn.read(&mut buf).unwrap();
+                request.extend_from_slice(&buf[..n]);
+            }
+            conn.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}").unwrap();
+            // La conexión sigue abierta (keep-alive): post_local no debe quedarse esperando el cierre
+            std::thread::sleep(Duration::from_secs(2));
+            String::from_utf8(request).unwrap()
+        });
+        let started = std::time::Instant::now();
+        assert_eq!(post_local(port, "/sync/all").unwrap(), "HTTP/1.1 200 OK");
+        assert!(started.elapsed() < Duration::from_secs(1));
+        let request = server.join().unwrap();
+        assert!(request.starts_with("POST /sync/all HTTP/1.1\r\n"));
+        // La API solo acepta un Host local (src/lib/local-only.ts)
+        assert!(request.contains(&format!("Host: 127.0.0.1:{port}\r\n")));
+    }
 }

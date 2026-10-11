@@ -10,7 +10,8 @@ Empaqueta el ledger personal (`apps/api` + `apps/web`) como una app de escritori
   - la web (Astro SSR, `resources/server/web/server/entry.js`), con `API_URL` y `PILOT_SLOTS` leídos al arrancar.
 - Los dos escuchan solo en `127.0.0.1`, por defecto en los puertos 47300 (API) y 47321 (web). La ventana principal navega a `http://127.0.0.1:47321`; esa página remota no puede invocar ningún comando de Tauri (lo deniega el ACL de las capacidades).
 - **Configuración…** (menú, `Ctrl/Cmd+,`) reabre el asistente en otra ventana; guardar reinicia los servicios.
-- La salida de los procesos va a `api.log` y `web.log` en la carpeta de registros. Una sola instancia (los puertos y la base son únicos).
+- La salida de los procesos va a `api.log` y `web.log` en la carpeta de registros. Una sola instancia (los puertos y la base son únicos): abrirla otra vez muestra la ventana.
+- **Segundo plano** (`lib.rs`): icono en la bandeja (feature `tray-icon`: Abrir · Sincronizar ahora · Iniciar con el sistema · Salir). Con `CLOSE_TO_TRAY=1`, cerrar la ventana principal la oculta (`prevent_close`) y el primer cierre avisa con un diálogo (marca `tray-hint-shown` en la carpeta de configuración); «Salir» cierra todo. `START_AT_LOGIN=1` registra la app al iniciar sesión con `tauri-plugin-autostart` (registro de Windows, LaunchAgent, `~/.config/autostart`) con el argumento `--hidden`: arranca sin ventana. ledger.env manda: al arrancar y al guardar, el sistema se pone de acuerdo. «Sincronizar ahora» hace `POST /sync/all` a la API local. En Linux el .deb depende de AppIndicator (`libayatana-appindicator3-1`: lo añade el bundler de Tauri al ver `tray-icon`).
 
 ## Compilar
 

@@ -18,6 +18,12 @@ const T = {
     omegaPlexHint: 'Lo que cuesta un mes de Omega de cada cuenta.',
     esiContact: 'Contacto para ESI (opcional)',
     esiContactHint: 'Tu nombre en EVE o un email. CCP lo pide para poder avisar si algo falla.',
+    backgroundTitle: 'En segundo plano',
+    backgroundLead: 'ESI solo guarda unos 30 días de wallet: los días que EVE Ledger no está abierto no se pueden recuperar después.',
+    startAtLogin: 'Abrir EVE Ledger al iniciar sesión',
+    startAtLoginHint: 'Arranca en la bandeja del sistema, sin ventana, y sincroniza aunque no lo abras.',
+    closeToTray: 'Al cerrar la ventana, seguir en la bandeja',
+    closeToTrayHint: 'Sigue sincronizando. Para salir del todo, «Salir» en su icono de la bandeja o en el menú.',
     advancedTitle: 'Avanzado',
     webPort: 'Puerto del dashboard',
     encTitle: 'Clave de cifrado:',
@@ -67,6 +73,12 @@ const T = {
     omegaPlexHint: 'What one month of Omega costs per account.',
     esiContact: 'Contact for ESI (optional)',
     esiContactHint: 'Your EVE name or an email. CCP asks for it to reach you if something breaks.',
+    backgroundTitle: 'In the background',
+    backgroundLead: 'ESI only keeps about 30 days of wallet history: days when EVE Ledger isn’t running can’t be recovered later.',
+    startAtLogin: 'Open EVE Ledger when I sign in',
+    startAtLoginHint: 'Starts in the system tray, without a window, and syncs even if you don’t open it.',
+    closeToTray: 'Keep running in the tray when I close the window',
+    closeToTrayHint: 'It keeps syncing. To quit completely, use Quit in its tray icon or in the menu.',
     advancedTitle: 'Advanced',
     webPort: 'Dashboard port',
     encTitle: 'Encryption key:',
@@ -116,6 +128,12 @@ const T = {
     omegaPlexHint: 'Was ein Monat Omega pro Account kostet.',
     esiContact: 'Kontakt für ESI (optional)',
     esiContactHint: 'Dein EVE-Name oder eine E-Mail. CCP möchte dich erreichen können, falls etwas schiefgeht.',
+    backgroundTitle: 'Im Hintergrund',
+    backgroundLead: 'ESI speichert nur etwa 30 Tage Wallet-Historie: Tage, an denen EVE Ledger nicht läuft, lassen sich später nicht nachholen.',
+    startAtLogin: 'EVE Ledger bei der Anmeldung öffnen',
+    startAtLoginHint: 'Startet im Infobereich, ohne Fenster, und synchronisiert, auch wenn du es nicht öffnest.',
+    closeToTray: 'Beim Schließen des Fensters im Infobereich weiterlaufen',
+    closeToTrayHint: 'Synchronisiert weiter. Zum vollständigen Beenden: Beenden im Symbol im Infobereich oder im Menü.',
     advancedTitle: 'Erweitert',
     webPort: 'Dashboard-Port',
     encTitle: 'Verschlüsselungsschlüssel:',
@@ -166,7 +184,7 @@ const tauri = preview
         if (cmd === 'get_state')
           return {
             configured: location.search.includes('configured'),
-            config: { clientId: 'preview', encKey: 'x'.repeat(43) + '=', esiContact: '', syncIntervalMin: 60, pilotSlots: 5, omegaAccounts: 5, omegaPlexPerMonth: 500, apiPort: 47300, webPort: 47321 },
+            config: { clientId: 'preview', encKey: 'x'.repeat(43) + '=', esiContact: '', syncIntervalMin: 60, pilotSlots: 5, omegaAccounts: 5, omegaPlexPerMonth: 500, apiPort: 47300, webPort: 47321, startAtLogin: true, closeToTray: true },
             configPath: '~/.config/net.eveledger.desktop/ledger.env',
             dataDir: '~/.local/share/net.eveledger.desktop',
             logDir: '~/.local/share/net.eveledger.desktop/logs',
@@ -208,7 +226,9 @@ function show(view) {
 function fill(cfg) {
   for (const [k, v] of Object.entries(cfg)) {
     const input = form.elements.namedItem(k);
-    if (input) input.value = v;
+    if (!input) continue;
+    if (input.type === 'checkbox') input.checked = !!v;
+    else input.value = v;
   }
   originalKey = cfg.encKey;
 }
@@ -228,6 +248,8 @@ function readForm() {
     omegaPlexPerMonth: num('omegaPlexPerMonth'),
     apiPort: state.config.apiPort,
     webPort: num('webPort'),
+    startAtLogin: f.startAtLogin.checked,
+    closeToTray: f.closeToTray.checked,
   };
 }
 
