@@ -2,7 +2,7 @@
 // historial con fechas relativas a hoy (ratting, mercado, una donación entre ellos, PLEX para el Omega, una nave
 // perdida y su reposición), inventario en una estación, en una citadela con nombre y en otra sin él. Nada viene de
 // ESI ni de datos reales: las pruebas corren sin red y dan lo mismo cada vez
-import { db, runMigrations } from '../../api/src/db/client';
+import { db, rawDb, runMigrations } from '../../api/src/db/client';
 import * as s from '../../api/src/db/schema';
 
 import { PILOTS } from './fixtures';
@@ -99,6 +99,11 @@ export function seed() {
     };
   });
   for (let i = 0; i < journal.length; i += 200) db.insert(s.walletJournal).values(journal.slice(i, i + 200)).run();
+  // El wallet de ESI va por delante del journal en Aria (25 M que el journal aún no da); en Kade, igual que el journal
+  const setWallet = (id: number, v: number, at: Date) =>
+    rawDb().run('update characters set wallet_balance = ?, wallet_at = ? where id = ?', [v, Math.floor(at.getTime() / 1000), id]);
+  setWallet(aria.id, balance.get(aria.id)! + 25_000_000, minutesAgo(10));
+  setWallet(kade.id, balance.get(kade.id)!, minutesAgo(12));
 
   // Transacciones de mercado enlazadas con su asiento del journal (y con el mismo id que su context_id)
   const txRows = journal

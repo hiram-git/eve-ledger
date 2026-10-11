@@ -78,7 +78,7 @@ const o = indicators?.omega;
 const wallets = walletRows.reduce((n, c) => n + (c.balance ?? 0), 0);
 // La conciliación suma los pilotos con movimientos guardados (como la tabla de pilotos del resumen): uno sin
 // primer sync no tiene saldo ni saldo anterior, y no debe dejar en «—» el de todos
-const recRows = walletRows.filter((c) => c.balance !== null);
+const recRows = walletRows.filter((c) => c.journalBalance !== null);
 const openingKnown = recRows.length > 0 && recRows.every((c) => c.openingBalance !== null);
 const opening = recRows.reduce((n, c) => n + (c.openingBalance ?? 0), 0);
 const invValue = inventory?.value ?? 0;
@@ -107,7 +107,12 @@ const gameResult = walletResult - accountsNet - unreplaced - toReplace;
 const prev = summary?.previous;
 
 // ---- Conciliación del wallet ----
-const gap = openingKnown ? wallets - opening - walletChange : 0;
+// Con el saldo del journal; lo que el wallet real (ESI, en cada sync) lleva de más va en su propia fila: movimientos
+// que el journal aún no da (ESI lo cachea hasta 1 h)
+const journalWallets = recRows.reduce((n, c) => n + (c.journalBalance ?? 0), 0);
+const recWallets = recRows.reduce((n, c) => n + (c.balance ?? 0), 0);
+const pending = recWallets - journalWallets;
+const gap = openingKnown ? journalWallets - opening - walletChange : 0;
 const partialAt = recRows
   .filter((c) => c.openingPartial && c.openingAt)
   .map((c) => c.openingAt!)
@@ -501,6 +506,19 @@ const partialAt = recRows
                       <td title={full(Math.abs(internal))}>{fmt(Math.abs(internal))}</td>
                     </tr>
                   )}
+                  {openingKnown && Math.abs(pending) >= 1 && (
+                    <tr>
+                      <th scope="row">
+                        {m.recPending}
+                        <span class="row-meta">{m.recPendingMeta}</span>
+                      </th>
+                      <td class="op">
+                        <span aria-hidden="true">{pending < 0 ? '−' : '+'}</span>
+                        <span class="sr-only">{pending < 0 ? m.opMinus : m.opPlus}</span>
+                      </td>
+                      <td title={full(Math.abs(pending))}>{fmt(Math.abs(pending))}</td>
+                    </tr>
+                  )}
                   {openingKnown && Math.abs(gap) >= 1 && (
                     <tr>
                       <th scope="row">
@@ -520,7 +538,7 @@ const partialAt = recRows
                       <span aria-hidden="true">=</span>
                       <span class="sr-only">{m.opEquals}</span>
                     </td>
-                    <td title={full(wallets)}>{fmt(wallets)}</td>
+                    <td title={full(recWallets)}>{fmt(recWallets)}</td>
                   </tr>
                 </tbody>
               </table>

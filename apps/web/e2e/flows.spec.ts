@@ -20,8 +20,8 @@ test('la suma de los netos de los pilotos es el total del resumen', async ({ pag
   const byActivity = summary.byActivity.reduce((n: number, a: { net: number }) => n + a.net, 0);
   expect(byActivity).toBeCloseTo(summary.totals.net, 0);
   // Saldo anterior + neto + lo movido entre tus pilotos = saldo, en cada piloto con datos
-  for (const c of summary.characters.filter((c: { balance: number | null }) => c.balance !== null)) {
-    expect(c.openingBalance + c.walletChange).toBeCloseTo(c.balance, 0);
+  for (const c of summary.characters.filter((c: { journalBalance: number | null }) => c.journalBalance !== null)) {
+    expect(c.openingBalance + c.walletChange).toBeCloseTo(c.journalBalance, 0);
   }
 });
 
@@ -123,6 +123,16 @@ test('un archivo que no es una copia se rechaza sin tocar nada', async ({ page }
   await panel.locator('.backup-upload button[type="submit"]').click();
   await expect(page).toHaveURL(/error=not_sqlite/);
   await expect(panel.locator('.action-notice')).toContainText('no es una copia de EVE Ledger');
+});
+
+test('el saldo es el del wallet de ESI y Balances concilia lo que el journal aún no da', async ({ page, request }) => {
+  const summary = await (await request.get(`${API_URL}/summary?days=30`)).json();
+  const aria = summary.characters.find((c: { id: number }) => c.id === PILOTS.aria.id);
+  expect(aria.balance - aria.journalBalance).toBeCloseTo(25_000_000, 0);
+  await page.goto('/balances?days=30');
+  await expect(page.getByText('Movimientos aún no en el journal').filter({ visible: true })).toHaveCount(1);
+  await page.goto('/?days=30');
+  await expect(page.getByText(/va por delante del journal en Aria Vex/).first()).toBeAttached();
 });
 
 test('el selector de idioma cambia la interfaz y vuelve a la misma página', async ({ page }) => {

@@ -36,8 +36,11 @@ export type Summary = {
     id: number;
     name: string;
     lastSyncAt: string | null;
+    // Saldo: el del wallet que da ESI en cada sync (o, si aún no lo hay, el del último movimiento del journal)
     balance: number | null;
     balanceAt: string | null;
+    // El del último movimiento del journal: con él cuadra la conciliación (el wallet puede ir por delante)
+    journalBalance: number | null;
     // Saldo con el que entró en el período (partial: su historial empieza dentro del período, en openingAt)
     openingBalance: number | null;
     openingAt: string | null;

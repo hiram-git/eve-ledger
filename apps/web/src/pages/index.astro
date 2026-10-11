@@ -316,9 +316,15 @@ const between = (c: { internalReceived: number; internalSent: number }) => c.int
 const betweenText = (v: number) => (Math.abs(v) < 0.5 ? '0' : fmt(v, { sign: true }));
 // Saldo anterior + neto + entre tus pilotos = saldo; si no cuadra (movimientos que ESI ya no daba al primer sync),
 // la nota lo dice
-const gapOf = (c: { openingBalance: number | null; balance: number | null; walletChange: number }) =>
-  c.openingBalance === null || c.balance === null ? 0 : c.balance - c.openingBalance - c.walletChange;
+// (con el saldo del journal: el wallet real puede llevar movimientos que el journal aún no da)
+const gapOf = (c: { openingBalance: number | null; journalBalance: number | null; walletChange: number }) =>
+  c.openingBalance === null || c.journalBalance === null ? 0 : c.journalBalance - c.openingBalance - c.walletChange;
 const reconcileGaps = (summary?.characters ?? []).filter((c) => c.lastSyncAt && Math.abs(gapOf(c)) >= 1);
+// El saldo de la tabla es el real de ESI; si va por delante del journal (que llega con hasta 1 h de retraso), la
+// nota dice cuánto, para que la cuenta de la fila se entienda
+const pendingOf = (c: { balance: number | null; journalBalance: number | null }) =>
+  c.balance === null || c.journalBalance === null ? 0 : c.balance - c.journalBalance;
+const reconcilePending = (summary?.characters ?? []).filter((c) => Math.abs(pendingOf(c)) >= 1);
 // En la vista de un piloto la fila Total sigue siendo el consolidado: la etiqueta lo dice
 const withData = (summary?.characters ?? []).filter((c) => c.lastSyncAt).length;
 const totalLabel = selected ? m.pilotsTotalAll : m.pilotsTotal(summary?.characters.length ?? 0, withData);
@@ -1211,6 +1217,7 @@ const worthNote =
                 <p>
                   {m.reconcileNote}
                   {reconcileGaps.length > 0 && m.reconcileGap(reconcileGaps.map((c) => m.reconcileItem(c.name, fmt(gapOf(c), { sign: true }))).join(', '))}
+                  {reconcilePending.length > 0 && m.reconcilePending(reconcilePending.map((c) => m.reconcileItem(c.name, fmt(pendingOf(c), { sign: true }))).join(', '))}
                 </p>
                 <p>
                   {withInv ? (

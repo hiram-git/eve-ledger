@@ -134,6 +134,9 @@ export async function openingBalance(characterId: number, from: Date) {
   return { balance: null, at: null, partial: true };
 }
 
+// Saldo actual: el del wallet que da ESI en cada sync (el real) y, si aún no lo hay, el balance del último
+// movimiento del journal. journalBalance es siempre el del journal: con él cuadra la conciliación (saldo anterior +
+// neto + entre tus pilotos), porque el wallet real puede llevar movimientos que el journal aún no da
 export async function lastBalance(characterId: number) {
   const [last] = await db
     .select({ balance: walletJournal.balance, date: walletJournal.date })
@@ -141,7 +144,13 @@ export async function lastBalance(characterId: number) {
     .where(eq(walletJournal.characterId, characterId))
     .orderBy(desc(walletJournal.date), desc(walletJournal.journalId))
     .limit(1);
-  return last;
+  const [wallet] = await db
+    .select({ balance: characters.walletBalance, at: characters.walletAt })
+    .from(characters)
+    .where(eq(characters.id, characterId));
+  const journalBalance = last?.balance ?? null;
+  if (wallet?.balance != null && wallet.at) return { balance: wallet.balance, date: wallet.at, journalBalance };
+  return last ? { balance: journalBalance, date: last.date, journalBalance } : undefined;
 }
 
 export async function getSummary(days: number, characterId?: number) {
@@ -348,7 +357,7 @@ export async function getSummary(days: number, characterId?: number) {
     return { ...row, internal: internalDay.get(d) ?? 0 };
   });
 
-  // Saldo = el balance del último movimiento sincronizado de cada personaje
+  // Saldo = el del wallet de ESI en el último sync (o el balance del último movimiento, si aún no lo hay)
   const chars = await db.select({ id: characters.id, name: characters.name, lastSyncAt: characters.lastSyncAt }).from(characters);
   const charMap = new Map(byCharacter.map((r) => [r.characterId, r]));
   const perCharacter = await Promise.all(
@@ -366,6 +375,7 @@ export async function getSummary(days: number, characterId?: number) {
         lastSyncAt: c.lastSyncAt,
         balance: last?.balance ?? null,
         balanceAt: last?.date ?? null,
+        journalBalance: last?.journalBalance ?? null,
         openingBalance: opening.balance,
         openingAt: opening.at,
         openingPartial: opening.partial,

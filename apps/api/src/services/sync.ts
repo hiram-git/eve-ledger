@@ -207,6 +207,14 @@ async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | u
   }
 }
 
+// Saldo real del wallet (GET /characters/{id}/wallet, mismo scope que el journal). Sin él, el saldo es el balance
+// del último movimiento del journal, que llega con hasta 1 h de retraso y falta si el piloto no movió ISK en 30 días
+async function syncWallet(characterId: number) {
+  const { data } = await esiGet<number>(`/characters/${characterId}/wallet`, characterId);
+  if (typeof data !== 'number' || !Number.isFinite(data)) return;
+  await db.update(characters).set({ walletBalance: data, walletAt: new Date() }).where(eq(characters.id, characterId));
+}
+
 // Journal + transacciones + inventario de un personaje; después precios y nombres que falten
 export async function syncCharacter(characterId: number, opts: { queue?: boolean } = {}): Promise<SyncResult> {
   const ch = await db.query.characters.findFirst({ where: eq(characters.id, characterId) });
@@ -226,6 +234,7 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
     // Si el token falló en el journal, fallará igual aquí: no gastar errores de ESI
     const tokenOk = !result.journal.error;
     if (tokenOk) {
+      await bestEffort('wallet', () => syncWallet(characterId));
       result.transactions = await syncTransactions(characterId);
       // Personajes vinculados antes de pedir estos scopes: hay que revincularlos
       const scopes = ch.scopes.split(' ');

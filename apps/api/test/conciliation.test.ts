@@ -75,8 +75,9 @@ async function expectReconciles(days = 7) {
   expect(sum.byActivity.reduce((n, a) => n + a.income, 0)).toBeCloseTo(sum.totals.income, 2);
   expect(sum.byActivity.reduce((n, a) => n + a.expenses, 0)).toBeCloseTo(sum.totals.expenses, 2);
   for (const c of sum.characters) {
-    if (c.openingBalance === null || c.balance === null) continue;
-    expect(c.openingBalance + c.walletChange).toBeCloseTo(c.balance, 2);
+    // Con el saldo del journal: el del wallet de ESI puede ir por delante (movimientos que el journal aún no da)
+    if (c.openingBalance === null || c.journalBalance === null) continue;
+    expect(c.openingBalance + c.walletChange).toBeCloseTo(c.journalBalance, 2);
     expect(c.walletChange).toBeCloseTo(c.net + c.internalReceived - c.internalSent, 2);
   }
   return sum;
@@ -181,4 +182,22 @@ test('el estado de una pérdida no depende del período que se mire', async () =
   expect(week.replacement).toBe(0);
   // Y en el período de 7 días solo está la segunda
   expect((await shipLosses(7)).totals.count).toBe(1);
+});
+
+test('el saldo es el del wallet de ESI y la conciliación sigue cuadrando con el del journal', async () => {
+  // El journal dice 1.000 (llega con retraso); el wallet de ESI ya va por 1.250
+  await journal([
+    { id: 701, char: A, date: daysAgo(10), ref: 'bounty_prizes', amount: 500, balance: 500, first: NPC },
+    { id: 702, char: A, date: yesterday(10), ref: 'bounty_prizes', amount: 500, balance: 1000, first: NPC },
+  ]);
+  await db.update(s.characters).set({ walletBalance: 1250, walletAt: new Date() }).where(inArray(s.characters.id, [A]));
+  const sum = await getSummary(7);
+  const a = sum.characters.find((c) => c.id === A)!;
+  expect(a.balance).toBe(1250);
+  expect(a.journalBalance).toBe(1000);
+  expect(sum.balance).toBe(1250);
+  expect(a.openingBalance! + a.walletChange).toBeCloseTo(a.journalBalance!, 2);
+  // Sin wallet de ESI (antes del primer sync con esta versión), el saldo sigue siendo el del journal
+  await db.update(s.characters).set({ walletBalance: null, walletAt: null }).where(inArray(s.characters.id, [A]));
+  expect((await getSummary(7)).characters.find((c) => c.id === A)!.balance).toBe(1000);
 });

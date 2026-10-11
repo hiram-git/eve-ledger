@@ -22,6 +22,10 @@ export const characters = sqliteTable('characters', {
   totalSp: integer('total_sp'),
   unallocatedSp: integer('unallocated_sp'),
   skillsAt: ts('skills_at'),
+  // GET /characters/{id}/wallet en cada sync: el saldo real (ESI lo cachea 2 min; el journal, hasta 1 h, y no
+  // tiene movimientos de un piloto que lleva más de 30 días sin mover ISK)
+  walletBalance: real('wallet_balance'),
+  walletAt: ts('wallet_at'),
 });
 
 export const walletJournal = sqliteTable(
