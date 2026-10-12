@@ -135,6 +135,13 @@ test('el saldo es el del wallet de ESI y Balances concilia lo que el journal aú
   await expect(page.getByText(/va por delante del journal en Aria Vex/).first()).toBeAttached();
 });
 
+test('el pie enlaza el aviso legal con el texto original de CCP', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('footer').getByRole('link', { name: 'Aviso legal' }).click();
+  await expect(page).toHaveURL(/\/aviso-legal/);
+  await expect(page.locator('blockquote[lang="en"]')).toContainText('CCP is in no way responsible');
+});
+
 test('el selector de idioma cambia la interfaz y vuelve a la misma página', async ({ page }) => {
   await page.goto('/balances');
   await page.getByRole('link', { name: 'EN', exact: true }).click();

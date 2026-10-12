@@ -834,6 +834,21 @@ footer .footer-brand {
 footer .footer-version {
   color: #6f8a9c;
 }
+/* Enlace al aviso legal: en el color del pie, subrayado (no es una acción) y con zona táctil de 40 px en móvil */
+footer .footer-link {
+  color: #a3baca;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+footer .footer-link:hover {
+  color: var(--text);
+}
+@media (max-width: 600px) {
+  footer .footer-link {
+    display: inline-block;
+    padding: 11px 0;
+  }
+}
 
 /* ───── Responsive ───── */
 @media (max-width: 1040px) {

@@ -162,6 +162,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Opcional: Client ID de una app de EVE para toda la corp (variable del repositorio; ver apps/desktop/README.md)
           EVE_LEDGER_CLIENT_ID: ${{ vars.EVE_LEDGER_CLIENT_ID }}
+          # El repositorio que compila: va al User-Agent de ESI y al aviso legal de la app
+          EVE_LEDGER_REPO: ${{ github.repository }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:

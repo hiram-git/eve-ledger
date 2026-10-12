@@ -1,0 +1,94 @@
+---
+// Aviso legal: qué es EVE Ledger frente a CCP (herramienta de terceros bajo su acuerdo de licencia para
+// desarrolladores), el aviso de propiedad de CCP con su texto original y la licencia. Enlazado desde el pie
+import { APP_REPO } from 'astro:env/server';
+import Base from '../layouts/Base.astro';
+import { getPilots, getSyncStatus, type Pilot, type SyncStatus } from '../lib/api';
+import { hasIssue, pilotState } from '../lib/pilot-state';
+import { getLang, t } from '../lib/i18n';
+
+const lang = getLang(Astro);
+const m = t(lang);
+
+let status: SyncStatus | undefined;
+let pilots: Pilot[] = [];
+try {
+  [status, pilots] = await Promise.all([getSyncStatus(), getPilots()]);
+} catch {
+  // Sin API, el aviso se lee igual
+}
+const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
+
+// El aviso de propiedad de CCP, en su texto original (no se traduce)
+const CCP_NOTICE =
+  'EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights are reserved worldwide. All other trademarks are the property of their respective owners. EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. CCP hf. has granted permission to EVE Ledger to use EVE Online and all associated logos and designs for promotional and information purposes on its website but does not endorse, and is not in any way affiliated with, EVE Ledger. CCP is in no way responsible for the content on or functioning of this application, nor can it be liable for any damage arising from the use of this application.';
+---
+
+<Base title={m.legalTitle} section="legal" status={status} pilots={pilots.length} pilotIssues={pilotIssues}>
+  <div class="page-head">
+    <h1>{m.legalTitle}</h1>
+    <p class="subtitle">{m.legalIntro}</p>
+  </div>
+  <div class="legal">
+    <section class="panel">
+      <h2>{m.legalDataTitle}</h2>
+      <p>{m.legalData}</p>
+    </section>
+    <section class="panel">
+      <h2>{m.legalCcpTitle}</h2>
+      <p class="note">{m.legalCcpNote}</p>
+      <blockquote lang="en">{CCP_NOTICE}</blockquote>
+    </section>
+    <section class="panel">
+      <h2>{m.legalLicenseTitle}</h2>
+      <p>{m.legalLicense}</p>
+      {APP_REPO && (
+        <p>
+          <a class="inline-action" href={APP_REPO} rel="noopener">
+            {m.legalSource}
+          </a>
+        </p>
+      )}
+    </section>
+  </div>
+</Base>
+
+<style>
+  .legal {
+    display: grid;
+    gap: 16px;
+    max-width: 760px;
+  }
+  .legal .panel {
+    padding: 20px 24px;
+  }
+  .legal h2 {
+    margin: 0 0 12px;
+    font-size: 16px;
+  }
+  .legal p {
+    margin: 0 0 10px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  .legal p:last-child {
+    margin-bottom: 0;
+  }
+  .legal .note {
+    font-size: 13px;
+  }
+  .legal blockquote {
+    margin: 0;
+    padding-left: 14px;
+    border-left: 2px solid #1f2d38;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+  @media (max-width: 600px) {
+    .legal .panel {
+      padding: 16px;
+    }
+  }
+</style>

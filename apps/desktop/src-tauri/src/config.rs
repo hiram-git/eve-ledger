@@ -45,6 +45,31 @@ pub fn bundled_client_id() -> Option<&'static str> {
     option_env!("EVE_LEDGER_CLIENT_ID").map(str::trim).filter(|s| !s.is_empty())
 }
 
+/// Repositorio de GitHub del que sale el instalador («dueño/nombre»; lo pone el workflow con GITHUB_REPOSITORY).
+/// Va al User-Agent de ESI (CCP pide poder contactar con el desarrollador) y al aviso legal; una compilación local
+/// no lo lleva
+pub fn bundled_repo_url() -> Option<String> {
+    repo_url(option_env!("EVE_LEDGER_REPO"))
+}
+
+fn repo_url(repo: Option<&str>) -> Option<String> {
+    let r = repo?.trim();
+    let ok = r.split('/').count() == 2 && r.chars().all(|c| c.is_ascii_alphanumeric() || "-_./".contains(c));
+    ok.then(|| format!("https://github.com/{r}"))
+}
+
+/// User-Agent de ESI: la app y su versión, la URL del proyecto y, si el usuario lo dio, su contacto (sin caracteres
+/// de control: va en una cabecera HTTP)
+fn user_agent(version: &str, repo: Option<&str>, contact: &str) -> String {
+    let contact: String = contact.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string();
+    let parts: Vec<String> = repo.map(|r| format!("+{r}")).into_iter().chain((!contact.is_empty()).then_some(contact)).collect();
+    if parts.is_empty() {
+        format!("eve-ledger-desktop/{version}")
+    } else {
+        format!("eve-ledger-desktop/{version} ({})", parts.join("; "))
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -161,11 +186,7 @@ impl Config {
 
     /// Variables de entorno de la API (apps/api/src/lib/env.ts)
     pub fn api_env(&self, version: &str) -> Vec<(String, String)> {
-        let ua = if self.esi_contact.trim().is_empty() {
-            format!("eve-ledger-desktop/{version}")
-        } else {
-            format!("eve-ledger-desktop/{version} ({})", self.esi_contact.trim())
-        };
+        let ua = user_agent(version, bundled_repo_url().as_deref(), &self.esi_contact);
         vec![
             ("EVE_CLIENT_ID".into(), self.client_id.trim().into()),
             ("EVE_CALLBACK_URL".into(), callback_url(self.api_port)),
@@ -187,6 +208,7 @@ impl Config {
         vec![
             // Pie del dashboard: «v0.1.8»
             ("APP_VERSION".into(), version.into()),
+            ("APP_REPO".into(), bundled_repo_url().unwrap_or_default()),
             ("PORT".into(), self.web_port.to_string()),
             ("HOST".into(), "127.0.0.1".into()),
             ("API_URL".into(), format!("http://127.0.0.1:{}", self.api_port)),
@@ -296,10 +318,26 @@ mod tests {
         assert_eq!(env["EVE_CALLBACK_URL"], format!("http://127.0.0.1:{DEFAULT_API_PORT}/auth/callback"));
         assert_eq!(env["HOST"], "127.0.0.1");
         assert_eq!(env["AUTH_DONE_PAGE"], "1");
-        assert_eq!(env["ESI_USER_AGENT"], "eve-ledger-desktop/0.1.0");
+        assert!(env["ESI_USER_AGENT"].starts_with("eve-ledger-desktop/0.1.0"));
         assert_eq!(env["WEB_URL"], format!("http://127.0.0.1:{DEFAULT_WEB_PORT}"));
         let web: BTreeMap<_, _> = valid().web_env("0.1.0").into_iter().collect();
         assert_eq!(web["APP_VERSION"], "0.1.0");
+    }
+
+    #[test]
+    fn el_user_agent_lleva_el_repositorio_y_el_contacto() {
+        let repo = repo_url(Some("dueno/eve-ledger"));
+        assert_eq!(repo.as_deref(), Some("https://github.com/dueno/eve-ledger"));
+        assert_eq!(repo_url(Some("dueno/eve ledger\r\nX: y")), None);
+        assert_eq!(repo_url(Some("solo-un-nombre")), None);
+        assert_eq!(repo_url(None), None);
+        assert_eq!(
+            user_agent("0.1.16", repo.as_deref(), " Piloto Uno\r\n"),
+            "eve-ledger-desktop/0.1.16 (+https://github.com/dueno/eve-ledger; Piloto Uno)"
+        );
+        assert_eq!(user_agent("0.1.16", repo.as_deref(), ""), "eve-ledger-desktop/0.1.16 (+https://github.com/dueno/eve-ledger)");
+        assert_eq!(user_agent("0.1.16", None, "yo@example.com"), "eve-ledger-desktop/0.1.16 (yo@example.com)");
+        assert_eq!(user_agent("0.1.16", None, "  "), "eve-ledger-desktop/0.1.16");
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {

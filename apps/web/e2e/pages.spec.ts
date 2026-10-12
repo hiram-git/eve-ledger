@@ -12,6 +12,7 @@ const PAGES = [
   { name: 'Balances de un piloto', path: `/balances?pilot=${PILOTS.aria.id}` },
   { name: 'Doctrinas', path: '/doctrinas' },
   { name: 'Pilotos', path: '/pilotos' },
+  { name: 'Aviso legal', path: '/aviso-legal' },
 ];
 const LANGS = ['es', 'en', 'de'] as const;
 const WIDTHS = [390, 1320];

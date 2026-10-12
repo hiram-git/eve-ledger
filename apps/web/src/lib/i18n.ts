@@ -45,6 +45,18 @@ const es = {
   cronLast: (ago: string, rows: number) => `Último sync automático ${ago}: ${rows} movimientos nuevos`,
   cronLastErrors: (n: number) => `, ${n} ${plural(n, 'piloto con error', 'pilotos con error')}`,
   footer: 'Datos vía ESI. EVE Online y todo lo relacionado son marcas de CCP hf.',
+  legalLink: 'Aviso legal',
+  legalTitle: 'Aviso legal',
+  legalIntro:
+    'EVE Ledger es una herramienta de terceros, gratuita y de código abierto (licencia MIT). No está afiliada a CCP hf. ni cuenta con su respaldo.',
+  legalData:
+    'Usa ESI y el login de EVE (SSO) bajo el acuerdo de licencia para desarrolladores de CCP, con permisos de solo lectura. Tus datos y tus tokens se quedan en este equipo: EVE Ledger no tiene servidor ni recoge nada.',
+  legalDataTitle: 'Datos y ESI',
+  legalCcpTitle: 'Aviso de CCP',
+  legalCcpNote: 'Texto original de CCP, en inglés.',
+  legalLicenseTitle: 'Licencia',
+  legalLicense: 'MIT © 2026 Sirrohan Yassavi. Se distribuye tal cual, sin garantías.',
+  legalSource: 'Código fuente y releases',
   // Indicadores
   indicators: 'Indicadores',
   balances: 'Balances',
@@ -834,6 +846,18 @@ const en: Messages = {
   cronLast: (ago, rows) => `Last auto-sync ${ago}: ${rows} new entries`,
   cronLastErrors: (n) => `, ${n} ${plural(n, 'pilot with errors', 'pilots with errors')}`,
   footer: 'Data via ESI. EVE Online and all related marks are trademarks of CCP hf.',
+  legalLink: 'Legal notice',
+  legalTitle: 'Legal notice',
+  legalIntro:
+    'EVE Ledger is a free, open-source third-party tool (MIT license). It is not affiliated with or endorsed by CCP hf.',
+  legalData:
+    "It uses ESI and EVE login (SSO) under CCP's Developer License Agreement, with read-only scopes. Your data and tokens stay on this computer: EVE Ledger has no server and collects nothing.",
+  legalDataTitle: 'Data and ESI',
+  legalCcpTitle: 'CCP notice',
+  legalCcpNote: "CCP's original text.",
+  legalLicenseTitle: 'License',
+  legalLicense: 'MIT © 2026 Sirrohan Yassavi. Provided as is, without warranty.',
+  legalSource: 'Source code and releases',
   // Indicators
   indicators: 'Indicators',
   balances: 'Balances',
@@ -1598,6 +1622,18 @@ const de: Messages = {
   cronLast: (ago, rows) => `Letzter Auto-Sync ${ago}: ${rows} neue Buchungen`,
   cronLastErrors: (n) => `, ${n} ${plural(n, 'Pilot mit Fehler', 'Piloten mit Fehlern')}`,
   footer: 'Daten über ESI. EVE Online und alle zugehörigen Marken sind Marken von CCP hf.',
+  legalLink: 'Rechtliche Hinweise',
+  legalTitle: 'Rechtliche Hinweise',
+  legalIntro:
+    'EVE Ledger ist ein kostenloses Open-Source-Werkzeug eines Drittanbieters (MIT-Lizenz). Es ist weder mit CCP hf. verbunden noch von CCP unterstützt.',
+  legalData:
+    'Es nutzt ESI und den EVE-Login (SSO) gemäß der Entwickler-Lizenzvereinbarung von CCP, nur mit Leserechten. Deine Daten und Tokens bleiben auf diesem Computer: EVE Ledger hat keinen Server und sammelt nichts.',
+  legalDataTitle: 'Daten und ESI',
+  legalCcpTitle: 'Hinweis von CCP',
+  legalCcpNote: 'Originaltext von CCP, auf Englisch.',
+  legalLicenseTitle: 'Lizenz',
+  legalLicense: 'MIT © 2026 Sirrohan Yassavi. Bereitgestellt wie besehen, ohne Gewährleistung.',
+  legalSource: 'Quellcode und Releases',
   // Kennzahlen
   indicators: 'Kennzahlen',
   balances: 'Bilanzen',

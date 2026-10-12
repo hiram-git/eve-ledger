@@ -15,6 +15,9 @@ export default defineConfig({
       PILOT_SLOTS: envField.number({ context: 'server', access: 'secret', default: 5 }),
       // Versión de la app (la pone la app de escritorio); vacía, el pie no la muestra
       APP_VERSION: envField.string({ context: 'server', access: 'secret', default: '' }),
+      // Repositorio del que salió el instalador (https://github.com/…; lo pone la app de escritorio): el aviso legal
+      // enlaza el código fuente; vacío, no lo enlaza
+      APP_REPO: envField.string({ context: 'server', access: 'secret', default: '' }),
     },
   },
 });

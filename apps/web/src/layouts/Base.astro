@@ -15,7 +15,7 @@ import { LANG_NAMES, LANGS, getLang, t } from '../lib/i18n';
 
 interface Props {
   title?: string;
-  section: 'resumen' | 'indicadores' | 'balances' | 'doctrinas' | 'pilotos';
+  section: 'resumen' | 'indicadores' | 'balances' | 'doctrinas' | 'pilotos' | 'legal';
   status?: SyncStatus;
   pilots?: number;
   // Pilotos con el sync roto, viejo o sin primer sync: un punto ámbar junto a «Pilotos»
@@ -144,7 +144,9 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
 
     <footer class="shell">
       <span class="footer-brand">EVE LEDGER · localhost{APP_VERSION && <span class="footer-version"> · v{APP_VERSION}</span>}</span>
-      <span>{m.footer}</span>
+      <span>
+        {m.footer} <a class="footer-link" href="/aviso-legal" aria-current={section === 'legal' ? 'page' : undefined}>{m.legalLink}</a>
+      </span>
     </footer>
   </body>
 </html>
