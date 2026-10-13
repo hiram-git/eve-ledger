@@ -129,6 +129,5 @@ EVE Ledger es una app de escritorio gratuita que consolida los wallets, el inven
 
 - **Descarga:** [Releases](../../releases/latest) (Windows, macOS con Apple Silicon y Linux).
 - **Guía de instalación:** [apps/desktop/INSTALAR.md](apps/desktop/INSTALAR.md).
-- **Novedades de cada versión:** [CHANGELOG.md](CHANGELOG.md) (en inglés).
 - **Compilar y publicar versiones:** [apps/desktop/README.md](apps/desktop/README.md).
 - **Licencia:** [MIT](LICENSE) © 2026 Sirrohan Yassavi. EVE Online y sus marcas son de CCP hf.; este programa no está afiliado a CCP.
