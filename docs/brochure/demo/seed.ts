@@ -1,8 +1,8 @@
-// Datos de demostración para las capturas del README y del brochure (bun): seis pilotos INVENTADOS con 65 días de
-// historial (fechas relativas a hoy), sin nada de una cuenta real. Ratting en Deklein con ESS, escalaciones y loot
-// vendido, misiones, trading en Jita, couriers, PLEX para el Omega, donaciones entre los pilotos, naves perdidas
-// (una repuesta con su courier, otra sin reponer y otra con la ventana abierta), inventario en estaciones y
-// citadelas, y skills para las doctrinas. Uso: DB_PATH=<base nueva> bun seed.ts (lo llama run.sh)
+// Demo data for the README and brochure screenshots (bun): six MADE-UP pilots with 65 days of
+// history (dates relative to today), nothing from a real account. Ratting in Deklein with ESS, escalations and loot
+// sold, missions, trading in Jita, couriers, PLEX for Omega, donations between the pilots, lost ships
+// (one replaced with its courier, one not replaced and one with the window still open), inventory in stations and
+// citadels, and skills for the doctrines. Usage: DB_PATH=<new database> bun seed.ts (called by run.sh)
 import { db, rawDb, runMigrations } from '../../../apps/api/src/db/client';
 import * as s from '../../../apps/api/src/db/schema';
 import { TYPES } from './types';
@@ -15,7 +15,7 @@ const at = (daysAgo: number, hour: number, minute = 0) => {
   return d;
 };
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000);
-// Pseudoaleatorio con semilla: las capturas salen iguales cada vez
+// Seeded pseudo-random: the screenshots come out the same every time
 let seedState = 20261011;
 const rand = () => ((seedState = (seedState * 1103515245 + 12345) % 2147483648) / 2147483648);
 const between = (a: number, b: number) => a + (b - a) * rand();
@@ -35,8 +35,8 @@ const SYS = {
 };
 const ST = {
   jita: 60003760, dodixie: 60011866, rens: 60004588, amarr: 60008494,
-  ttt: 1022734985679, // Perimeter - Tranquility Trading Tower (pública)
-  staging: 1_045_000_000_001, // citadela inventada en VFK-IV
+  ttt: 1022734985679, // Perimeter - Tranquility Trading Tower (public)
+  staging: 1_045_000_000_001, // made-up citadel in VFK-IV
 };
 const NPC_CORP = 1000125; // CONCORD
 const STRANGERS = [95_100_001, 95_100_002, 95_100_003, 95_100_004];
@@ -86,7 +86,7 @@ db.insert(s.characters)
   .run();
 
 // ---------------------------------------------------------------------------------------------------------------
-// Movimientos del wallet
+// Wallet movements
 type Entry = { char: number; date: Date; ref: string; amount: number; first?: number; second?: number; ctx?: [number, string]; tx?: Tx };
 type Tx = { typeId: number; quantity: number; location: number; client: number };
 const entries: Entry[] = [];
@@ -99,7 +99,7 @@ const sell = (char: number, date: Date, typeId: number, quantity: number, unit: 
 
 for (let d = 65; d >= 0; d--) {
   const today = d === 0;
-  // Aria: ratting casi a diario en Deklein (un pago cada 20 min), ESS cada semana, escalaciones y loot de vez en cuando
+  // Aria: ratting almost daily in Deklein (one payout every 20 min), ESS weekly, escalations and loot now and then
   if (rand() > 0.12 || today) {
     const system = RAT[d % RAT.length];
     const ticks = today ? 4 : Math.round(between(5, 11));
@@ -112,23 +112,23 @@ for (let d = 65; d >= 0; d--) {
   if (d % 7 === 3) add({ char: P.aria.id, date: at(d, 22), ref: 'ess_escrow_transfer', amount: round(between(380e6, 620e6)), first: NPC_CORP, second: P.aria.id });
   if (d % 9 === 4) add({ char: P.aria.id, date: at(d, 23), ref: 'player_donation', amount: rand() > 0.5 ? 300e6 : 150e6, first: STRANGERS[2], second: P.aria.id });
   if (d % 6 === 2) add({ char: P.aria.id, date: at(d, 21), ref: 'contract_price_payment_corp', amount: round(between(70e6, 190e6)), first: BUYBACK_CORP, second: P.aria.id });
-  // Nyx: ratting algunos días en 0V0R-R
+  // Nyx: ratting some days in 0V0R-R
   if (d % 3 !== 0 && d > 0) {
     const ticks = Math.round(between(3, 6));
     for (let i = 0; i < ticks; i++) add({ char: P.nyx.id, date: at(d, 19 + Math.floor(i / 3), (i % 3) * 20), ref: 'bounty_prizes', amount: round(between(9e6, 15e6)), first: NPC_CORP, second: P.nyx.id, ctx: [SYS.v0r, 'system_id'] });
   }
-  // Kade (Alfa): misiones en Dodixie
+  // Kade (Alpha): missions in Dodixie
   if (d % 2 === 0 && d > 0) {
     for (let i = 0; i < 3; i++) {
       add({ char: P.kade.id, date: at(d, 17 + i), ref: 'agent_mission_reward', amount: round(between(1.4e6, 2.6e6)), first: NPC_CORP, second: P.kade.id });
       add({ char: P.kade.id, date: at(d, 17 + i, 1), ref: 'agent_mission_time_bonus_reward', amount: round(between(0.6e6, 1.2e6)), first: NPC_CORP, second: P.kade.id });
     }
   }
-  // Tomas (Alfa): recompensas pequeñas en Rens
+  // Tomas (Alpha): small bounties in Rens
   if (d % 4 === 1) {
     for (let i = 0; i < 3; i++) add({ char: P.tomas.id, date: at(d, 20, i * 20), ref: 'bounty_prizes', amount: round(between(0.9e6, 1.8e6)), first: NPC_CORP, second: P.tomas.id, ctx: [SYS.rens, 'system_id'] });
   }
-  // Lio: trading de minerales en Jita (compra cada tres días, vende cada dos, con impuestos y comisiones)
+  // Lio: mineral trading in Jita (buys every three days, sells every two, with taxes and fees)
   if (d % 3 === 1) {
     const q = round(between(18e6, 30e6), 1e5);
     buy(P.lio.id, at(d, 12), T.tritanium, q, 3.85);
@@ -144,25 +144,25 @@ for (let d = 65; d >= 0; d--) {
       add({ char: P.lio.id, date: at(d, 15, 1), ref: 'transaction_tax', amount: -round(p * 13.8 * 0.036), first: P.lio.id, second: NPC_CORP });
     }
   }
-  // Rhea: couriers para la corp de transporte (logística)
+  // Rhea: couriers for the hauling corp (logistics)
   if (d % 3 === 2) add({ char: P.rhea.id, date: at(d, 13), ref: 'contract_reward', amount: round(between(14e6, 38e6)), first: STRANGERS[3], second: P.rhea.id, ctx: [80_000_000 + d, 'contract_id'] });
 }
-// Otros gastos: skills y clones
+// Other expenses: skills and clones
 add({ char: P.kade.id, date: at(40, 16), ref: 'skill_purchase', amount: -32_000_000, first: P.kade.id, second: NPC_CORP });
 add({ char: P.aria.id, date: at(33, 9), ref: 'jump_clone_activation_fee', amount: -9_500_000, first: P.aria.id, second: NPC_CORP });
 add({ char: P.rhea.id, date: at(18, 10), ref: 'skill_purchase', amount: -24_000_000, first: P.rhea.id, second: NPC_CORP });
-// Donaciones entre tus pilotos (no son ingreso ni gasto; ESI da el mismo id a los dos lados)
+// Donations between your pilots (neither income nor expense; ESI gives both sides the same id)
 const donation = (from: number, to: number, date: Date, amount: number, id: number) => {
   add({ char: from, date, ref: 'player_donation', amount: -amount, first: from, second: to, ctx: [id, 'donation'] });
   add({ char: to, date, ref: 'player_donation', amount, first: from, second: to, ctx: [id, 'donation'] });
 };
 donation(P.aria.id, P.lio.id, at(44, 11), 2_000_000_000, 1);
 donation(P.aria.id, P.rhea.id, at(9, 11), 350_000_000, 2);
-// PLEX para el Omega (PLEX / cuentas, aparte del resultado de juego)
+// PLEX for Omega (PLEX / accounts, separate from the game result)
 buy(P.aria.id, at(49, 20), T.plex, 1000, 4_020_000);
 buy(P.aria.id, at(19, 20), T.plex, 1000, 4_090_000);
 
-// Naves perdidas -----------------------------------------------------------------------------------------------
+// Ship losses -----------------------------------------------------------------------------------------------
 const HURRICANE_FIT: [number, number, number][] = [
   [T.dc, 1, 11], [T.gyro, 2, 12], [T.lse, 2, 19], [T.ab, 1, 21], [T.ac, 5, 27], [T.neut, 1, 32],
   [T.aerator, 2, 92], [T.hammerhead, 5, 87], [T.emp, 3000, 5],
@@ -183,7 +183,7 @@ const lose = (id: number, victim: number, when: Date, system: number, ship: numb
     items: fit.map(([typeId, q, flag]) => ({ typeId, destroyed: Math.ceil(q * 0.6), dropped: q - Math.ceil(q * 0.6), flag })),
     attackers,
   });
-// 1) Hurricane de Nyx hace 12 días: seguro, Aria lo repone en Jita y Nyx emite el courier a la citadela de staging
+// 1) Nyx's Hurricane 12 days ago: insurance, Aria replaces it in Jita and Nyx issues the courier to the staging citadel
 lose(130_000_001, P.nyx.id, at(12, 20, 14), SYS.t3m8, T.hurricane, HURRICANE_FIT, 7);
 add({ char: P.nyx.id, date: at(12, 20, 40), ref: 'insurance', amount: 21_400_000, first: NPC_CORP, second: P.nyx.id });
 buy(P.aria.id, at(10, 15), T.hurricane, 1, 61_800_000);
@@ -192,17 +192,17 @@ add({ char: P.nyx.id, date: at(10, 16), ref: 'insurance', amount: -16_800_000, f
 const COURIER = 70_000_001;
 add({ char: P.nyx.id, date: at(10, 16, 10), ref: 'contract_reward_deposited', amount: -28_000_000, first: P.nyx.id, second: P.nyx.id, ctx: [COURIER, 'contract_id'] });
 add({ char: P.nyx.id, date: at(10, 16, 10), ref: 'contract_brokers_fee', amount: -1_350_000, first: P.nyx.id, second: NPC_CORP, ctx: [COURIER, 'contract_id'] });
-// 2) Hurricane de Nyx hace 27 días, sin seguro y sin reponer: patrimonio que no volvió
+// 2) Nyx's Hurricane 27 days ago, uninsured and not replaced: net worth that didn't come back
 lose(130_000_002, P.nyx.id, at(27, 21, 2), SYS.n2is, T.hurricane, HURRICANE_FIT, 12);
-// 3) Scimitar de Rhea hace 2 días: seguro y casco repuesto, falta el equipo (la ventana sigue abierta)
+// 3) Rhea's Scimitar 2 days ago: insurance and hull replaced, fitting still missing (the window is still open)
 lose(130_000_003, P.rhea.id, at(2, 19, 48), SYS.j1au, T.scimitar, SCIMITAR_FIT, 9);
 add({ char: P.rhea.id, date: at(2, 20, 5), ref: 'insurance', amount: 74_000_000, first: NPC_CORP, second: P.rhea.id });
 buy(P.rhea.id, at(1, 14), T.scimitar, 1, 229_500_000);
-// 4) Pérdidas menores: un Rifter de Tomas y una cápsula
+// 4) Minor losses: a Rifter of Tomas's and a capsule
 lose(130_000_004, P.tomas.id, at(24, 20, 30), SYS.rens, T.rifter, [[T.dc, 1, 11], [T.ab, 1, 19]], 2);
 lose(130_000_005, P.nyx.id, at(27, 21, 3), SYS.n2is, T.capsule, [], 12);
 
-// Saldos acumulados y asientos ----------------------------------------------------------------------------------
+// Running balances and entries ----------------------------------------------------------------------------------
 entries.sort((a, b) => a.date.getTime() - b.date.getTime());
 const balance = new Map<number, number>([
   [P.aria.id, 9_400_000_000], [P.kade.id, 145_000_000], [P.nyx.id, 1_250_000_000],
@@ -277,7 +277,7 @@ db.insert(s.contracts)
   })
   .run();
 
-// Inventario ----------------------------------------------------------------------------------------------------
+// Inventory ----------------------------------------------------------------------------------------------------
 let itemId = 1_000_000_000_000;
 const asset = (characterId: number, typeId: number, quantity: number, root: number, singleton = false) => ({
   itemId: itemId++,
@@ -313,7 +313,7 @@ db.insert(s.assets)
   ])
   .run();
 
-// Precios, nombres y universo -----------------------------------------------------------------------------------
+// Prices, names and universe -----------------------------------------------------------------------------------
 const updatedAt = minutesAgo(20);
 db.insert(s.marketPrices)
   .values(Object.entries(AVG).map(([typeId, averagePrice]) => ({ typeId: Number(typeId), averagePrice, adjustedPrice: averagePrice * 0.97, updatedAt })))
@@ -362,24 +362,24 @@ db.insert(s.names)
   .onConflictDoNothing()
   .run();
 
-// Skills para las doctrinas (los atributos ya incluyen implantes, como los da ESI) ------------------------------
+// Skills for the doctrines (attributes already include implants, as ESI returns them) ------------------------------
 const sp = (rank: number, lv: number) => (lv <= 0 ? 0 : Math.ceil(250 * rank * Math.pow(2, 2.5 * (lv - 1))));
 const skills = Object.entries(TYPES).filter(([, t]) => t[2] === 16).map(([id, t]) => [Number(id), t[3]!] as const);
 const ALL5 = Object.fromEntries(skills.map(([id]) => [id, 5]));
 const base = { 3327: 4, 3329: 4, 3333: 4, 3392: 4, 3394: 4, 3436: 5, 24241: 5, 3300: 4, 3305: 4, 3413: 4, 3426: 4, 3416: 4, 3425: 4, 3449: 4, 3450: 4 };
 type Profile = { clone: 'omega' | 'alpha'; total: number; unallocated?: number; lv: Record<number, number>; active?: Record<number, number> };
 const PROFILES: Record<number, Profile> = {
-  // Veterana: lo vuela todo; al plan le faltan dos niveles V
+  // Veteran: flies everything; two level Vs short of the plan
   [P.aria.id]: { clone: 'omega', total: 61_000_000, lv: { ...ALL5, 33095: 4, 12205: 4 } },
-  // Alfa: el Rifter sí; Hurricane y Scimitar piden skills solo Omega
+  // Alpha: the Rifter yes; Hurricane and Scimitar need Omega-only skills
   [P.kade.id]: { clone: 'alpha', total: 4_200_000, lv: { ...base, 33095: 3, 3318: 3, 3423: 3, 33699: 4, 3422: 3, 3431: 3, 26260: 1 } },
-  // DPS: Hurricane y Rifter; le falta Logistics Cruisers para el Scimitar
+  // DPS: Hurricane and Rifter; lacks Logistics Cruisers for the Scimitar
   [P.nyx.id]: { clone: 'omega', total: 26_000_000, unallocated: 180_000, lv: { ...base, 3333: 5, 33095: 5, 3305: 5, 12205: 3, 3318: 5, 3423: 4, 33699: 5, 3425: 4, 3450: 4, 26260: 3, 3422: 3, 3431: 3, 3413: 5, 3426: 5 } },
-  // Trader nuevo: Rifter; al Hurricane le faltan varias
+  // New trader: Rifter; several missing for the Hurricane
   [P.lio.id]: { clone: 'omega', total: 7_800_000, lv: { ...base, 33095: 1, 3318: 2, 33699: 3, 3423: 2, 3422: 2 } },
-  // Logi: Scimitar y Rifter; al Hurricane le falta la especialización
+  // Logi: Scimitar and Rifter; lacks the specialization for the Hurricane
   [P.rhea.id]: { clone: 'omega', total: 31_000_000, lv: { ...base, 3333: 5, 12096: 4, 3422: 5, 3416: 5, 3425: 5, 3431: 4, 33095: 3, 3318: 3, 3423: 4, 33699: 4, 26260: 2 } },
-  // Alfa con skills entrenadas de cuando era Omega
+  // Alpha with skills trained back when Omega
   [P.tomas.id]: { clone: 'alpha', total: 9_500_000, lv: { ...base, 3333: 5, 33095: 4, 3305: 5, 12205: 1, 3318: 4, 3423: 4, 33699: 5, 26260: 3, 3431: 4 }, active: { 3333: 4, 3305: 4, 12205: 0, 33699: 4, 3318: 4 } },
 };
 const skillsAt = minutesAgo(35);
@@ -393,7 +393,7 @@ for (const [idStr, p] of Object.entries(PROFILES)) {
   db.insert(s.characterAttributes).values({ characterId: id, charisma: 19, intelligence: 21, memory: 20, perception: 27, willpower: 24, updatedAt: skillsAt }).run();
 }
 
-// El último sync de cada piloto, sin errores
+// Each pilot's last sync, without errors
 for (const p of Object.values(P)) {
   for (const kind of ['journal', 'transactions', 'assets', 'killmails', 'contracts', 'skills']) {
     db.insert(s.syncLog).values({ characterId: p.id, kind, startedAt: minutesAgo(13), finishedAt: minutesAgo(12), rowsInserted: 0 }).run();

@@ -1,6 +1,6 @@
 ---
-// Primer uso, sin pilotos vinculados: qué responde el ledger, los tres pasos y por qué hay prisa
-// (ESI solo guarda ~30 días de wallet). La única acción es vincular el primer piloto.
+// First use, no linked pilots: what the ledger answers, the three steps and why there's a hurry
+// (ESI only keeps ~30 days of wallet). The only action is linking the first pilot.
 import Icon from './Icon.astro';
 import { loginUrl } from '../lib/api';
 import { getLang, t } from '../lib/i18n';
@@ -95,7 +95,7 @@ const steps = [
     border-radius: 8px;
     background: var(--panel-2);
   }
-  /* El paso en el que estás: estado, por eso en cian */
+  /* The step you're on: it's state, hence cyan */
   .steps li.current {
     border-color: var(--cyan-dim);
   }

@@ -1,5 +1,5 @@
-// Repartos (tortas): como mucho 7 porciones, en orden fijo (la porción i lleva siempre el color i, también en la
-// leyenda); a partir de la séptima, «Otros N» con la suma del resto
+// Shares (donuts): at most 7 slices, in fixed order (slice i always gets color i, in the legend
+// too); from the seventh on, «Otros N» (Others N) with the sum of the rest
 export const MAX_SLICES = 7;
 
 export type Slice = { label: string; value: number };
@@ -11,7 +11,7 @@ export const fold = <T extends Slice>(items: T[], otherLabel: (n: number) => str
   return [...head, { label: otherLabel(rest.length), value: rest.reduce((n, i) => n + i.value, 0) }];
 };
 
-// Porcentaje de una porción sobre el total («93 %»; menos de 1 % se dice «<1 %»)
+// A slice's percentage of the total («93 %»; under 1 % reads «<1 %»)
 export const shareOf = (value: number, total: number, lang: string) => {
   if (total <= 0 || value <= 0) return '0 %';
   const p = value / total;

@@ -3,7 +3,7 @@ import { db } from '../db/client';
 import { assets } from '../db/schema';
 import { esiGet } from '../lib/esi';
 
-// GET /characters/{id}/assets (1000 ítems por página)
+// GET /characters/{id}/assets (1000 items per page)
 type EsiAsset = {
   item_id: number;
   type_id: number;
@@ -20,8 +20,8 @@ export const ASSETS_SCOPE = 'esi-assets.read_assets.v1';
 const CHUNK = 500;
 const MAX_DEPTH = 10;
 
-// Un ítem dentro de una nave dentro de un contenedor... apunta a su padre por item_id.
-// Se sube por la cadena hasta llegar a algo que no es un ítem propio (estación, estructura, sistema)
+// An item inside a ship inside a container... points to its parent by item_id.
+// Walk up the chain until reaching something that isn't an owned item (station, structure, system)
 export function rootLocations(items: EsiAsset[]): Map<number, number> {
   const byId = new Map(items.map((a) => [a.item_id, a]));
   const roots = new Map<number, number>();
@@ -60,8 +60,8 @@ export async function fetchAssets(characterId: number, r: { pages: number; fetch
     updatedAt: now,
   }));
 
-  // Se reemplaza la foto completa solo cuando ya se descargaron todas las páginas.
-  // Upsert por item_id: si un ítem pasó de otro personaje a este, se lo "lleva"
+  // The full snapshot is replaced only once all pages have been downloaded.
+  // Upsert by item_id: if an item moved from another character to this one, this one "takes" it
   db.transaction((tx) => {
     tx.delete(assets).where(eq(assets.characterId, characterId)).run();
     for (let i = 0; i < rows.length; i += CHUNK) {

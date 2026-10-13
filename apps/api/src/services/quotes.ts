@@ -3,11 +3,11 @@ import { db } from '../db/client';
 import { marketQuotes } from '../db/schema';
 import { esiGet } from '../lib/esi';
 
-// PLEX (tipo 44992) se negocia en su propio mercado global, no en Jita
+// PLEX (type 44992) trades on its own global market, not in Jita
 export const PLEX_TYPE_ID = 44992;
 const PLEX_REGION_ID = 19000001;
 const MAX_PAGES = 5;
-// Un syncAll llama a syncCharacter por cada piloto: con esto el precio se pide una sola vez por ronda
+// A syncAll calls syncCharacter for each pilot: with this the price is fetched only once per round
 const MIN_AGE_MS = 60_000;
 
 type EsiOrder = { price: number; is_buy_order: boolean };
@@ -17,7 +17,7 @@ export async function getQuote(typeId: number) {
   return row;
 }
 
-// Precio de venta más bajo del PLEX ahora mismo (órdenes públicas, sin token)
+// Lowest PLEX sell price right now (public orders, no token)
 export async function refreshPlexQuote(): Promise<number | null> {
   const prev = await getQuote(PLEX_TYPE_ID);
   if (prev && Date.now() - prev.updatedAt.getTime() < MIN_AGE_MS) return prev.sellMin;

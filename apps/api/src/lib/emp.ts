@@ -1,6 +1,6 @@
-// Planes de skills de EVEMon (.emp): un XML comprimido con gzip, con una entrada por skill y nivel:
+// EVEMon skill plans (.emp): a gzip-compressed XML, with one entry per skill and level:
 //   <plan name="Beehive - Rorqual"> <entry skillID="3327" skill="Spaceship Command" level="1" …/> …
-// También vale el XML sin comprimir. Del plan solo cuenta el nivel más alto de cada skill
+// Uncompressed XML works too. Only the highest level of each skill in the plan counts
 import type { RequiredSkill } from '../db/schema';
 
 export type EmpPlan = { name: string; skills: RequiredSkill[] };

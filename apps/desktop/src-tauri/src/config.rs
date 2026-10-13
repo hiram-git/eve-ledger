@@ -1,6 +1,6 @@
-//! Configuración del usuario: lo que antes iba en apps/api/.env y apps/web/.env, en un solo archivo
-//! `ledger.env` (CLAVE=valor) en la carpeta de configuración de la app. El asistente lo crea en el primer
-//! arranque y la ventana «Configuración…» lo edita después.
+//! User configuration: what used to live in apps/api/.env and apps/web/.env, in a single
+//! `ledger.env` file (KEY=value) in the app's config folder. The wizard creates it on first
+//! launch and the «Configuración…» (Settings…) window edits it afterwards.
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
@@ -12,15 +12,15 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    /// App de EVE: la que trae el instalador (EVE_LEDGER_CLIENT_ID). El asistente ya no la pide (decisión del
-    /// usuario: nadie tiene que crear una en developers.eveonline.com); si ledger.env trae otra (quien la configuró
-    /// en una versión anterior), se conserva para no obligar a revincular los pilotos
-    /// Solo el Client ID: el login va con PKCE y la Secret Key ya no se usa (decisión del usuario). Un
-    /// `EVE_CLIENT_SECRET` de versiones anteriores se ignora y desaparece de ledger.env al guardar
+    /// EVE app: the one bundled with the installer (EVE_LEDGER_CLIENT_ID). The wizard no longer asks for it (user's
+    /// decision: nobody has to create one at developers.eveonline.com); if ledger.env has another one (set up
+    /// in an earlier version), it is kept so the pilots don't have to be relinked
+    /// Client ID only: login uses PKCE and the Secret Key is no longer used (user's decision). An
+    /// `EVE_CLIENT_SECRET` from earlier versions is ignored and removed from ledger.env on save
     pub client_id: String,
-    /// 32 bytes en base64: cifra los tokens de EVE. Cambiarla obliga a revincular los pilotos
+    /// 32 bytes in base64: encrypts the EVE tokens. Changing it forces relinking the pilots
     pub enc_key: String,
-    /// Contacto para el User-Agent de ESI (CCP pide poder avisar a quien hace las llamadas)
+    /// Contact for the ESI User-Agent (CCP asks to be able to reach whoever makes the calls)
     pub esi_contact: String,
     pub sync_interval_min: u32,
     pub pilot_slots: u32,
@@ -28,26 +28,26 @@ pub struct Config {
     pub omega_plex_per_month: u32,
     pub api_port: u16,
     pub web_port: u16,
-    /// Abrir la app al iniciar sesión, en la bandeja y sin ventana: así sincroniza aunque no se abra (ESI solo da
-    /// ~30 días de wallet). El sistema (registro, LaunchAgent, autostart de XDG) se pone de acuerdo con esto al arrancar
+    /// Open the app at login, in the tray and without a window: that way it syncs even if never opened (ESI only gives
+    /// ~30 days of wallet). The OS (registry, LaunchAgent, XDG autostart) is brought in line with this at startup
     pub start_at_login: bool,
-    /// Cerrar la ventana la deja en la bandeja del sistema, sincronizando; «Salir» (bandeja o menú) la cierra del todo
+    /// Closing the window leaves it in the system tray, syncing; «Salir» (Quit, tray or menu) closes it completely
     pub close_to_tray: bool,
 }
 
-// Puertos poco habituales para no chocar con otros programas (3000 y 4321 los usan muchos servidores de desarrollo)
+// Unusual ports so as not to clash with other programs (3000 and 4321 are used by many dev servers)
 pub const DEFAULT_API_PORT: u16 = 47300;
 pub const DEFAULT_WEB_PORT: u16 = 47321;
 
-/// Client ID de una app de EVE incluido al compilar (variable `EVE_LEDGER_CLIENT_ID`): quien instala no tiene que
-/// crear la suya. Va sin secreto (login con PKCE) y su Callback URL es la del puerto de la API por defecto
+/// Client ID of an EVE app embedded at build time (variable `EVE_LEDGER_CLIENT_ID`): whoever installs doesn't have to
+/// create their own. It has no secret (PKCE login) and its Callback URL uses the default API port
 pub fn bundled_client_id() -> Option<&'static str> {
     option_env!("EVE_LEDGER_CLIENT_ID").map(str::trim).filter(|s| !s.is_empty())
 }
 
-/// Repositorio de GitHub del que sale el instalador («dueño/nombre»; lo pone el workflow con GITHUB_REPOSITORY).
-/// Va al User-Agent de ESI (CCP pide poder contactar con el desarrollador) y al aviso legal; una compilación local
-/// no lo lleva
+/// GitHub repository the installer comes from ("owner/name"; set by the workflow from GITHUB_REPOSITORY).
+/// Goes into the ESI User-Agent (CCP asks to be able to contact the developer) and the legal notice; a local build
+/// doesn't have it
 pub fn bundled_repo_url() -> Option<String> {
     repo_url(option_env!("EVE_LEDGER_REPO"))
 }
@@ -58,8 +58,8 @@ fn repo_url(repo: Option<&str>) -> Option<String> {
     ok.then(|| format!("https://github.com/{r}"))
 }
 
-/// User-Agent de ESI: la app y su versión, la URL del proyecto y, si el usuario lo dio, su contacto (sin caracteres
-/// de control: va en una cabecera HTTP)
+/// ESI User-Agent: the app and its version, the project URL and, if the user gave one, their contact (no control
+/// characters: it goes in an HTTP header)
 fn user_agent(version: &str, repo: Option<&str>, contact: &str) -> String {
     let contact: String = contact.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string();
     let parts: Vec<String> = repo.map(|r| format!("+{r}")).into_iter().chain((!contact.is_empty()).then_some(contact)).collect();
@@ -82,26 +82,26 @@ impl Default for Config {
             omega_plex_per_month: 500,
             api_port: DEFAULT_API_PORT,
             web_port: DEFAULT_WEB_PORT,
-            // El asistente lo propone marcado; quien ya tenía ledger.env de antes no se apunta solo (from_map)
+            // The wizard suggests it checked; anyone with an older ledger.env is not opted in automatically (from_map)
             start_at_login: true,
             close_to_tray: true,
         }
     }
 }
 
-/// Clave nueva de 32 bytes aleatorios en base64
+/// New key of 32 random bytes in base64
 pub fn generate_enc_key() -> String {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).expect("sin fuente de aleatoriedad del sistema");
     STANDARD.encode(bytes)
 }
 
-/// La URL que hay que registrar en la app de EVE (tiene que coincidir exactamente)
+/// The URL to register in the EVE app (must match exactly)
 pub fn callback_url(api_port: u16) -> String {
     format!("http://127.0.0.1:{api_port}/auth/callback")
 }
 
-/// Errores de validación, en claves que la interfaz traduce (vacío = válida)
+/// Validation errors, as keys the UI translates (empty = valid)
 pub fn validate(c: &Config) -> Vec<&'static str> {
     let mut errors = Vec::new();
     if c.client_id.trim().is_empty() {
@@ -116,7 +116,7 @@ pub fn validate(c: &Config) -> Vec<&'static str> {
     if c.pilot_slots == 0 || c.omega_plex_per_month == 0 {
         errors.push("numbers");
     }
-    // La app de EVE del instalador solo conoce la Callback URL del puerto por defecto
+    // The installer's EVE app only knows the Callback URL for the default port
     if bundled_client_id() == Some(c.client_id.trim()) && c.api_port != DEFAULT_API_PORT {
         errors.push("bundledPort");
     }
@@ -149,7 +149,7 @@ impl Config {
             omega_plex_per_month: n("OMEGA_PLEX_PER_MONTH", d.omega_plex_per_month),
             api_port: p("API_PORT", d.api_port),
             web_port: p("WEB_PORT", d.web_port),
-            // Sin la clave (ledger.env de una versión anterior): no se añade al inicio del sistema sin preguntar
+            // Without the key (ledger.env from an earlier version): not added to system startup without asking
             start_at_login: b("START_AT_LOGIN", false),
             close_to_tray: b("CLOSE_TO_TRAY", d.close_to_tray),
         }
@@ -184,7 +184,7 @@ impl Config {
         )
     }
 
-    /// Variables de entorno de la API (apps/api/src/lib/env.ts)
+    /// API environment variables (apps/api/src/lib/env.ts)
     pub fn api_env(&self, version: &str) -> Vec<(String, String)> {
         let ua = user_agent(version, bundled_repo_url().as_deref(), &self.esi_contact);
         vec![
@@ -195,7 +195,7 @@ impl Config {
             ("PORT".into(), self.api_port.to_string()),
             ("HOST".into(), "127.0.0.1".into()),
             ("WEB_URL".into(), self.web_url()),
-            // El login va al navegador del sistema (lib.rs): al volver, una página que se cierra, no el dashboard
+            // Login goes to the system browser (lib.rs): on return, a page that closes itself, not the dashboard
             ("AUTH_DONE_PAGE".into(), "1".into()),
             ("SYNC_INTERVAL_MIN".into(), self.sync_interval_min.to_string()),
             ("OMEGA_ACCOUNTS".into(), self.omega_accounts.to_string()),
@@ -203,10 +203,10 @@ impl Config {
         ]
     }
 
-    /// Variables de entorno de la web (Astro: API_URL y PILOT_SLOTS se leen al arrancar)
+    /// Web environment variables (Astro: API_URL and PILOT_SLOTS are read at startup)
     pub fn web_env(&self, version: &str) -> Vec<(String, String)> {
         vec![
-            // Pie del dashboard: «v0.1.8»
+            // Dashboard footer: «v0.1.8»
             ("APP_VERSION".into(), version.into()),
             ("APP_REPO".into(), bundled_repo_url().unwrap_or_default()),
             ("PORT".into(), self.web_port.to_string()),
@@ -221,9 +221,9 @@ impl Config {
     }
 }
 
-/// None si aún no hay archivo (primer arranque). Si el archivo no trae ENC_KEY (editado a mano), se genera una y se
-/// guarda en el acto: antes cada arranque usaba una clave nueva sin guardarla, y los pilotos vinculados se perdían
-/// una y otra vez. Con una clave nueva, los que estaban vinculados con la anterior hay que revincularlos
+/// None if there is no file yet (first launch). If the file has no ENC_KEY (edited by hand), one is generated and
+/// saved right away: previously each launch used a new key without saving it, and linked pilots were lost
+/// over and over. With a new key, pilots linked under the previous one must be relinked
 pub fn load(path: &Path) -> Option<Config> {
     let map = parse(&fs::read_to_string(path).ok()?);
     let c = Config::from_map(&map);
@@ -235,8 +235,9 @@ pub fn load(path: &Path) -> Option<Config> {
     Some(c)
 }
 
-/// Guarda el archivo. En Linux y macOS solo lo puede leer el usuario desde que se crea (lleva ENC_KEY). Se escribe en un temporal que se renombra encima: un corte de luz no deja el archivo a medias
-/// (con ENC_KEY truncada, los tokens de los pilotos ya no se podrían descifrar)
+/// Saves the file. On Linux and macOS only the user can read it from the moment it is created (it holds ENC_KEY). It is
+/// written to a temp file that is renamed over it: a power cut doesn't leave the file half-written
+/// (with a truncated ENC_KEY, the pilots' tokens could no longer be decrypted)
 pub fn save(path: &Path, c: &Config) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
@@ -253,14 +254,14 @@ pub fn save(path: &Path, c: &Config) -> std::io::Result<()> {
         let mut file = opts.open(&tmp)?;
         #[cfg(unix)]
         {
-            // Por si el temporal ya existía con otros permisos (mode solo vale al crearlo)
+            // In case the temp file already existed with other permissions (mode only applies on creation)
             use std::os::unix::fs::PermissionsExt;
             file.set_permissions(fs::Permissions::from_mode(0o600))?;
         }
         file.write_all(c.to_env().as_bytes())?;
         file.sync_all()?;
     }
-    // En Windows, rename reemplaza el archivo existente (MoveFileExW con MOVEFILE_REPLACE_EXISTING)
+    // On Windows, rename replaces the existing file (MoveFileExW with MOVEFILE_REPLACE_EXISTING)
     fs::rename(&tmp, path)
 }
 
@@ -303,7 +304,7 @@ mod tests {
 
     #[test]
     fn la_app_del_instalador_exige_el_puerto_por_defecto() {
-        // Solo se comprueba si se compiló con EVE_LEDGER_CLIENT_ID
+        // Only checked when built with EVE_LEDGER_CLIENT_ID
         if let Some(id) = bundled_client_id() {
             assert_eq!(Config::default().client_id, id);
             assert!(validate(&Config::default()).is_empty());
@@ -353,10 +354,10 @@ mod tests {
         fs::write(&path, "EVE_CLIENT_ID=abc\nAPI_PORT=47300\n").unwrap();
         let first = load(&path).unwrap();
         assert_eq!(STANDARD.decode(&first.enc_key).unwrap().len(), 32);
-        // El siguiente arranque lee la misma clave (antes salía otra cada vez)
+        // The next launch reads the same key (previously a new one came out each time)
         assert_eq!(load(&path).unwrap().enc_key, first.enc_key);
         assert!(fs::read_to_string(&path).unwrap().contains(&format!("ENC_KEY={}", first.enc_key)));
-        // Lo demás se conserva
+        // Everything else is kept
         assert_eq!(load(&path).unwrap().client_id, "abc");
     }
 
@@ -392,7 +393,7 @@ mod tests {
         let c = Config { start_at_login: false, close_to_tray: false, ..valid() };
         assert_eq!(Config::from_map(&parse(&c.to_env())), c);
         assert!(Config::from_map(&parse(&valid().to_env())).start_at_login);
-        // Un ledger.env de antes (sin las claves): al cerrar sigue en la bandeja, pero no arranca con el sistema
+        // An older ledger.env (without the keys): closing keeps it in the tray, but it doesn't start with the system
         let old = Config::from_map(&parse("EVE_CLIENT_ID=abc\n"));
         assert!(!old.start_at_login);
         assert!(old.close_to_tray);

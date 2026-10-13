@@ -1,8 +1,8 @@
-// Rendimiento con un año de datos (hacia la 1.0): genera una base sintética de 5 pilotos y 365 días (ratting diario,
-// un trader con ~100 operaciones al día, couriers, una pérdida cada 3 días con su reposición, PLEX, inventario) y
-// mide las rutas que piden las páginas, arrancando la API de verdad sobre esa base.
+// Performance with a year of data (toward 1.0): generates a synthetic database of 5 pilots and 365 days (daily ratting,
+// a trader with ~100 trades a day, couriers, a loss every 3 days with its replacement, PLEX, inventory) and
+// measures the routes the pages request, starting the real API on top of that database.
 //   bun run bench [--days=365] [--runs=5] [--keep]
-// Todo es inventado: no toca la base del usuario (carpeta temporal) ni llama a ESI (sync automático apagado)
+// Everything is made up: it doesn't touch the user's database (temp folder) or call ESI (automatic sync off)
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,7 +30,7 @@ const { rawDb, runMigrations } = await import('../src/db/client');
 runMigrations();
 const sqlite = rawDb();
 
-// ── Datos ────────────────────────────────────────────────────────────────────
+// ── Data ────────────────────────────────────────────────────────────────────
 const P = { aria: 2_100_000_001, kade: 2_100_000_002, rhea: 2_100_000_003, lio: 2_100_000_004, tomas: 2_100_000_005 };
 const NPC = 1_000_125;
 const TAX_CORP = 1_000_044;
@@ -69,7 +69,7 @@ let kmId = 100_000_000;
 let contractId = 200_000_000;
 
 for (let d = DAYS; d >= 0; d--) {
-  // Ratting: Aria 4 h (12 pagos), Kade 2 h (6 pagos); impuesto de corporación del 10 %
+  // Ratting: Aria 4 h (12 payouts), Kade 2 h (6 payouts); 10 % corporation tax
   for (const [char, ticks] of [[P.aria, 12], [P.kade, 6]] as const) {
     const system = pick(RAT_SYSTEMS);
     for (let t = 0; t < ticks; t++) {
@@ -78,7 +78,7 @@ for (let d = DAYS; d >= 0; d--) {
     }
   }
   if (d % 7 === 0) journal.push({ char: P.aria, date: at(d, 70_000), ref: 'ess_escrow_transfer', amount: 300_000_000, first: NPC, second: P.aria, tax: 33_000_000 });
-  // Trading: Rhea, ~100 operaciones al día (ventas con impuesto y broker; compras por escrow)
+  // Trading: Rhea, ~100 trades a day (sales with tax and broker fee; purchases via escrow)
   for (let t = 0; t < 100; t++) {
     const date = at(d, 3_600 + t * 600);
     const type = pick(TRADE_TYPES);
@@ -92,13 +92,13 @@ for (let d = DAYS; d >= 0; d--) {
     journal.push({ char: P.rhea, date, ref: 'brokers_fee', amount: -total * 0.015, first: P.rhea, second: NPC });
     tx.push([txId++, P.rhea, date, type, qty, price, buy ? 1 : 0, JITA_STATION, 95_000_000 + t, id]);
   }
-  // Logística: Lio cobra un courier cada dos días
+  // Logistics: Lio is paid for a courier every two days
   if (d % 2 === 0) {
     const cid = contractId++;
     journal.push({ char: P.lio, date: at(d, 40_000), ref: 'contract_reward', amount: 45_000_000, first: 98_000_000, second: P.lio, ctx: cid, ctxType: 'contract_id' });
     contracts.push([cid, P.lio, 98_000_000, P.lio, null, 'courier', 'finished', at(d + 1, 40_000), at(d, 40_000), null, 45_000_000, 500_000_000, JITA_STATION, 60_008_494, '[]', at(0, 0)]);
   }
-  // Una pérdida de Kade cada 3 días: seguro, y Tomas repone casco y módulos en Jita al día siguiente
+  // A loss for Kade every 3 days: insurance, and Tomas replaces hull and modules in Jita the next day
   if (d % 3 === 0 && d > 1) {
     const hull = pick(HULLS);
     const mods = Array.from({ length: 15 }, () => pick(MODULES));
@@ -112,9 +112,9 @@ for (let d = DAYS; d >= 0; d--) {
       tx.push([txId++, P.tomas, lostAt + DAY, type, 1, price, 1, JITA_STATION, 95_500_000, id]);
     }
   }
-  // Kills de Kade (killmails donde no es la víctima)
+  // Kade's kills (killmails where he is not the victim)
   if (d % 2 === 1) killmails.push([kmId++, 'hash', P.kade, at(d, 60_000), pick(RAT_SYSTEMS), 95_900_000, 587, '[]', 4]);
-  // Aria reparte ISK a los demás cada semana (entre tus pilotos: mismo id en los dos lados)
+  // Aria hands out ISK to the others every week (between your pilots: same id on both sides)
   if (d % 7 === 3) {
     for (const to of [P.kade, P.tomas]) {
       const id = jId++;
@@ -122,7 +122,7 @@ for (let d = DAYS; d >= 0; d--) {
       journal.push({ id, char: to, date: at(d, 30_000), ref: 'player_donation', amount: 1_000_000_000, first: P.aria, second: to });
     }
   }
-  // PLEX para el Omega cada mes
+  // PLEX for Omega every month
   if (d % 30 === 0) {
     const id = jId++;
     journal.push({ id, char: P.aria, date: at(d, 20_000), ref: 'market_escrow', amount: -2_500 * 5_000_000, first: P.aria, second: P.aria, ctx: txId, ctxType: 'market_transaction_id' });
@@ -158,7 +158,7 @@ sqlite.transaction(() => {
     'insert into contracts (contract_id, character_id, issuer_id, acceptor_id, assignee_id, type, status, date_issued, date_completed, price, reward, collateral, start_location_id, end_location_id, items, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   for (const c of contracts) ct.run(...(c as never[]));
-  // Inventario: 15 000 pilas en 40 ubicaciones
+  // Inventory: 15 000 stacks in 40 locations
   const as = sqlite.prepare(
     'insert into assets (item_id, character_id, type_id, quantity, location_id, location_flag, location_type, root_location_id, is_singleton, is_blueprint_copy, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
@@ -168,7 +168,7 @@ sqlite.transaction(() => {
     const loc = pick(locations);
     as.run(1_000_000_000 + i, pick(owners), pick([...TRADE_TYPES, ...MODULES, ...HULLS]), 1 + Math.floor(rand() * 1000), loc, 'Hangar', 'station', loc, 0, 0, now - 600);
   }
-  // Precios, nombres y grupos de mercado de todo lo que aparece
+  // Prices, names and market groups of everything that appears
   const allTypes = [...TRADE_TYPES, ...MODULES, ...HULLS, PLEX];
   const mp = sqlite.prepare('insert into market_prices (type_id, average_price, adjusted_price, updated_at) values (?, ?, ?, ?)');
   const nm = sqlite.prepare('insert or ignore into names (id, name, category, updated_at) values (?, ?, ?, ?)');
@@ -192,7 +192,7 @@ console.log(
 );
 sqlite.close();
 
-// ── Medir ────────────────────────────────────────────────────────────────────
+// ── Measure ────────────────────────────────────────────────────────────────────
 const PORT = 3990;
 const api = Bun.spawn(['bun', join(import.meta.dir, '../src/index.ts')], {
   env: { ...baseEnv, PORT: String(PORT) },
@@ -207,7 +207,7 @@ for (let i = 0; i < 50; i++) {
   await Bun.sleep(200);
 }
 
-// Lo que pide cada página (el Resumen pide varias a la vez)
+// What each page requests (the Summary requests several at once)
 const routes = [
   '/characters',
   '/summary?days=7',

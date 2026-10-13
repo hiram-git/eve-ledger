@@ -1,13 +1,13 @@
-// Exporta los datos del ledger a un JSON para revisarlos fuera de esta máquina, SIN nada sensible:
-// ni tokens (access/refresh), ni owner_hash, ni descripciones del journal (texto libre con nombres).
-// Por defecto también anonimiza: tus pilotos pasan a «Piloto 1…N» con IDs ficticios, y los IDs de otros
-// jugadores, corporaciones y alianzas se sustituyen por seudónimos estables (la misma persona, el mismo seudónimo).
+// Exports the ledger data to a JSON file to review it off this machine, WITHOUT anything sensitive:
+// no tokens (access/refresh), no owner_hash, no journal descriptions (free text with names).
+// By default it also anonymizes: your pilots become «Piloto 1…N» with fake IDs, and the IDs of other
+// players, corporations and alliances are replaced by stable pseudonyms (same person, same pseudonym).
 //
-// Uso (desde apps/api):  bun run export:debug [--days=90] [--names]
-//   --days=N   movimientos del wallet y transacciones de los últimos N días (90 por defecto)
-//   --names    conserva los nombres e IDs reales de tus pilotos (el resto sigue anonimizado)
+// Usage (from apps/api):  bun run export:debug [--days=90] [--names]
+//   --days=N   wallet movements and transactions from the last N days (90 by default)
+//   --names    keeps your pilots' real names and IDs (everything else stays anonymized)
 //
-// Escribe data/export-debug-AAAA-MM-DD.json (data/ no se sube a git). Revísalo antes de compartirlo.
+// Writes data/export-debug-AAAA-MM-DD.json (data/ is not committed to git). Review it before sharing.
 import { Database } from 'bun:sqlite';
 import { existsSync, writeFileSync } from 'node:fs';
 
@@ -29,13 +29,13 @@ const db = new Database(DB_PATH, { readonly: true });
 const all = <T = Record<string, unknown>>(sql: string, ...params: (string | number)[]) =>
   db.query(sql).all(...params) as T[];
 
-// --- Seudónimos -------------------------------------------------------------------------------------------
-// Tus pilotos: 2100000001… en orden de vinculación (o sus IDs reales con --names)
+// --- Pseudonyms -------------------------------------------------------------------------------------------
+// Your pilots: 2100000001… in linking order (or their real IDs with --names)
 const pilots = all<{ id: number; name: string }>(`select id, name from characters order by created_at, id`);
 const pilotId = new Map(pilots.map((p, i) => [p.id, keepNames ? p.id : 2_100_000_001 + i]));
 const pilotName = new Map(pilots.map((p, i) => [p.id, keepNames ? p.name : `Piloto ${i + 1}`]));
-// Otros jugadores, corporaciones y alianzas (IDs ≥ 90.000.000): seudónimo estable. Las corporaciones de NPC
-// (1.000.000–2.999.999), los agentes y los sistemas/estaciones quedan tal cual: no identifican a nadie
+// Other players, corporations and alliances (IDs ≥ 90,000,000): stable pseudonym. NPC corporations
+// (1,000,000–2,999,999), agents and systems/stations stay as they are: they identify nobody
 const others = new Map<number, number>();
 const person = (id: number | null) => {
   if (id === null || id === undefined) return null;
@@ -45,7 +45,7 @@ const person = (id: number | null) => {
   return others.get(id)!;
 };
 const PERSON_CONTEXTS = new Set(['character_id', 'corporation_id', 'alliance_id']);
-// En el texto de los errores de sync: IDs y nombres de tus pilotos
+// In sync error text: your pilots' IDs and names
 const scrub = (text: string | null) => {
   if (!text) return text;
   let out = text;
@@ -53,19 +53,19 @@ const scrub = (text: string | null) => {
     out = out.split(String(p.id)).join(String(pilotId.get(p.id)));
     out = out.split(p.name).join(pilotName.get(p.id)!);
   }
-  // Por si un error llevara un token o una cabecera Authorization
+  // In case an error carried a token or an Authorization header
   return out.replace(/Bearer\s+[\w.-]+/g, 'Bearer [redactado]').replace(/eyJ[\w.-]{20,}/g, '[token redactado]');
 };
 
 const since = Math.floor(Date.now() / 1000) - days * 86_400;
 
-// --- Tablas -----------------------------------------------------------------------------------------------
-// characters: sin owner_hash, refresh_token, access_token ni token_expires_at
+// --- Tables -----------------------------------------------------------------------------------------------
+// characters: without owner_hash, refresh_token, access_token or token_expires_at
 const characters = all<Record<string, number | string | null>>(
   `select id, name, scopes, last_sync_at, created_at from characters order by created_at, id`,
 ).map((c) => ({ ...c, id: pilotId.get(c.id as number), name: pilotName.get(c.id as number) }));
 
-// wallet_journal: sin description (texto libre con nombres de jugadores)
+// wallet_journal: without description (free text with player names)
 const walletJournal = all<Record<string, number | string | null>>(
   `select journal_id, character_id, date, ref_type, amount, balance, first_party_id, second_party_id, context_id, context_id_type
    from wallet_journal where date >= ? order by date`,
@@ -89,7 +89,7 @@ const assets = all<Record<string, number | string | null>>(`select * from assets
   character_id: person(a.character_id as number),
 }));
 
-// killmails: sin el hash (solo sirve para volver a pedirlo a ESI)
+// killmails: without the hash (only useful to fetch it again from ESI)
 const killmails = all<Record<string, number | string | null>>(
   `select killmail_id, character_id, killmail_time, solar_system_id, victim_character_id, ship_type_id, items, attackers from killmails`,
 ).map((k) => ({
@@ -107,12 +107,12 @@ const contracts = all<Record<string, number | string | null>>(`select * from con
   assignee_id: person(c.assignee_id as number | null),
 }));
 
-// Nombres: solo ítems, estaciones y geografía (nunca personajes, corporaciones ni alianzas)
+// Names: only items, stations and geography (never characters, corporations or alliances)
 const names = all(
   `select * from names where category not in ('character', 'corporation', 'alliance', 'faction')`,
 );
 
-// Precios: solo los tipos que aparecen en los datos exportados (la tabla completa son ~15.000 filas)
+// Prices: only the types that appear in the exported data (the full table is ~15,000 rows)
 const typeIds = new Set<number>([
   ...walletTransactions.map((t) => t.type_id as number),
   ...assets.map((a) => a.type_id as number),
@@ -123,7 +123,7 @@ const typeIds = new Set<number>([
 const marketPrices = all<{ type_id: number }>(`select * from market_prices`).filter((p) => typeIds.has(p.type_id));
 const marketQuotes = all(`select * from market_quotes`);
 const systems = all(`select * from systems`);
-// Grupos de mercado de los tipos (reconocen el equipo equivalente al reponer una nave); la tabla puede no existir aún
+// Market groups of the types (they recognize equivalent fittings when replacing a ship); the table may not exist yet
 const typesTable = (() => {
   try {
     return all(`select * from types`);

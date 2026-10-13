@@ -1,9 +1,9 @@
 ---
-// Doctrinas: los fits de cada doctrina (pegados en EFT) con su plan de skills de la comunidad (.emp de EVEMon).
-// Por fit, una fila por piloto: si puede volarlo (y si no, qué le falta y cuánto tarda) y su avance en el plan
-// óptimo. Las cuentas las hace la API con las skills y atributos de cada piloto (Alfa a la mitad).
-// Entrega 2: coste del fit en Jita, inyectores para volarlo ya o completar el plan, y lo que falta del wallet
-// (con todo el saldo o reservando el Omega) en horas de ratting y días al ritmo actual
+// Doctrines: each doctrine's fits (pasted as EFT) with their community skill plan (EVEMon .emp).
+// Per fit, one row per pilot: whether they can fly it (and if not, what's missing and how long it takes) and their
+// progress on the optimal plan. The API does the math with each pilot's skills and attributes (Alpha at half speed).
+// Delivery 2: fit cost in Jita, injectors to fly it now or complete the plan, and the wallet shortfall
+// (with the whole balance or setting Omega aside) in ratting hours and days at the current pace
 import Base from '../layouts/Base.astro';
 import ActionNotice from '../components/ActionNotice.astro';
 import Icon from '../components/Icon.astro';
@@ -50,7 +50,7 @@ const pilotOf = new Map(view?.pilots.map((p) => [p.id, p]));
 const noScope = view?.pilots.filter((p) => !p.hasScope) ?? [];
 const noData = view?.pilots.filter((p) => p.hasScope && !p.skillsAt) ?? [];
 
-// Resultado de la última acción (vuelta de /doctrinas/accion)
+// Result of the last action (return from /doctrinas/accion)
 const okKind = q.get('ok');
 const okText =
   okKind === 'doctrine'
@@ -68,11 +68,11 @@ const ignored = q.get('ignored');
 const errorCode = q.get('error');
 const errorText = errorCode ? m.doctrineError(errorCode, q.get('detail')) : null;
 const extraText = ignored ? m.fitIgnored(ignored) : null;
-// Dónde va el aviso: junto a lo que se tocó (fondos, una doctrina o un fit); sin sitio, arriba
+// Where the notice goes: next to what was touched (funds, a doctrine or a fit); with no place, at the top
 const at = q.get('at');
 const noticeAt = (key: string) => !!at && at === key && (!!okText || !!errorText);
 
-// En cada fit, primero quien puede volarlo; luego quien solo necesita Omega y quien está más cerca
+// In each fit, first whoever can fly it; then whoever only needs Omega and whoever is closest
 const RANK: Record<FitPilotStatus, number> = { ok: 0, omega: 1, missing: 2, noData: 3, noScope: 4 };
 const sorted = (fit: DoctrineFit) =>
   [...fit.pilots].sort(
@@ -82,7 +82,7 @@ const sorted = (fit: DoctrineFit) =>
       (pilotOf.get(a.characterId)?.name ?? '').localeCompare(pilotOf.get(b.characterId)?.name ?? ''),
   );
 const fitLabel = (f: DoctrineFit) => (f.ship ? `${f.ship} · ${f.name}` : f.name);
-// Lo que tiene de un plan, en SP (el avance real: una skill de rango 10 pesa más que una de rango 1)
+// How much of a plan they have, in SP (real progress: a rank 10 skill weighs more than a rank 1)
 const progress = (e: SkillEvaluation) => (e.targetSp ? Math.min(1, (e.haveSp ?? 0) / e.targetSp) : e.missing.length ? 0 : 1);
 const skillLine = (s: MissingSkill) =>
   s.omegaOnly ? m.skillOmegaOnly : `${s.active ? ROMAN[s.active] : m.skillUntrained} → ${ROMAN[s.need]} · ${time(s.minutes)}`;
@@ -103,7 +103,7 @@ const STATUS_ICON: Record<FitPilotStatus, 'check' | 'clock' | 'alert' | 'info'> 
   noScope: 'alert',
   noData: 'info',
 };
-// Dinero y presupuesto
+// Money and budget
 const money = (v: number) => isk(v, { lang });
 const costOr = (v: number | null) => (v === null ? m.noPriceShort : money(v));
 const injText = (i: InjectorPlan) => m.injectors(i.large, i.small);
@@ -119,10 +119,10 @@ const shortText = (s: Shortfall) =>
         .join(' · ');
 const funds = view?.funds;
 const allFits = view?.doctrines.flatMap((d) => d.fits) ?? [];
-// El precio más viejo de los que se usan: la frescura de toda la página
+// The oldest of the prices used: the freshness of the whole page
 const pricedAt = allFits.map((f) => f.cost.pricedAt).filter((d): d is string => !!d).sort()[0] ?? null;
-// «Para volarlo ya» en cuatro iconos: skills, clon (Ω/α), ISK del wallet e inyectores. Cada uno con su estado
-// (good / part / warn / info / off), una etiqueta corta visible y la frase completa para lectores y el title
+// «Para volarlo ya» (Fly it now) as four icons: skills, clone (Ω/α), wallet ISK and injectors. Each with its state
+// (good / part / warn / info / off), a short visible label and the full sentence for screen readers and the title
 type ChipState = 'good' | 'part' | 'warn' | 'info' | 'off';
 type Chip = { key: string; state: ChipState; icon?: 'check' | 'clock' | 'info' | 'wallet' | 'syringe' | 'alert'; glyph?: string; label: string; full: string };
 type FitRow = DoctrineFit['pilots'][number];
@@ -153,7 +153,7 @@ const chipsFor = (f: DoctrineFit, row: FitRow): Chip[] => {
                 label: time(row.fly?.minutes ?? null),
                 full: m.chipSkillsMissingFull(trainable.length, time(row.fly?.minutes ?? null)),
               };
-  // Clon: lo que pide el fit frente a lo que es el piloto
+  // Clone: what the fit needs versus what the pilot is
   const because = f.omegaSkills.length ? ` · ${m.omegaBecause(f.omegaSkills.slice(0, 3).join(', '))}` : '';
   const clone: Chip =
     f.clone === 'omega'
@@ -165,7 +165,7 @@ const chipsFor = (f: DoctrineFit, row: FitRow): Chip[] => {
         : f.clone === 'alphaUnsure'
           ? { key: 'clone', state: 'off', glyph: 'α', label: m.chipCloneAlphaUnsure, full: m.cloneAlphaUnsure }
           : { key: 'clone', state: 'off', glyph: '?', label: m.chipCloneUnknown, full: m.cloneUnknown };
-  // ISK: sin skills que mirar, el del fit solo
+  // ISK: with no skills to check, just the fit's
   const b = row.budget ?? (unsynced ? f.budget : null);
   const isk: Chip = !b
     ? { key: 'isk', state: 'off', icon: 'wallet', label: m.chipIskUnknown, full: m.budgetNoInjectorPrice }
@@ -180,7 +180,7 @@ const chipsFor = (f: DoctrineFit, row: FitRow): Chip[] => {
             full: m.chipIskPartFull(b.withOmega ? money(b.withOmega.short) + farmText(b.withOmega) : m.noOmegaPrice),
           }
         : { key: 'isk', state: 'warn', icon: 'wallet', label: m.chipIskShort(money(b.wallet.short)), full: m.chipIskShortFull(money(b.wallet.short), farmText(b.wallet)) };
-  // Inyectores para volarlo ya
+  // Injectors to fly it now
   const inj = row.injectors?.fly;
   const injectors: Chip = unsynced
     ? { key: 'inj', state: 'off', icon: 'syringe', label: '—', full: row.status === 'noScope' ? m.statusNoScope : m.statusNoData }
@@ -189,7 +189,7 @@ const chipsFor = (f: DoctrineFit, row: FitRow): Chip[] => {
       : { key: 'inj', state: 'info', icon: 'syringe', label: m.chipInj(inj.large, inj.small), full: m.chipInjFull(injText(inj), costOr(inj.cost)) };
   return [skills, clone, isk, injectors];
 };
-// Coste del fit por partes, para la barra de colores (misma paleta categórica que el resto: casco, módulos, drones, carga)
+// Fit cost by part, for the color bar (same categorical palette as the rest: hull, modules, drones, cargo)
 const costShares = (f: DoctrineFit) =>
   (
     [
@@ -248,7 +248,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     )
   }
   {
-    /* Quién no entra en las cuentas y por qué: la acción está en Pilotos */
+    /* Who isn't included in the math and why: the action is in Pilotos */
     (noScope.length > 0 || noData.length > 0) && (
       <div class="coverage">
         {noScope.length > 0 && (
@@ -270,7 +270,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   {view && view.doctrines.length === 0 && <p class="empty-state">{m.doctrinesEmpty}</p>}
 
   {
-    /* Con qué se paga: lo mismo para todos los fits (el saldo de todos tus pilotos, el Omega y tus ritmos) */
+    /* What pays for it: the same for all fits (the balance of all your pilots, Omega and your pace) */
     funds && allFits.length > 0 && (
       <section class="funds" id="fondos" aria-labelledby="funds-title">
         <h2 id="funds-title" class="sr-only">{m.fundsTitle}</h2>
@@ -315,7 +315,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
             </button>
           </form>
         </div>
-        {/* Qué dice cada icono de «Para volarlo ya» */}
+        {/* What each «Para volarlo ya» icon means */}
         <p class="legend">
           <span class="legend-title">{m.legendTitle}</span>
           <span><Icon name="check" /> {m.legendSkills}</span>
@@ -349,7 +349,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
             </div>
           )}
 
-          {/* Quién vuela la doctrina: cuántos de sus fits puede volar cada piloto (con skills sincronizadas) */}
+          {/* Who flies the doctrine: how many of its fits each pilot can fly (with synced skills) */}
           {d.fits.length > 0 && withData.length > 0 && (
             <div class="who-flies">
               <span class="who-label">{m.doctrineWho}</span>
@@ -379,7 +379,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                     <span class="fit-name">{f.name}</span>
                   </h3>
                   <p class="fit-meta">
-                    {/* Colores = las partes del coste: módulos (ranuras), drones y carga */}
+                    {/* Colors = the parts of the cost: modules (slots), drones and cargo */}
                     {[
                       [f.slots.high, m.slotHigh, 'fitted'],
                       [f.slots.mid, m.slotMid, 'fitted'],
@@ -514,7 +514,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                                 <span class="none">—</span>
                               ) : (
                                 <>
-                                  {/* En móvil no hay cabecera de columna: la barra sola no decía de qué era */}
+                                  {/* On mobile there's no column header: the bar alone didn't say what it was */}
                                   <span class="cell-label" aria-hidden="true">{m.colPlan}</span>
                                   <span class="plan-pct">
                                     <span class="bar" aria-hidden="true">
@@ -628,8 +628,8 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
 </Base>
 
 <script>
-  // Borrar pide confirmación (data-confirm). Las acciones que llaman a ESI (data-pending) muestran que están
-  // trabajando: botón ocupado y una nota, hasta que vuelve la página con el resultado junto a lo que se tocó
+  // Deleting asks for confirmation (data-confirm). Actions that call ESI (data-pending) show they are
+  // working: busy button and a note, until the page comes back with the result next to what was touched
   document.addEventListener('submit', (e) => {
     const form = e.target as HTMLFormElement;
     const msg = form.dataset.confirm;
@@ -637,7 +637,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
       e.preventDefault();
       return;
     }
-    // El fit pegado se guarda por si vuelve con un error (la página se recarga y el textarea se vaciaría)
+    // The pasted fit is saved in case it comes back with an error (the page reloads and the textarea would be emptied)
     const draft = form.dataset.draft;
     const area = form.querySelector('textarea');
     try {
@@ -646,7 +646,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     const pending = form.dataset.pending;
     if (!pending) return;
     const button = form.querySelector<HTMLButtonElement>('button[type=submit]');
-    // Después del envío: deshabilitarlo antes cancelaría el propio envío en algunos navegadores
+    // After submitting: disabling it earlier would cancel the submission itself in some browsers
     setTimeout(() => {
       if (button) {
         button.disabled = true;
@@ -662,7 +662,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
       note.textContent = pending;
     });
   });
-  // Al volver atrás, el navegador restaura la página tal cual: sin botones ocupados
+  // On going back, the browser restores the page as it was: without busy buttons
   window.addEventListener('pageshow', () => {
     document.querySelectorAll<HTMLButtonElement>('button[aria-busy=true]').forEach((b) => {
       b.disabled = false;
@@ -670,7 +670,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     });
     document.querySelectorAll('.pending-note').forEach((n) => n.remove());
   });
-  // Vuelta con error: se recupera el fit pegado; con éxito, se olvida
+  // Returned with an error: the pasted fit is restored; on success, it's forgotten
   const params = new URLSearchParams(location.search);
   const at = params.get('at') ?? '';
   try {
@@ -682,8 +682,8 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
       for (const k of Object.keys(sessionStorage)) if (k.startsWith('eft-')) sessionStorage.removeItem(k);
     }
   } catch {}
-  // El aviso del resultado recibe el foco: el lector de pantalla lo anuncia y queda a la vista. Tras la carga: el
-  // salto al ancla (#fit-3) le quitaba el foco si se ponía antes
+  // The result notice gets focus: the screen reader announces it and it stays in view. After load: the
+  // jump to the anchor (#fit-3) took the focus away if it was set earlier
   const focusNotice = () => setTimeout(() => document.querySelector<HTMLElement>('.action-notice')?.focus({ preventScroll: !!location.hash }));
   if (document.readyState === 'complete') focusNotice();
   else window.addEventListener('load', focusNotice, { once: true });
@@ -923,7 +923,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     color: var(--text-muted);
     text-align: left;
   }
-  /* Texto, no cifras: sin la mono, las mayúsculas ni el nowrap globales de las tablas */
+  /* Text, not figures: without the tables' global mono, uppercase or nowrap */
   .fit-pilots th[scope='row'],
   .fit-pilots td {
     padding: 10px 12px 10px 0;
@@ -970,7 +970,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     gap: 3px;
     margin: 6px 0 0;
   }
-  /* «Con el wallet: lo tienes» en una línea; si no cabe, la cifra baja */
+  /* «Con el wallet: lo tienes» on one line; if it doesn't fit, the figure wraps below */
   .scenarios div {
     display: flex;
     flex-wrap: wrap;
@@ -990,7 +990,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     color: var(--text-secondary);
   }
 
-  /* Con qué se paga: una franja de datos compartida por todos los fits */
+  /* What pays for it: a data strip shared by all fits */
   .funds {
     display: grid;
     gap: 10px;
@@ -1189,10 +1189,10 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     margin-top: 4px;
   }
 
-  /* ───── Color (entrega 3) ─────
-     Partes del coste con la paleta categórica de las tortas (--cat-6 casco, --cat-1 módulos, --cat-3 drones,
-     --cat-4 carga): las mismas en los chips de ranuras, el desglose y la barra. Estados de los iconos con los tokens:
-     verde = listo, ámbar = falta o bloquea, cian = se puede resolver (entrenar, inyectar), gris = sin dato */
+  /* ───── Color (delivery 3) ─────
+     Cost parts with the donuts' categorical palette (--cat-6 hull, --cat-1 modules, --cat-3 drones,
+     --cat-4 cargo): the same in the slot chips, the breakdown and the bar. Icon states with the tokens:
+     green = ready, amber = missing or blocking, cyan = can be resolved (train, inject), gray = no data */
   .doctrine,
   .funds {
     --part-hull: #9085e9;
@@ -1267,7 +1267,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     background: var(--dot);
   }
 
-  /* Estado de la fila: un punto de color junto al nombre (verde puede, ámbar necesita Omega, cian entrenando) */
+  /* Row state: a colored dot next to the name (green can, amber needs Omega, cyan training) */
   .pilot-name::before {
     content: '';
     display: inline-block;
@@ -1297,7 +1297,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     background: var(--positive);
   }
 
-  /* Quién la vuela: todos los fits en verde, algunos en cian, ninguno en gris */
+  /* Who flies it: all fits in green, some in cyan, none in gray */
   .who-flies li.all {
     border-color: #2f5a4b;
     background: #13261f;
@@ -1312,7 +1312,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     color: var(--cyan);
   }
 
-  /* Los cuatro iconos de «Para volarlo ya» */
+  /* The four «Para volarlo ya» icons */
   .checks {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1391,7 +1391,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     font-size: 13px;
   }
 
-  /* Leyenda de los iconos, al pie de la franja de fondos */
+  /* Icon legend, at the foot of the funds strip */
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -1420,7 +1420,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     color: var(--cyan-dim);
   }
 
-  /* Aviso del resultado y estado de carga */
+  /* Result notice and loading state */
   .panel-notice {
     padding: 0 22px;
   }
@@ -1464,7 +1464,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     .add-fit {
       padding-inline: 16px;
     }
-    /* Una tarjeta por piloto: nombre, volarlo y plan apilados */
+    /* One card per pilot: name, fly it and plan stacked */
     .fit-pilots thead {
       position: absolute;
       width: 1px;

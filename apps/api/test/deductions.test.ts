@@ -1,5 +1,5 @@
-// Descuentos: impuesto de corporación (exacto, del journal) y penalización de incursión (estimada con los tramos en
-// que se vio infestado cada sistema; ESI solo dice las incursiones activas)
+// Deductions: corporation tax (exact, from the journal) and incursion penalty (estimated from the spans during
+// which each system was seen infested; ESI only reports active incursions)
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,13 +19,13 @@ const { eq, inArray } = await import('drizzle-orm');
 runMigrations();
 
 const PILOT = 9301;
-const NPC_CORP = 1_000_125; // corporación NPC
+const NPC_CORP = 1_000_125; // NPC corporation
 const PLAYER_CORP = 98_000_001;
 const INFESTED = 30_002_001;
 const CLEAN = 30_002_002;
 const CONSTELLATION = 20_000_301;
 const H = 3_600_000;
-const now = Math.floor(Date.now() / 1000) * 1000; // las fechas se guardan en segundos
+const now = Math.floor(Date.now() / 1000) * 1000; // dates are stored in seconds
 
 async function clean() {
   await db.delete(s.walletJournal).where(eq(s.walletJournal.characterId, PILOT));
@@ -51,13 +51,13 @@ afterAll(clean);
 test('un sistema infestado se alarga mientras se vea y abre otro tramo tras 24 h sin verlo', async () => {
   const t0 = new Date(now - 60 * H);
   expect(await refreshIncursions(incursion([INFESTED]), t0)).toBe(1);
-  // En el mismo minuto (otro piloto de la misma ronda) no se vuelve a preguntar
+  // Within the same minute (another pilot in the same round) it isn't asked again
   expect(await refreshIncursions(incursion([INFESTED]), new Date(t0.getTime() + 1000))).toBe(0);
   await refreshIncursions(incursion([INFESTED]), new Date(t0.getTime() + 5 * H));
   let spells = await db.select().from(s.incursionSystems);
   expect(spells).toHaveLength(1);
   expect(spells[0].lastSeen.getTime() - spells[0].firstSeen.getTime()).toBe(5 * H);
-  // Sin incursión: no se apunta nada, pero sí que se miró
+  // No incursion: nothing is recorded, but the check is
   await refreshIncursions(incursion([]), new Date(t0.getTime() + 10 * H));
   await refreshIncursions(incursion([INFESTED]), new Date(t0.getTime() + 40 * H));
   spells = await db.select().from(s.incursionSystems);
@@ -83,16 +83,16 @@ test('impuesto exacto por corporación y penalización solo mientras se vio la i
     contextIdType: system ? 'system_id' : null,
   });
   await db.insert(s.walletJournal).values([
-    // Dentro del tramo: cobra 9 M de 20 M (−50 %) tras 10 % de impuesto → se perdieron 9 M
+    // Inside the span: collects 9 M of 20 M (−50 %) after 10 % tax → 9 M were lost
     row(t0 + 2 * H, 'bounty_prizes', 9_000_000, 1_000_000, NPC_CORP, INFESTED),
-    // Antes de verla: no se sabe, no cuenta
+    // Before it was seen: unknown, doesn't count
     row(t0 - 2 * H, 'bounty_prizes', 18_000_000, 2_000_000, NPC_CORP, INFESTED),
-    // Sistema sin incursión
+    // System without incursion
     row(t0 + 3 * H, 'bounty_prizes', 18_000_000, 2_000_000, NPC_CORP, CLEAN),
-    // ESS y misión: impuesto a la corporación del jugador
+    // ESS and mission: tax to the player's corporation
     row(t0 + 4 * H, 'ess_escrow_transfer', 9_500_000, 500_000, PLAYER_CORP),
     row(t0 + 5 * H, 'agent_mission_reward', 4_500_000, 500_000, PLAYER_CORP),
-    // Guardado antes de leer el impuesto
+    // Stored before the tax was read
     row(t0 + 6 * H, 'bounty_prizes', 1_000_000, null, null, CLEAN),
   ]);
 
@@ -107,7 +107,7 @@ test('impuesto exacto por corporación y penalización solo mientras se vio la i
   expect(d.bySystem.map((x) => [x.systemId, x.ticks, x.lost])).toEqual([[INFESTED, 1, 9_000_000]]);
   expect(d.incursion).toBe(9_000_000);
   expect(d.incursionsSince).toBe(new Date(t0).toISOString());
-  // Sin descuentos: 46 M + 5,5 M de impuesto del ratting (la misión no) + 9 M de incursión en 2 h
+  // Without deductions: 46 M + 5.5 M of ratting tax (not the mission) + 9 M of incursion in 2 h
   expect(d.iskPerHour).toBe(23_000_000);
   expect(d.grossPerHour).toBe(30_250_000);
 });

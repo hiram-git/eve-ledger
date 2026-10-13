@@ -7,13 +7,13 @@ import { pricesUpdatedAt } from './prices';
 const itemName = alias(names, 'item_name');
 const locationName = alias(names, 'location_name');
 
-// Precio unitario: medio de ESI (o el ajustado si no hay medio). Las copias de blueprint
-// no se venden en el mercado y su average_price es el del original: valen 0
+// Unit price: ESI's average (or the adjusted one if there is no average). Blueprint copies
+// aren't sold on the market and their average_price is the original's: they are worth 0
 export const unitPrice = sql<number>`(case when ${a.isBlueprintCopy} then 0 else coalesce(${p.averagePrice}, ${p.adjustedPrice}, 0) end)`;
 const value = sql<number>`coalesce(sum(${a.quantity} * ${unitPrice}), 0)`;
 const priced = eq(p.typeId, a.typeId);
 
-// characterId opcional: solo el inventario de ese piloto (byCharacter siempre incluye a todos)
+// Optional characterId: only that pilot's inventory (byCharacter always includes everyone)
 export async function getInventory({ locations = 10, items = 15, characterId }: { locations?: number; items?: number; characterId?: number } = {}) {
   const pilot = characterId ? eq(a.characterId, characterId) : undefined;
   const [totals] = await db
@@ -66,7 +66,7 @@ export async function getInventory({ locations = 10, items = 15, characterId }: 
     .orderBy(desc(value))
     .limit(items);
 
-  // Las ubicaciones más valiosas y el resto agrupado
+  // The most valuable locations and the rest grouped
   const shown = byLocation.slice(0, locations);
   const rest = byLocation.slice(locations);
   if (rest.length) {
