@@ -1,13 +1,13 @@
-// Tipos del ESI simulado para la demostración: nombre, grupo, categoría y, en las skills, rango, atributos y requisitos.
-// Son los del juego (IDs reales), pero los atributos y los precios son aproximados: solo sirven para las capturas.
-// [nombre, grupo, categoría, rango, primario, secundario, [skill, nivel]…, soloOmega]
+// Types of the mocked ESI for the demo: name, group, category and, for skills, rank, attributes and requirements.
+// They are the game's (real IDs), but attributes and prices are approximate: only good for the screenshots.
+// [name, group, category, rank, primary, secondary, [skill, level]…, omegaOnly]
 export type Fake = [string, number, number, number | null, number | null, number | null, [number, number][], boolean?];
 export const TYPES: Record<number, Fake> = {
-  // Naves
+  // Ships
   587: ['Rifter', 25, 6, null, null, null, [[3329, 1]]],
   24702: ['Hurricane', 419, 6, null, null, null, [[33095, 1]]],
   11978: ['Scimitar', 832, 6, null, null, null, [[12096, 1], [3333, 5]]],
-  // Módulos, munición y drones
+  // Modules, ammo and drones
   2048: ['Damage Control II', 60, 7, null, null, null, [[3394, 3]]],
   519: ['Gyrostabilizer II', 59, 7, null, null, null, [[3318, 1]]],
   2913: ['425mm AutoCannon II', 55, 7, null, null, null, [[3305, 5], [12205, 1]]],

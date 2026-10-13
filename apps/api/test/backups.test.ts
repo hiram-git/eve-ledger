@@ -1,5 +1,5 @@
-// Copias de seguridad: se crean con VACUUM INTO, se recortan por tipo, se comprueban antes de restaurar y
-// restaurar cambia el contenido de la base abierta sin reiniciar (también desde una copia de una versión anterior)
+// Backups: created with VACUUM INTO, pruned by kind, checked before restoring, and restoring
+// changes the contents of the open database without restarting (also from a backup made by an older version)
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -69,7 +69,7 @@ test('cada tipo se recorta por separado: 10 manuales, la diaria no la borra', as
 });
 
 test('la diaria se hace una vez y no se repite hasta pasadas 20 h', async () => {
-  // (la base de las pruebas es compartida: otros archivos ya dejan pilotos, así que siempre hay algo que guardar)
+  // (the test database is shared: other files already leave pilots in it, so there is always something to back up)
   await pilot(X, 1);
   expect(backups.maybeAutoBackup()?.kind).toBe('auto');
   expect(backups.maybeAutoBackup()).toBeNull();
@@ -87,7 +87,7 @@ test('solo restaura bases de EVE Ledger sanas y de esta versión o anteriores', 
   o.close();
   expect(() => backups.inspectBackup(other)).toThrow(expect.objectContaining({ code: 'not_ledger' }));
 
-  // Una copia hecha por una versión más nueva (con una migración que esta no conoce)
+  // A backup made by a newer version (with a migration this one doesn't know)
   await pilot(X, 1);
   const b = backups.createBackup('manual');
   const newer = join(tmp, 'newer.db');
@@ -97,7 +97,7 @@ test('solo restaura bases de EVE Ledger sanas y de esta versión o anteriores', 
   n.close();
   expect(() => backups.inspectBackup(newer)).toThrow(expect.objectContaining({ code: 'newer' }));
 
-  // Nombres que no son de copias (rutas, «..»): no se sirven
+  // Names that aren't backups (paths, «..»): not served
   expect(() => backups.backupPath('../ledger.db')).toThrow(expect.objectContaining({ code: 'not_found' }));
   expect(() => backups.backupPath('ledger-20260101-000000-manual.db')).toThrow(expect.objectContaining({ code: 'not_found' }));
 });
@@ -105,21 +105,21 @@ test('solo restaura bases de EVE Ledger sanas y de esta versión o anteriores', 
 test('restaurar vuelve a la copia, guarda antes lo que había y sigue funcionando sin reiniciar', async () => {
   await pilot(X, 2);
   const b = backups.createBackup('manual');
-  // Después de la copia: X pierde sus movimientos y aparece Y
+  // After the backup: X loses its entries and Y appears
   await db.delete(s.walletJournal).where(eq(s.walletJournal.characterId, X));
   await pilot(Y, 4);
 
   const { info, safety } = backups.restoreBackup(b.name);
   expect(info.entries).toBeGreaterThanOrEqual(2);
-  // El `db` de los servicios ya lee la base restaurada
+  // The services' `db` already reads the restored database
   expect((await db.select().from(s.walletJournal).where(eq(s.walletJournal.characterId, X))).length).toBe(2);
   expect(await db.query.characters.findFirst({ where: eq(s.characters.id, Y) })).toBeUndefined();
-  // Lo de antes de restaurar quedó en una copia «restore»
+  // What was there before restoring was kept in a «restore» backup
   expect(safety?.kind).toBe('restore');
   const saved = new Database(join(backups.BACKUP_DIR, safety!.name), { readonly: true });
   expect((saved.query(`select count(*) as n from wallet_journal where character_id = ${Y}`).get() as { n: number }).n).toBe(4);
   saved.close();
-  // Y se puede seguir escribiendo
+  // And writing still works
   await db.insert(s.walletJournal).values({ journalId: 1, characterId: X, date: new Date(), refType: 'bounty_prizes', amount: 1, balance: 1 });
 });
 
@@ -130,7 +130,7 @@ test('restaurar un archivo subido y negarse mientras otra restauración está en
   await pilot(Y, 1);
   backups.restoreUpload(bytes);
   expect(await db.query.characters.findFirst({ where: eq(s.characters.id, Y) })).toBeUndefined();
-  // El archivo subido no se queda en la carpeta
+  // The uploaded file doesn't stay in the folder
   expect(backups.listBackups().every((x) => !x.name.startsWith('upload'))).toBe(true);
   expect(existsSync(backups.BACKUP_DIR)).toBe(true);
 
@@ -146,8 +146,8 @@ test('restaurar un archivo subido y negarse mientras otra restauración está en
 test('una copia de una versión anterior (con menos migraciones) se restaura y queda al día', async () => {
   await pilot(X, 2);
   const b = backups.createBackup('manual');
-  // La copia «antigua»: sin la última migración. Se deshace lo que crea su SQL (tablas, columnas, índices) y se
-  // borra su fila (por created_at: Drizzle deja el id de __drizzle_migrations a NULL)
+  // The «old» backup: without the latest migration. What its SQL creates (tables, columns, indexes) is undone and
+  // its row is deleted (by created_at: Drizzle leaves the __drizzle_migrations id as NULL)
   const old = join(tmp, 'old.db');
   copyFileSync(join(backups.BACKUP_DIR, b.name), old);
   const journal = JSON.parse(readFileSync(join(Bun.env.MIGRATIONS_DIR!, 'meta', '_journal.json'), 'utf8'));
@@ -167,7 +167,7 @@ test('una copia de una versión anterior (con menos migraciones) se restaura y q
   backups.restoreUpload(new Uint8Array(readFileSync(old)));
   expect((await db.select().from(s.walletJournal).where(eq(s.walletJournal.characterId, X))).length).toBe(2);
   expect(await db.query.characters.findFirst({ where: eq(s.characters.id, Y) })).toBeUndefined();
-  // La base sigue con el esquema de esta versión y con todas las migraciones registradas
+  // The database keeps this version's schema with all migrations recorded
   expect(appliedMigrations()).toBe(knownMigrations());
   await db.select({ o: s.typeDogma.omegaOnly }).from(s.typeDogma).limit(1);
   await db.select().from(s.structureLookups).limit(1);

@@ -1,5 +1,5 @@
-// ESI simulado para la demostración (bun --preload): la API resuelve los fits, las skills y los precios de Jita
-// con los tipos de types.ts, sin red. Todo lo demás de ESI responde 503 (la demo no sincroniza)
+// Mocked ESI for the demo (bun --preload): the API resolves fits, skills and Jita prices
+// with the types in types.ts, without network. Everything else in ESI answers 503 (the demo doesn't sync)
 import { mock } from 'bun:test';
 import { PRICE, TYPES } from './types';
 

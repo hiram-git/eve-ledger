@@ -1,6 +1,6 @@
 ---
-// Aviso legal: qué es EVE Ledger frente a CCP (herramienta de terceros bajo su acuerdo de licencia para
-// desarrolladores), el aviso de propiedad de CCP con su texto original y la licencia. Enlazado desde el pie
+// Legal notice: what EVE Ledger is relative to CCP (a third-party tool under its developer license
+// agreement), CCP's ownership notice in its original text, and the license. Linked from the footer
 import { APP_REPO } from 'astro:env/server';
 import Base from '../layouts/Base.astro';
 import { getPilots, getSyncStatus, type Pilot, type SyncStatus } from '../lib/api';
@@ -15,12 +15,12 @@ let pilots: Pilot[] = [];
 try {
   [status, pilots] = await Promise.all([getSyncStatus(), getPilots()]);
 } catch {
-  // Sin API, el aviso se lee igual
+  // Without the API, the notice still reads fine
 }
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
 
-// El aviso de propiedad de CCP, en su texto original (no se traduce)
+// CCP's ownership notice, in its original text (not translated)
 const CCP_NOTICE =
   'EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights are reserved worldwide. All other trademarks are the property of their respective owners. EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. CCP hf. has granted permission to EVE Ledger to use EVE Online and all associated logos and designs for promotional and information purposes on its website but does not endorse, and is not in any way affiliated with, EVE Ledger. CCP is in no way responsible for the content on or functioning of this application, nor can it be liable for any damage arising from the use of this application.';
 ---

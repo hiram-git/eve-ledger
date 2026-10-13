@@ -1,5 +1,5 @@
-// Cada página, en los tres idiomas y a 390 y 1320 px: responde, no lanza errores, tiene un solo h1, no deja
-// «undefined»/«NaN» a la vista ni se desborda en horizontal (lo que más veces se rompió al cambiar la interfaz)
+// Every page, in the three languages and at 390 and 1320 px: responds, throws no errors, has a single h1, shows no
+// «undefined»/«NaN» and doesn't overflow horizontally (what broke most often when the UI changed)
 import { expect, test, type Page } from '@playwright/test';
 import { PILOTS, WEB_URL } from './fixtures';
 
@@ -17,7 +17,7 @@ const PAGES = [
 const LANGS = ['es', 'en', 'de'] as const;
 const WIDTHS = [390, 1320];
 
-// Errores de la página. Las imágenes de CCP (retratos, iconos) no cargan sin red: no cuentan
+// Page errors. CCP images (portraits, icons) don't load without network: they don't count
 function collectErrors(page: Page) {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

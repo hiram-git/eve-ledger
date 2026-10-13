@@ -1,9 +1,9 @@
-// Carga un export de export-debug.ts en una base NUEVA para reproducir el ledger fuera de tu máquina.
-// No toca data/ledger.db: escribe <destino>/data/ledger.db con las migraciones al día.
-// Los pilotos importados no tienen tokens (el export no los lleva): la API los lee, pero no puede sincronizar.
+// Loads an export from export-debug.ts into a NEW database to reproduce the ledger off your machine.
+// Doesn't touch data/ledger.db: writes <destination>/data/ledger.db with migrations up to date.
+// Imported pilots have no tokens (the export doesn't include them): the API reads them but can't sync.
 //
-// Uso (desde apps/api):  bun run import:debug <export.json> <directorio destino>
-// Después:  cd <destino> && SYNC_INTERVAL_MIN=0 bun <ruta a apps/api>/src/index.ts
+// Usage (from apps/api):  bun run import:debug <export.json> <destination directory>
+// Then:  cd <destination> && SYNC_INTERVAL_MIN=0 bun <path to apps/api>/src/index.ts
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
@@ -30,14 +30,14 @@ mkdirSync(join(resolve(dest), 'data'), { recursive: true });
 const migrations = resolve(import.meta.dir, '..', 'drizzle');
 const sqlite = new Database(dbPath, { create: true });
 migrate(drizzle(sqlite), { migrationsFolder: migrations });
-// La API aplica sus migraciones desde ./drizzle (relativo a donde arranca): un enlace a las del repo
+// The API applies its migrations from ./drizzle (relative to where it starts): a link to the repo's
 if (!existsSync(join(resolve(dest), 'drizzle'))) symlinkSync(migrations, join(resolve(dest), 'drizzle'));
 
-// Los pilotos necesitan un refresh token (NOT NULL): marcador, nunca se descifra
+// Pilots need a refresh token (NOT NULL): a placeholder, never decrypted
 const tables: Record<string, Record<string, unknown>[]> = data.tables;
 tables.characters = tables.characters.map((c) => ({ ...c, owner_hash: 'importado', refresh_token: 'importado' }));
 
-// Orden: characters antes que lo que la referencia
+// Order: characters before whatever references it
 const ORDER = [
   'characters',
   'names',
