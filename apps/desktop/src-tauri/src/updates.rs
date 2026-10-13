@@ -1,9 +1,9 @@
-//! Actualizaciones automáticas (tauri-plugin-updater) desde las releases de GitHub (`latest.json`, ver tauri.conf.json).
-//! Solo si el instalador se compiló con la clave pública de firma (`plugins.updater.pubkey`, que pone el workflow
-//! desde la variable `EVE_LEDGER_UPDATER_PUBKEY`, junto con `endpoints`: las releases del repositorio que compila): cada versión va firmada con la clave privada, que solo tiene
-//! GitHub Actions, y el plugin rechaza lo que no esté firmado con ella. Una compilación local no se actualiza sola.
-//! Al arrancar y cada 6 h busca una versión nueva y la descarga en segundo plano; luego pregunta si reiniciar ahora
-//! o instalarla al cerrar la app. Los datos y `ledger.env` están en las carpetas del usuario: la actualización no los toca.
+//! Automatic updates (tauri-plugin-updater) from the GitHub releases (`latest.json`, see tauri.conf.json).
+//! Only if the installer was built with the signing public key (`plugins.updater.pubkey`, which the workflow sets
+//! from the `EVE_LEDGER_UPDATER_PUBKEY` variable, together with `endpoints`: the releases of the repository that builds it): each version is signed with the private key, which only
+//! GitHub Actions has, and the plugin rejects anything not signed with it. A local build does not update itself.
+//! At startup and every 6 h it looks for a new version and downloads it in the background; then it asks whether to restart now
+//! or install it when the app closes. The data and `ledger.env` are in the user's folders: the update does not touch them.
 
 use crate::services::{self, Services};
 use std::fs::OpenOptions;
@@ -26,11 +26,11 @@ pub fn enabled(app: &AppHandle) -> bool {
         .is_some_and(|k| !k.trim().is_empty())
 }
 
-/// Una versión ya descargada y verificada, a la espera de instalarse
+/// A version already downloaded and verified, waiting to be installed
 #[derive(Default)]
 pub struct Pending(Mutex<Option<(Update, Vec<u8>)>>);
 
-/// Comprobación periódica en segundo plano (no hace nada si esta copia no tiene la clave pública)
+/// Periodic background check (does nothing if this copy does not have the public key)
 pub fn start(app: &AppHandle) {
     if !enabled(app) {
         return;
@@ -44,10 +44,10 @@ pub fn start(app: &AppHandle) {
     });
 }
 
-/// Busca, descarga y pregunta. `manual` (menú «Buscar actualizaciones…») también avisa si no hay nada nuevo o falla
+/// Looks, downloads and asks. `manual` (menu «Buscar actualizaciones…») also notifies if there is nothing new or it fails
 pub async fn check(app: &AppHandle, manual: bool) -> Result<(), String> {
     let current = app.package_info().version.to_string();
-    // Ya hay una descargada: solo se vuelve a preguntar si lo pide el usuario
+    // One is already downloaded: only ask again if the user requests it
     let waiting = app.state::<Pending>().0.lock().unwrap().as_ref().map(|(u, _)| u.version.clone());
     if let Some(version) = waiting {
         if manual {
@@ -105,8 +105,8 @@ fn message(app: &AppHandle, body: &str) {
     app.dialog().message(body).title(text("title")).kind(MessageDialogKind::Info).show(|_| {});
 }
 
-/// Instala la versión descargada, si la hay. `restart`: ahora y vuelve a abrir la app; si no, al cerrarla.
-/// Antes se paran la API y la web (en Windows el instalador cierra el proceso sin pasar por RunEvent::Exit)
+/// Installs the downloaded version, if any. `restart`: now, and reopens the app; otherwise, when it closes.
+/// The API and the web are stopped first (on Windows the installer kills the process without going through RunEvent::Exit)
 pub fn install(app: &AppHandle, restart: bool) {
     let Some((update, bytes)) = app.state::<Pending>().0.lock().unwrap().take() else { return };
     app.state::<Services>().stop();
@@ -129,7 +129,7 @@ fn log(app: &AppHandle, line: &str) {
     }
 }
 
-/// Textos de los avisos según el idioma del sistema, como el menú
+/// Notice texts according to the system language, like the menu
 pub fn text(key: &str) -> &'static str {
     let lang = sys_locale::get_locale().unwrap_or_default().to_lowercase();
     let lang = if lang.starts_with("de") { "de" } else if lang.starts_with("en") { "en" } else { "es" };

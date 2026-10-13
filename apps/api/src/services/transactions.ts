@@ -6,7 +6,7 @@ import { characters, names, walletTransactions as tx } from '../db/schema';
 const itemName = alias(names, 'item_name');
 const locationName = alias(names, 'location_name');
 
-// Compra/venta entre mis propios personajes: en el consolidado se anula
+// Purchase/sale between my own characters: cancels out in the consolidated view
 const isInternal = sql<number>`(case when ${tx.clientId} in (select id from characters) then 1 else 0 end)`;
 
 export type TransactionFilter = {
@@ -53,8 +53,8 @@ export async function listTransactions(f: TransactionFilter) {
   }));
 }
 
-// Revisión de mercado: por ítem, lo vendido y lo comprado en el período (sin operaciones internas),
-// ordenado por ISK movido. El neto por ítem es ventas − compras, sin comisiones ni impuestos.
+// Market review: per item, what was sold and bought in the period (without internal trades),
+// sorted by ISK moved. The net per item is sales − purchases, without fees or taxes.
 export async function marketReview(from: Date, characterId?: number, limit = 15) {
   const soldIsk = sql<number>`coalesce(sum(case when ${tx.isBuy} = 0 then ${tx.quantity} * ${tx.unitPrice} end), 0)`;
   const boughtIsk = sql<number>`coalesce(sum(case when ${tx.isBuy} = 1 then ${tx.quantity} * ${tx.unitPrice} end), 0)`;

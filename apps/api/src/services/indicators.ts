@@ -9,22 +9,22 @@ import { PLEX_TYPE_ID, getQuote } from './quotes';
 import { activity, dailyNetRate, isInternal, lastBalance } from './summary';
 
 const DAY_MS = 86_400_000;
-// Desde las 00:00 EVE de hace `days - 1` días, como el resumen
+// From 00:00 EVE `days - 1` days ago, like the summary
 const periodFrom = (days: number) => {
   const now = new Date();
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return new Date(today - (days - 1) * DAY_MS);
 };
-// Saldo de los wallets: el último balance de cada piloto
+// Wallet balance: each pilot's last balance
 async function walletBalance() {
   const chars = await db.select({ id: characters.id }).from(characters);
   const balances = await Promise.all(chars.map((c) => lastBalance(c.id)));
   return balances.reduce((acc, b) => acc + (b?.balance ?? 0), 0);
 }
 
-// PLEX: con él se paga el Omega. Precio = venta más baja del mercado (se refresca en cada sync);
-// mientras no haya cotización, la media global de ESI.
-// Ritmo: neto diario de los últimos 7 días, frente al coste diario del Omega (un mes = 30 días)
+// PLEX: it pays for Omega. Price = lowest sell on the market (refreshed on each sync);
+// while there is no quote, ESI's global average.
+// Pace: daily net over the last 7 days, versus the daily cost of Omega (a month = 30 days)
 const PACE_DAYS = 7;
 const OMEGA_MONTH_DAYS = 30;
 
@@ -41,8 +41,8 @@ export async function omegaIndicator() {
   const plexPriceSource = market !== null ? ('market' as const) : average !== null ? ('average' as const) : null;
   const plexPriceUpdatedAt = market !== null ? quote!.updatedAt : average !== null ? price!.updatedAt : null;
 
-  // Saldo de los wallets de los pilotos vinculados. Del inventario solo cuenta el PLEX que ya tienes:
-  // el resto no es dinero hasta que se vende
+  // Wallet balance of the linked pilots. From the inventory only the PLEX you already have counts:
+  // the rest is not money until it is sold
   const chars = await db.select({ id: characters.id, lastSyncAt: characters.lastSyncAt }).from(characters);
   const balances = await Promise.all(chars.map((c) => lastBalance(c.id)));
   const available = balances.reduce((acc, b) => acc + (b?.balance ?? 0), 0);
@@ -51,16 +51,16 @@ export async function omegaIndicator() {
   const plexMissing = Math.max(0, plexNeeded - plexOwned);
 
   const cost = plexPrice === null ? null : plexNeeded * plexPrice;
-  // Lo que queda por pagar: los PLEX que faltan, al precio actual
+  // What is left to pay: the missing PLEX, at the current price
   const costMissing = plexPrice === null ? null : plexMissing * plexPrice;
   const missing = costMissing === null ? null : Math.max(0, costMissing - available);
   const surplus = costMissing === null ? null : Math.max(0, available - costMissing);
   const covered = cost === null ? 0 : Math.min(cost, available + Math.min(plexOwned, plexNeeded) * plexPrice!);
   const progress = cost === null || cost === 0 ? null : covered / cost;
 
-  // ¿Tus pilotos se pagan el Omega? El Omega se renueva cada mes, así que «cuánto falta» no basta:
-  // se compara lo que cuesta al día con lo que ganas al día. El ritmo se mide por piloto sobre los
-  // días con datos (uno con el sync atascado cuenta hasta su último sync; uno sin sync no cuenta)
+  // Do your pilots pay for their Omega? Omega renews every month, so "how much is missing" is not enough:
+  // we compare what it costs per day with what you earn per day. The pace is measured per pilot over the
+  // days with data (one with a stuck sync counts up to its last sync; one without a sync does not count)
   const rates = await Promise.all(chars.map((c) => dailyNetRate(c.id, c.lastSyncAt, PACE_DAYS)));
   const pace = rates.reduce((acc: number, r) => acc + (r ?? 0), 0);
   const costPerDay = cost === null ? null : cost / OMEGA_MONTH_DAYS;
@@ -87,17 +87,17 @@ export async function omegaIndicator() {
     paceDays: PACE_DAYS,
     costPerDay,
     paceShare,
-    // Saldo de cada piloto: la web dice cuánto de «available» viene de pilotos con datos viejos
+    // Each pilot's balance: the web says how much of "available" comes from pilots with stale data
     balances: chars.map((c, i) => ({ characterId: c.id, balance: balances[i]?.balance ?? null })),
   };
 }
 
-// ISK por hora de ratting. EVE no dice cuánto tiempo jugaste, pero paga las recompensas de NPC en bloques de
-// 20 minutos: cada pago `bounty_prizes` del journal es un bloque, así que bloques × 20 min ≈ tiempo ratteando
-// (por defecto, un bloque a medias cuenta entero). El ESS (`ess_escrow_transfer`) es la parte diferida de esas
-// recompensas: suma al piloto, pero no a un sistema (no lo dice). Además (decisión del usuario), lo que el rateo
-// da fuera de las recompensas: escalaciones vendidas y loot vendido al buyback (refKindOf); el tiempo sigue
-// saliendo de los bloques de recompensas (los sitios de escalación también los pagan)
+// ISK per hour of ratting. EVE does not say how long you played, but it pays NPC bounties in 20-minute
+// blocks: each `bounty_prizes` payment in the journal is one block, so blocks × 20 min ≈ time ratting
+// (by default, a partial block counts as whole). The ESS (`ess_escrow_transfer`) is the deferred part of those
+// bounties: it adds to the pilot, but not to a system (it does not say). Also (user's decision), what ratting
+// yields outside bounties: sold escalations and loot sold to the buyback (refKindOf); time still comes
+// from the bounty blocks (escalation sites pay them too)
 const TICK_MINUTES = 20;
 const BOUNTY_REFS = ['bounty_prizes', 'bounty_prize'];
 const ESS_REF = 'ess_escrow_transfer';
@@ -119,7 +119,7 @@ async function rattingRate(from: Date) {
   const ticks = bounty.length;
   const isk = rows.reduce((n, r) => n + Math.max(0, r.amount), 0);
   const hours = (ticks * TICK_MINUTES) / 60;
-  // De dónde sale el ISK: recompensas, ESS, escalaciones vendidas y loot vendido
+  // Where the ISK comes from: bounties, ESS, sold escalations and sold loot
   const part = (kinds: string[]) => rows.filter((r) => kinds.includes(r.refType)).reduce((n, r) => n + Math.max(0, r.amount), 0);
   const parts = {
     bounties: part(BOUNTY_REFS),
@@ -146,7 +146,7 @@ export async function rattingIndicator(days = 30) {
     .filter((p) => p.ticks > 0)
     .sort((a, b) => (b.iskPerHour ?? 0) - (a.iskPerHour ?? 0));
 
-  // Por sistema: solo las recompensas (el journal dice el sistema con context_id_type = system_id)
+  // Per system: bounties only (the journal says the system with context_id_type = system_id)
   const bySystemMap = new Map<number, { ticks: number; isk: number }>();
   for (const r of all.bounty) {
     if (r.contextIdType !== 'system_id' || !r.contextId) continue;
@@ -168,7 +168,7 @@ export async function rattingIndicator(days = 30) {
       return { systemId: id, name: sysById.get(id)?.name ?? nameById.get(id) ?? null, security: sysById.get(id)?.security ?? null, ticks: v.ticks, hours, isk: v.isk, iskPerHour: v.isk / hours };
     })
     .sort((a, b) => b.hours - a.hours);
-  // Para el reparto: los 6 sistemas con más horas; el resto, agrupado; y las recompensas sin sistema (el journal no lo dice)
+  // For the breakdown: the 6 systems with most hours; the rest, grouped; and bounties without a system (the journal does not say)
   const TOP = 6;
   const rest = bySystem.slice(TOP).reduce(
     (acc, s) => ({ systems: acc.systems + 1, ticks: acc.ticks + s.ticks, hours: acc.hours + s.hours, isk: acc.isk + s.isk }),
@@ -189,7 +189,7 @@ export async function rattingIndicator(days = 30) {
     isk: all.isk,
     iskPerHour: all.iskPerHour,
     parts: all.parts,
-    // Los últimos 7 días, para ver si el ritmo sube o baja
+    // The last 7 days, to see whether the pace goes up or down
     recent: { days: 7, hours: recent.hours, iskPerHour: recent.iskPerHour },
     byPilot,
     bySystem: bySystem.slice(0, TOP),
@@ -198,9 +198,9 @@ export async function rattingIndicator(days = 30) {
   };
 }
 
-// Tus días: el neto de juego de cada día del período (sin PLEX y sin lo movido entre tus pilotos), consolidado.
-// Mejor y peor día, cuántos días acabaron en positivo y la racha actual. Un día sin movimientos cuenta como 0
-// desde el primer movimiento guardado; antes del historial no cuenta
+// Your days: the game net of each day in the period (without PLEX and without what was moved between your pilots), consolidated.
+// Best and worst day, how many days ended positive and the current streak. A day without movements counts as 0
+// from the first stored movement on; before the history it does not count
 export async function daysIndicator(days = 30) {
   const from = periodFrom(days);
   const day = sql<string>`date(${walletJournal.date}, 'unixepoch')`;
@@ -221,7 +221,7 @@ export async function daysIndicator(days = 30) {
     const date = new Date(t).toISOString().slice(0, 10);
     series.push({ date, net: netOf.get(date) ?? 0 });
   }
-  // Hoy aún no ha terminado: entra en la media y en la racha solo si ya tiene movimientos
+  // Today is not over yet: it enters the average and the streak only if it already has movements
   const closed = series.filter((d, i) => i < series.length - 1 || netOf.has(d.date));
   const withData = closed.length;
   const positive = closed.filter((d) => d.net > 0).length;
@@ -234,9 +234,9 @@ export async function daysIndicator(days = 30) {
   return { days, withData, positive, negative, best, worst, streak, avg, firstAt: firstAt.toISOString() };
 }
 
-// Fondo de reposición: cuántas veces repones cada nave que has perdido (casco + equipo como lo perdiste, al
-// precio medio de ESI) con el saldo de los wallets, y cuánto ratting cuesta cada una. Más lo que te costaron las
-// pérdidas del período, expresado en horas de ratting
+// Replacement fund: how many times you can replace each ship you lost (hull + fitting as lost, at
+// ESI's average price) with the wallet balance, and how much ratting each one costs. Plus what the period's
+// losses cost you, expressed in ratting hours
 export async function replacementIndicator(iskPerHour: number | null, days = 30) {
   const available = await walletBalance();
   const recent = await shipLosses(90);
@@ -260,16 +260,16 @@ export async function replacementIndicator(iskPerHour: number | null, days = 30)
     ships,
     days,
     count: period.totals.count,
-    // Lo que te costaron (negativo) y su equivalente en horas de ratting
+    // What they cost you (negative) and its equivalent in ratting hours
     cost,
     costHours: iskPerHour && cost < 0 ? -cost / iskPerHour : null,
-    // Sin el permiso de killmails en ningún piloto no hay pérdidas que medir
+    // Without the killmails scope on any pilot there are no losses to measure
     noScope: recent.pilots > 0 && recent.missingScope.length === recent.pilots,
   };
 }
 
-// Comisiones e impuestos del mercado: lo que se lleva el juego por comerciar. Las comisiones de los courier son
-// logística, no mercado: no cuentan aquí
+// Market fees and taxes: what the game takes for trading. Courier fees are
+// logistics, not market: they do not count here
 const FEE_REFS = ['transaction_tax', 'brokers_fee', 'market_provider_tax', 'contract_sales_tax', 'contract_brokers_fee'];
 
 export async function feesIndicator(days = 30) {
@@ -281,7 +281,7 @@ export async function feesIndicator(days = 30) {
     .from(walletJournal)
     .where(and(inArray(walletJournal.refType, FEE_REFS), gte(walletJournal.date, from), notCourier))
     .groupBy(walletJournal.refType);
-  // Lo vendido en el mercado (sin las ventas a tus otros pilotos)
+  // Sold on the market (excluding sales to your other pilots)
   const [sales] = await db
     .select({ total: sql<number>`coalesce(sum(${walletJournal.amount}), 0)` })
     .from(walletJournal)

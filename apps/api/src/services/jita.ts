@@ -1,6 +1,6 @@
-// Precios de compra para las doctrinas: la orden de venta más baja en Jita (decisión del usuario), de cada tipo que
-// llevan los fits y de los inyectores de skills. Órdenes públicas de The Forge (sin token) filtradas por el sistema
-// de Jita; se guardan en jita_prices y se piden como mucho cada hora (en el sync, al añadir un fit o a mano)
+// Purchase prices for the doctrines: the lowest sell order in Jita (user's decision), for each type the
+// fits carry and for the skill injectors. Public orders from The Forge (no token) filtered by the Jita
+// system; stored in jita_prices and requested at most once an hour (on sync, when adding a fit or by hand)
 import { inArray } from 'drizzle-orm';
 import { db } from '../db/client';
 import { fits, jitaPrices } from '../db/schema';
@@ -11,7 +11,7 @@ const THE_FORGE = 10000002;
 const JITA_SYSTEM = 30000142;
 const MAX_AGE_MS = 3_600_000;
 const MAX_PAGES = 5;
-// Tope de tipos por ronda (un fit grande lleva ~40): el resto se pide en la siguiente
+// Cap on types per round (a large fit carries ~40): the rest are requested in the next one
 const MAX_TYPES = 120;
 
 type EsiOrder = { price: number; is_buy_order: boolean; system_id: number };
@@ -33,7 +33,7 @@ async function sellMinInJita(typeId: number) {
   return { sellMin: sells.length ? Math.min(...sells) : null, sellOrders: sells.length };
 }
 
-// Pide los precios que falten o tengan más de una hora. Un tipo que ESI no conoce (404) queda sin precio
+// Requests the prices that are missing or older than an hour. A type ESI does not know (404) stays without a price
 export async function refreshJitaPrices(typeIds: number[], { force = false } = {}): Promise<number> {
   const ids = [...new Set(typeIds)];
   const known = await loadJitaPrices(ids);
@@ -57,7 +57,7 @@ export async function refreshJitaPrices(typeIds: number[], { force = false } = {
   return done;
 }
 
-// Todo lo que tiene precio en las doctrinas: cascos, lo que llevan los fits y los dos inyectores
+// Everything priced in the doctrines: hulls, what the fits carry and the two injectors
 export async function doctrineTypeIds(): Promise<number[]> {
   const rows = await db.select({ ship: fits.shipTypeId, items: fits.items }).from(fits);
   const ids = new Set<number>([INJECTOR.large, INJECTOR.small]);
@@ -65,7 +65,7 @@ export async function doctrineTypeIds(): Promise<number[]> {
     ids.add(r.ship);
     for (const i of r.items) ids.add(i.typeId);
   }
-  // Sin fits no hace falta nada (ni los inyectores)
+  // Without fits nothing is needed (not even the injectors)
   return rows.length ? [...ids] : [];
 }
 

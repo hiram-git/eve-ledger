@@ -24,7 +24,7 @@ body {
     radial-gradient(ellipse 40% 40% at 100% 100%, #2a1f4a33, transparent 70%),
     var(--bg);
 }
-/* estrellas */
+/* stars */
 .stars { position: absolute; inset: 0; pointer-events: none; }
 .stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #c9d8e4; opacity: .35; }
 .stars i.b { width: 3px; height: 3px; opacity: .55; }
@@ -52,7 +52,7 @@ li::before { content: ''; flex: none; width: 16px; height: 16px; border: 3px sol
 .box .t2 { font: 500 27px var(--mono); color: var(--cyan); margin-top: 2px; }
 .box .t3 { font-size: 24px; color: var(--text-secondary); margin-top: 4px; }
 .foot { position: absolute; left: 96px; width: 880px; bottom: 26px; font-size: 19px; line-height: 1.35; color: var(--text-muted); }
-/* capturas: cada pieza coloca las suyas (back = detrás, front = delante) */
+/* screenshots: each piece places its own (back = behind, front = in front) */
 .shots { position: absolute; left: 1000px; top: 0; right: 0; bottom: 0; }
 .shot { position: absolute; border: 2px solid #2d4556; border-radius: 14px; overflow: hidden; background: var(--panel); box-shadow: 0 30px 80px -30px #000; }
 .shot img { display: block; width: 100%; }
@@ -62,12 +62,12 @@ li::before { content: ''; flex: none; width: 16px; height: 16px; border: 3px sol
 .bracket.tl { left: 130px; top: 36px; border-right: 0; border-bottom: 0; }
 .bracket.tr { right: 26px; top: 36px; border-left: 0; border-bottom: 0; }
 .bracket.fl { left: 0; top: 250px; border-right: 0; border-bottom: 0; border-color: var(--cyan-dim); }
-/* Doctrinas: la franja «Con qué se paga» arriba y la doctrina grande delante */
+/* Doctrinas: the «Con qué se paga» strip on top and the large doctrine in front */
 body[data-slide='doctrinas'] .shot.back { left: 120px; top: 64px; width: 860px; height: auto; opacity: .9; }
 body[data-slide='doctrinas'] .shot.front { left: 20px; top: 250px; width: 960px; height: 730px; }
 body[data-slide='doctrinas'] .bracket.fl { top: 230px; }
 body[data-slide='doctrinas'] .bracket.tl { left: 100px; top: 44px; }
-/* La novedad: chip junto a la viñeta */
+/* What's new: chip next to the bullet */
 .new { margin-left: 14px; font: 600 18px var(--mono); letter-spacing: .06em; color: #0a131d; background: var(--cyan); border-radius: 8px; padding: 3px 10px; }
 li.hl { color: var(--text); }
 li.hl::before { border-color: var(--cyan); background: #61cce522; }
@@ -100,7 +100,7 @@ li.hl::before { border-color: var(--cyan); background: #61cce522; }
 </div>
 <p class="foot" data-t="foot"></p>
 <script>
-// Tres piezas: ?slide=portada|doctrinas|indicadores, ?lang=es|en y ?v= (versión)
+// Three pieces: ?slide=portada|doctrinas|indicadores, ?lang=es|en and ?v= (version)
 const NEW = { es: 'NUEVO', en: 'NEW' };
 const T = {
   portada: {
@@ -164,14 +164,14 @@ document.body.dataset.slide = slide;
 document.querySelector('[data-version]').textContent = q.get('v') || '0.1.14';
 for (const el of document.querySelectorAll('[data-t]')) {
   const k = el.dataset.t;
-  // Una viñeta entre corchetes es la novedad: chip «NUEVO»
+  // A bullet in square brackets is the new feature: chip «NUEVO»
   if (k === 'bullets') el.innerHTML = t.bullets.map((b) => (Array.isArray(b) ? '<li class="hl">' + b[0] + '<span class="new">' + NEW[lang] + '</span></li>' : '<li>' + b + '</li>')).join('');
   else el.innerHTML = t[k];
 }
 const [back, front] = T[slide].shots;
 document.querySelector('[data-shot=back]').src = 'shot-' + back + '-' + lang + '.jpg';
 document.querySelector('[data-shot=front]').src = 'shot-' + front + '-' + lang + '.jpg';
-// Estrellas deterministas
+// Deterministic stars
 let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
 const stars = document.getElementById('stars');
 for (let i = 0; i < 140; i++) { const d = document.createElement('i'); if (rnd() < .2) d.className = 'b'; d.style.left = rnd() * 2000 + 'px'; d.style.top = rnd() * 1000 + 'px'; stars.append(d); }

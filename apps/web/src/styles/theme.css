@@ -1,18 +1,18 @@
-/* EVE Ledger — tema HUD oscuro */
+/* EVE Ledger — dark HUD theme */
 :root {
   color-scheme: dark;
 
-  /* Superficies */
+  /* Surfaces */
   --bg: #070c13;
   --panel: #0f1822;
   --panel-2: #0b131c;
-  --surface: var(--panel); /* alias usado por los componentes */
+  --surface: var(--panel); /* alias used by the components */
   --surface-raised: #13212d;
   --line: #1f2d3a;
   --line-strong: #2d4556;
   --corner: #4d7185;
 
-  /* Tinta */
+  /* Ink */
   --text: #e6eef5;
   --text-primary: var(--text);
   --text-secondary: #9fb3c2;
@@ -22,21 +22,21 @@
   --border: #22313e;
   --hover: #61cce50d;
 
-  /* Acentos de interfaz (no de datos) */
+  /* Interface accents (not data) */
   --cyan: #61cce5;
   --cyan-dim: #3b7f94;
   --positive: #8ed7bc;
   --critical: #f0857a;
-  --warning: #e7b75f; /* estado: datos viejos, sync desactivado */
+  --warning: #e7b75f; /* state: stale data, sync disabled */
   --accent: var(--cyan);
 
-  /* Colores de datos: validados contra --panel (dark, all-pairs) */
+  /* Data colours: validated against --panel (dark, all-pairs) */
   --income: #2a98c0;
   --expenses: #e8604c;
   --inventory: #9a7cf0;
-  --balance: #6b8799; /* neutro para el saldo junto al inventario */
+  --balance: #6b8799; /* neutral for the balance next to the inventory */
 
-  /* Tipografía */
+  /* Typography */
   --font: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
@@ -132,7 +132,7 @@ a {
   stroke-linejoin: round;
 }
 
-/* ───── Barra superior ───── */
+/* ───── Top bar ───── */
 .utility {
   height: 52px;
   display: flex;
@@ -161,8 +161,8 @@ a {
   align-items: center;
   gap: 14px;
 }
-/* Con cinco secciones, la cabecera ya no cabe en una fila por debajo de ~1280 px (en español, el estado del sync y
-   Sincronizar se salían por la derecha): las secciones bajan a una segunda fila, como en móvil */
+/* With five sections, the header no longer fits in one row below ~1280 px (in Spanish, the sync status and
+   Sincronizar overflowed on the right): the sections drop to a second row, as on mobile */
 @media (max-width: 1279px) {
   .utility {
     height: auto;
@@ -204,7 +204,7 @@ a {
   }
 }
 
-/* Oculto hasta recibir el foco con Tab: primera parada de la página */
+/* Hidden until it receives focus with Tab: first stop on the page */
 .skip-link {
   position: absolute;
   top: 8px;
@@ -238,10 +238,10 @@ a {
   white-space: nowrap;
 }
 
-/* ───── Botones ───── */
-/* Acciones en línea (Sincronizar, Revincular, Revisar): enlace o botón, se ven igual en todas las páginas */
+/* ───── Buttons ───── */
+/* Inline actions (Sincronizar, Revincular, Revisar): link or button, they look the same on every page */
 .inline-action {
-  /* Zona táctil ampliada (40 px) sin mover el texto */
+  /* Enlarged touch area (40 px) without moving the text */
   padding: 12px 0;
   margin-block: -12px;
   border: 0;
@@ -262,7 +262,7 @@ a {
 .sync-form.inline {
   display: inline;
 }
-/* Botón principal en contorno: la acción está a mano, pero lo más luminoso de la pantalla es el dato */
+/* Outlined primary button: the action is at hand, but the brightest thing on screen is the data */
 .primary-button.outline {
   background: #61cce514;
   border-color: var(--cyan-dim);
@@ -326,7 +326,7 @@ a {
   text-decoration: none;
 }
 
-/* ───── Franja de marca con mapa estelar (compacta) ───── */
+/* ───── Brand strip with star map (compact) ───── */
 .hero {
   position: relative;
   height: 118px;
@@ -362,7 +362,7 @@ a {
   color: #7690a1;
 }
 
-/* ───── Navegación de período ───── */
+/* ───── Period navigation ───── */
 .period-meta {
   display: flex;
   align-items: center;
@@ -435,7 +435,7 @@ main {
   padding: 20px 0 8px;
 }
 
-/* ───── Paneles con esquinas de mira ───── */
+/* ───── Panels with crosshair corners ───── */
 .panel {
   position: relative;
   min-width: 0;
@@ -496,7 +496,7 @@ main {
   color: var(--text-muted);
 }
 
-/* Repartos (tortas) en los paneles: una fila de figuras, cada una con su torta y su pie (o su tabla-leyenda al lado) */
+/* Shares (donuts) in the panels: a row of figures, each with its donut and its caption (or its legend table beside it) */
 .shares {
   display: flex;
   flex-wrap: wrap;
@@ -526,7 +526,7 @@ main {
 .shares .mini {
   align-self: start;
 }
-/* La muestra de color pegada al nombre (en .who el hueco ya lo pone el gap) */
+/* The colour swatch next to the name (in .who the gap already provides the spacing) */
 .who .swatch {
   margin-right: 0;
 }
@@ -548,7 +548,7 @@ main {
     width: 100%;
   }
 }
-/* Tablas cortas junto a una torta: etiqueta a la izquierda, cifras a la derecha; la muestra de color es la leyenda */
+/* Short tables next to a donut: label on the left, figures on the right; the colour swatch is the legend */
 .mini {
   width: 100%;
   border-collapse: collapse;
@@ -567,7 +567,7 @@ main {
 .mini td {
   padding-left: 12px;
 }
-/* Las cabeceras se parten (th lleva nowrap): si no, ensanchaban la tarjeta en móvil */
+/* Headers wrap (th has nowrap): otherwise they widened the card on mobile */
 .mini thead th {
   font-size: 12px;
   color: var(--text-muted);
@@ -590,13 +590,13 @@ main {
   border-bottom: 0;
 }
 @media (max-width: 480px) {
-  /* Las tablas cortas no se encogen por debajo de su contenido: en 390 px «1.791.399 veces» se parte en dos líneas */
+  /* Short tables do not shrink below their content: at 390 px «1.791.399 veces» wraps onto two lines */
   .mini td {
     white-space: normal;
   }
 }
-/* Cabecera de columna que ordena la tabla (botón sin aspecto de botón; la flecha, en el relleno de la celda para no
-   ensanchar la columna, dice el orden) */
+/* Column header that sorts the table (a button without button styling; the arrow, in the cell padding so it does
+   not widen the column, shows the order) */
 .sort-button {
   position: relative;
   display: inline-block;
@@ -638,7 +638,7 @@ th[aria-sort='descending'] .sort-button::after {
   opacity: 1;
   transform: rotate(180deg);
 }
-/* Selector de orden (móvil, donde la tabla son tarjetas sin cabecera) */
+/* Sort selector (mobile, where the table becomes cards without a header) */
 .sort-select {
   display: inline-flex;
   align-items: center;
@@ -656,7 +656,7 @@ th[aria-sort='descending'] .sort-button::after {
   font: 13px var(--font);
 }
 
-/* Aviso / mensajes */
+/* Notice / messages */
 .notice {
   display: flex;
   gap: 12px;
@@ -729,7 +729,7 @@ th[aria-sort='descending'] .sort-button::after {
   color: var(--text-muted);
 }
 
-/* KPI principal: borde cian y línea de luz superior */
+/* Main KPI: cyan border and top light line */
 .stat.hero-stat {
   border-color: #345469;
   background: linear-gradient(150deg, #13283875, #0f1924 55%);
@@ -742,7 +742,7 @@ th[aria-sort='descending'] .sort-button::after {
   font-size: 44px;
 }
 
-/* ───── Rejillas ───── */
+/* ───── Grids ───── */
 .split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -750,7 +750,7 @@ th[aria-sort='descending'] .sort-button::after {
   align-items: stretch;
 }
 
-/* ───── Tablas ───── */
+/* ───── Tables ───── */
 .scroll {
   overflow-x: auto;
 }
@@ -809,8 +809,8 @@ td.neg {
   border: 1px solid var(--line-strong);
 }
 
-/* ───── Pie ───── */
-/* footer.shell: la clase .shell pone margin: 0 auto y, sin este selector, anulaba el margen superior */
+/* ───── Footer ───── */
+/* footer.shell: the .shell class sets margin: 0 auto and, without this selector, overrode the top margin */
 footer.shell {
   display: flex;
   justify-content: space-between;
@@ -834,7 +834,7 @@ footer .footer-brand {
 footer .footer-version {
   color: #6f8a9c;
 }
-/* Enlace al aviso legal: en el color del pie, subrayado (no es una acción) y con zona táctil de 40 px en móvil */
+/* Link to the legal notice: in the footer colour, underlined (it is not an action) and with a 40 px touch area on mobile */
 footer .footer-link {
   color: #a3baca;
   text-decoration: underline;
@@ -891,14 +891,14 @@ footer .footer-link:hover {
     padding: 8px 0;
     flex-wrap: wrap;
   }
-  /* Marca, idioma, estado y Sincronizar en una sola fila; las secciones bajan a la segunda */
+  /* Brand, language, status and Sincronizar in a single row; the sections drop to the second */
   .utility-right {
     flex-wrap: nowrap;
     justify-content: flex-end;
     margin-left: auto;
     gap: 8px;
   }
-  /* En móvil solo el punto (ámbar si el sync automático está desactivado); el texto sigue para lectores de pantalla */
+  /* On mobile only the dot (amber if automatic sync is disabled); the text stays for screen readers */
   .status-badge .text {
     position: absolute;
     width: 1px;

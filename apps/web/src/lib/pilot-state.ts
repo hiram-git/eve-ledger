@@ -3,7 +3,7 @@ import type { Messages } from './i18n';
 
 export type PilotState = { kind: 'ok' | 'pending' | 'stale' | 'error'; text: string; title?: string; hint?: string };
 
-// Los errores llegan de la API en español/inglés técnico: se explican en el idioma elegido
+// Errors arrive from the API in technical Spanish/English: they are explained in the chosen language
 export function explainError(message: string, m: Messages): string {
   if (/invalid_grant|refresh token/i.test(message)) return m.errToken;
   if (/descifrar|ENC_KEY/i.test(message)) return m.errDecrypt;
@@ -14,21 +14,21 @@ export function explainError(message: string, m: Messages): string {
   return message;
 }
 
-// Un primer sync que no ha registrado nada en este tiempo ya no está «en curso»: la API se reinició a medias
-// o el sync nunca se lanzó. Si hay un sync en marcha ahora mismo, sí puede ser el suyo
+// A first sync that has logged nothing in this time is no longer "in progress": the API restarted halfway
+// or the sync never started. If a sync is running right now, it may well be this one
 const FIRST_SYNC_GRACE_MS = 10 * 60_000;
 
-// Permisos opcionales: sin ellos el wallet funciona, pero falta el inventario o las naves perdidas
+// Optional scopes: the wallet works without them, but the inventory or the lost ships are missing
 export const ASSETS_SCOPE = 'esi-assets.read_assets.v1';
 export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
 export const CONTRACTS_SCOPE = 'esi-contracts.read_character_contracts.v1';
 export const SKILLS_SCOPE = 'esi-skills.read_skills.v1';
 
-// Necesita atención: el sync no está al día o le falta algún permiso (ambas cosas se arreglan desde Pilotos).
-// Es lo que cuenta el punto ámbar de «Pilotos» en la navegación
+// Needs attention: the sync is not up to date or a scope is missing (both are fixed from Pilotos).
+// This is what the amber dot on «Pilotos» in the navigation counts
 export const hasIssue = (p: Pilot, st: PilotState) => st.kind !== 'ok' || p.missingScopes.length > 0;
 
-// Estado de sync de un piloto: el mismo en la página de Pilotos y en la línea de avisos del resumen
+// A pilot's sync state: the same on the Pilotos page and in the summary's notice line
 export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunning = false): PilotState {
   if (p.lastError) {
     const kinds: Record<string, string> = {
@@ -40,17 +40,17 @@ export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunn
     };
     const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
     const hint = explainError(p.lastError.message, m);
-    // Un token caducado se llama igual en todas partes (tarjeta, línea de salud y Pilotos)
+    // An expired token has the same name everywhere (card, health line and Pilotos)
     const text = hint === m.errToken ? m.stateToken : m.stateError(kind);
     return { kind: 'error', text, title: p.lastError.message, hint };
   }
-  // Recién (re)vinculado y sin sync desde entonces: su sync está en marcha (también al revincular un piloto con datos)
+  // Just (re)linked and no sync since then: its sync is running (also when relinking a pilot that has data)
   const recent = Date.now() - new Date(p.linkedAt ?? p.createdAt).getTime() < FIRST_SYNC_GRACE_MS;
   const syncedSinceLink = !!p.lastSyncAt && new Date(p.lastSyncAt) >= new Date(p.linkedAt ?? p.createdAt);
   if (p.lastSyncAt && !syncedSinceLink && (syncRunning || recent)) return { kind: 'pending', text: m.syncing };
   if (!p.lastSyncAt) {
     if (syncRunning || recent) return { kind: 'pending', text: m.statePending };
-    // Si además le falta algún permiso, la acción es revincular (da los permisos y lanza el primer sync)
+    // If it is also missing a scope, the action is to relink (grants the scopes and starts the first sync)
     return { kind: 'stale', text: m.stateNoFirstSync, hint: p.missingScopes.length ? m.noFirstSyncRelinkHint : m.noFirstSyncHint };
   }
   if (Date.now() - new Date(p.lastSyncAt).getTime() > staleAfterMs) return { kind: 'stale', text: m.stateStale };

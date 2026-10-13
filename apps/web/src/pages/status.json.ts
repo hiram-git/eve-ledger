@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getSyncStatus } from '../lib/api';
 
-// Estado del sync para el auto-refresco del dashboard (el navegador no llama a la API directamente)
+// Sync state for the dashboard auto-refresh (the browser does not call the API directly)
 export const GET: APIRoute = async () => {
   try {
     const s = await getSyncStatus();

@@ -1,7 +1,7 @@
-// Copias de seguridad de la base. ESI solo da ~30 días de wallet: lo anterior vive únicamente en ledger.db, y un
-// disco roto o una reinstalación lo perdían para siempre. Una copia al día (y antes de cada migración y de cada
-// restauración) con `VACUUM INTO`, que escribe una base compacta y coherente aunque la API esté escribiendo.
-// Restaurar copia el contenido de la copia a la base abierta, sin reiniciar la API (replaceDatabase)
+// Database backups. ESI only gives ~30 days of wallet: anything older lives only in ledger.db, and a
+// broken disk or a reinstall lost it forever. One backup a day (and before each migration and each
+// restore) with `VACUUM INTO`, which writes a compact, consistent database even while the API is writing.
+// Restoring copies the backup's contents into the open database, without restarting the API (replaceDatabase)
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -12,12 +12,12 @@ import { syncBusy } from './sync';
 export const BACKUP_DIR = Bun.env.BACKUP_DIR || join(dirname(DB_PATH), 'backups');
 const keepAuto = Number(Bun.env.BACKUP_KEEP) > 0 ? Math.floor(Number(Bun.env.BACKUP_KEEP)) : 14;
 
-// auto: la diaria · manual: «Hacer una copia ahora» · restore: lo que había antes de restaurar otra ·
-// update: antes de aplicar migraciones nuevas (al arrancar una versión nueva)
+// auto: the daily one · manual: «Hacer una copia ahora» · restore: what was there before restoring another ·
+// update: before applying new migrations (when a new version starts)
 export type BackupKind = 'auto' | 'manual' | 'restore' | 'update';
 const KEEP: Record<BackupKind, number> = { auto: keepAuto, manual: 10, restore: 5, update: 5 };
 const NAME = /^ledger-(\d{8})-(\d{6})-(auto|manual|restore|update)\.db$/;
-// Una al día: si la última diaria tiene menos de 20 h, no se repite (el sync de cada hora la va desplazando poco)
+// One a day: if the last daily one is under 20 h old, it is not repeated (the hourly sync shifts it only slightly)
 const AUTO_EVERY_MS = 20 * 3_600_000;
 
 export type Backup = { name: string; kind: BackupKind; createdAt: Date; size: number };
@@ -51,7 +51,7 @@ function parse(name: string): Backup | null {
   return { name, kind: kind as BackupKind, createdAt, size };
 }
 
-// De la más reciente a la más antigua
+// From newest to oldest
 export function listBackups(): Backup[] {
   if (!existsSync(BACKUP_DIR)) return [];
   return readdirSync(BACKUP_DIR)
@@ -60,7 +60,7 @@ export function listBackups(): Backup[] {
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.name.localeCompare(a.name));
 }
 
-// Ruta de una copia por su nombre: solo nombres con el formato de las copias (nada de rutas ni «..»)
+// Path of a backup by its name: only names in the backup format (no paths and no "..")
 export function backupPath(name: string): string {
   if (!NAME.test(name) || !existsSync(join(BACKUP_DIR, name))) throw new BackupError('not_found');
   return join(BACKUP_DIR, name);
@@ -74,8 +74,8 @@ function prune(kind: BackupKind) {
 
 export function createBackup(kind: BackupKind): Backup {
   mkdirSync(BACKUP_DIR, { recursive: true });
-  // Dos copias en el mismo segundo (una manual justo tras la diaria): el nombre lleva el tipo, pero si coincide
-  // también, se espera al segundo siguiente en el nombre
+  // Two backups in the same second (a manual one right after the daily one): the name carries the type, but if that
+  // matches too, wait for the next second in the name
   let at = new Date();
   let name = `ledger-${stamp(at)}-${kind}.db`;
   while (existsSync(join(BACKUP_DIR, name))) {
@@ -88,7 +88,7 @@ export function createBackup(kind: BackupKind): Backup {
   return parse(name)!;
 }
 
-// Hay algo que guardar: algún piloto vinculado o algún movimiento
+// There is something to save: some linked pilot or some movement
 function hasData(handle: Database = rawDb()) {
   try {
     const row = handle
@@ -100,7 +100,7 @@ function hasData(handle: Database = rawDb()) {
   }
 }
 
-// La diaria: al arrancar, tras cada ronda de sync y cada pocas horas (también con el sync automático apagado)
+// The daily one: at startup, after each sync round and every few hours (also with automatic sync turned off)
 export function maybeAutoBackup(): Backup | null {
   if (maintenance.active() || !hasData()) return null;
   const last = listBackups().find((b) => b.kind === 'auto');
@@ -113,7 +113,7 @@ export function maybeAutoBackup(): Backup | null {
   }
 }
 
-// Antes de aplicar migraciones nuevas: si una sale mal, lo de antes queda a salvo
+// Before applying new migrations: if one goes wrong, what was there before stays safe
 export function backupBeforeMigrations(): Backup | null {
   if (!hasData() || appliedMigrations() >= knownMigrations()) return null;
   return createBackup('update');
@@ -127,7 +127,7 @@ export type BackupInfo = {
   migrations: number;
 };
 
-// Comprueba que un archivo es una base de EVE Ledger sana y que esta versión sabe abrirla (no es de una más nueva)
+// Checks that a file is a healthy EVE Ledger database and that this version can open it (it is not from a newer one)
 export function inspectBackup(file: string): BackupInfo {
   let handle: Database;
   try {
@@ -140,7 +140,7 @@ export function inspectBackup(file: string): BackupInfo {
     try {
       check = Object.values(handle.query('PRAGMA quick_check').get() as Record<string, string>)[0];
     } catch (err) {
-      // «file is not a database»: cualquier archivo que no sea SQLite
+      // «file is not a database»: any file that is not SQLite
       throw new BackupError('not_sqlite', err instanceof Error ? err.message : undefined);
     }
     if (check !== 'ok') throw new BackupError('corrupt', check);
@@ -157,7 +157,7 @@ export function inspectBackup(file: string): BackupInfo {
         'select (select count(*) from characters) as pilots, count(*) as entries, min(date) as first, max(date) as last from wallet_journal',
       )
       .get() as { pilots: number; entries: number; first: number | null; last: number | null };
-    // Las fechas del journal son segundos (timestamp de Drizzle)
+    // Journal dates are seconds (Drizzle timestamp)
     const at = (s: number | null) => (s === null ? null : new Date(s * 1000));
     return { pilots: row.pilots, entries: row.entries, firstEntryAt: at(row.first), lastEntryAt: at(row.last), migrations };
   } finally {
@@ -169,8 +169,8 @@ export function inspectBackupByName(name: string) {
   return inspectBackup(backupPath(name));
 }
 
-// Sustituye la base por la copia. Antes guarda lo que hay («restore»); el cambio va en una sola transacción, así
-// que si algo falla la base se queda como estaba
+// Replaces the database with the backup. First it saves what is there ("restore"); the change runs in a single
+// transaction, so if something fails the database stays as it was
 export function restoreFromFile(file: string): { info: BackupInfo; safety: Backup | null } {
   if (maintenance.active() || syncBusy()) throw new BackupError('busy');
   const info = inspectBackup(file);
@@ -189,7 +189,7 @@ export function restoreBackup(name: string) {
   return restoreFromFile(backupPath(name));
 }
 
-// Un archivo subido (una copia descargada antes o de otro equipo): se guarda aparte, se restaura y se borra
+// An uploaded file (a backup downloaded earlier or from another machine): saved apart, restored and deleted
 export function restoreUpload(bytes: Uint8Array) {
   if (bytes.byteLength === 0) throw new BackupError('empty');
   mkdirSync(BACKUP_DIR, { recursive: true });
@@ -202,7 +202,7 @@ export function restoreUpload(bytes: Uint8Array) {
   }
 }
 
-// Para la web: dónde están, cuántas se guardan y la lista
+// For the web: where they are, how many are kept and the list
 export function backupsView() {
   return { dir: BACKUP_DIR, keep: KEEP, backups: listBackups(), busy: maintenance.active() };
 }

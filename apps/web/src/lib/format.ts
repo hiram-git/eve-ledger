@@ -1,38 +1,38 @@
 import { DEFAULT_LANG, t, type Lang } from './i18n';
 
-// Formato de números de cada idioma (1.234,5 en es/de, 1,234.5 en en)
+// Number format for each language (1.234,5 in es/de, 1,234.5 in en)
 const LOCALE: Record<Lang, string> = { es: 'es', en: 'en', de: 'de' };
 
 const num = (digits: number, lang: Lang) =>
   new Intl.NumberFormat(LOCALE[lang], { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-// Notación de EVE: k / M / B (mil millones), igual en los tres idiomas porque es la del juego
+// EVE notation: k / M / B (billion), the same in all three languages because it is the game's
 export function isk(value: number, { sign = false, lang = DEFAULT_LANG }: { sign?: boolean; lang?: Lang } = {}): string {
   const abs = Math.abs(value);
-  // Espacio duro entre la cifra y su unidad: «6,41 B» no se parte entre dos líneas
+  // Non-breaking space between the figure and its unit: «6,41 B» does not break across two lines
   const [div, suffix] = abs >= 1e9 ? [1e9, '\u00a0B'] : abs >= 1e6 ? [1e6, '\u00a0M'] : abs >= 1e3 ? [1e3, '\u00a0k'] : [1, ''];
   const scaled = abs / div;
-  // Por debajo de 1000 se muestran decimales si los hay (precios unitarios de minerales, p. ej.)
+  // Below 1000 decimals are shown if there are any (unit prices of minerals, e.g.)
   const digits = div === 1 ? (Number.isInteger(abs) ? 0 : 2) : scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
   const prefix = value < 0 ? '−' : sign && value > 0 ? '+' : '';
   return `${prefix}${num(digits, lang).format(scaled)}${suffix}`;
 }
 
-// Signo menos tipográfico (U+2212), igual que en las cifras abreviadas
-// sign: «+» en los positivos (netos), como en la cifra abreviada
+// Typographic minus sign (U+2212), as in the abbreviated figures
+// sign: «+» on positives (nets), as in the abbreviated figure
 export const iskFull = (value: number, lang: Lang = DEFAULT_LANG, sign = false) =>
   `${sign && value > 0 ? '+' : ''}${num(2, lang).format(value).replace('-', '−')} ISK`;
 
 export const shortDate = (iso: string, lang: Lang = DEFAULT_LANG) =>
   new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(iso));
 
-// «25 sept, 09:47» en hora de EVE (UTC)
+// «25 sept, 09:47» in EVE time (UTC)
 export const shortDateTime = (iso: string, lang: Lang = DEFAULT_LANG) =>
   new Intl.DateTimeFormat(LOCALE[lang], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }).format(
     new Date(iso),
   );
 
-// Tamaño de un archivo con el formato del idioma («12,4 MB», «860 kB»)
+// File size in the language's format («12,4 MB», «860 kB»)
 export function bytes(n: number, lang: Lang = DEFAULT_LANG): string {
   const units = ['byte', 'kilobyte', 'megabyte', 'gigabyte'];
   let value = n;
@@ -54,7 +54,7 @@ export const longDate = (iso: string, lang: Lang = DEFAULT_LANG) =>
     new Date(iso),
   );
 
-// Tiempo relativo con el formato de cada idioma («hace 5 min», «5 min ago», «vor 5 Min.»)
+// Relative time in each language's format («hace 5 min», «5 min ago», «vor 5 Min.»)
 function relative(minutes: number, lang: Lang): string {
   const rtf = new Intl.RelativeTimeFormat(LOCALE[lang], { numeric: 'always', style: 'short' });
   const abs = Math.abs(minutes);
@@ -64,20 +64,20 @@ function relative(minutes: number, lang: Lang): string {
   return rtf.format(Math.round(hours / 24), 'day');
 }
 
-// Duración hasta un instante futuro («18 h», «3 d»): lo que falta, sin «dentro de»
+// Duration until a future instant («18 h», «3 d»): what is left, without "in"
 export function remaining(iso: string, lang: Lang = DEFAULT_LANG): string {
   const hours = Math.max(1, (new Date(iso).getTime() - Date.now()) / 3_600_000);
   const [n, unit] = hours < 48 ? [Math.round(hours), 'hour'] : [Math.round(hours / 24), 'day'];
   return new Intl.NumberFormat(LOCALE[lang], { style: 'unit', unit, unitDisplay: 'short' }).format(n);
 }
 
-// Horas de juego (ratting): «~46 min», «20 h», «312 h» (en horas aunque sean días: es tiempo jugando, no de calendario)
+// Play hours (ratting): «~46 min», «20 h», «312 h» (in hours even if it is days: it is time played, not calendar time)
 export function hoursPlayed(hours: number, lang: Lang = DEFAULT_LANG): string {
   if (hours < 1) return duration(hours * 60, lang);
   return new Intl.NumberFormat(LOCALE[lang], { style: 'unit', unit: 'hour', unitDisplay: 'short', maximumFractionDigits: 0 }).format(Math.round(hours));
 }
 
-// Tiempo de entrenamiento: «12 d 4 h», «5 h 20 min», «45 min» (unidades cortas de cada idioma)
+// Training time: «12 d 4 h», «5 h 20 min», «45 min» (each language's short units)
 export function duration(minutes: number, lang: Lang = DEFAULT_LANG): string {
   const unit = (n: number, u: string) => new Intl.NumberFormat(LOCALE[lang], { style: 'unit', unit: u, unitDisplay: 'short' }).format(n);
   const total = Math.max(1, Math.round(minutes));
@@ -100,14 +100,14 @@ export function until(iso: string, lang: Lang = DEFAULT_LANG): string {
   return relative(Math.max(1, min), lang);
 }
 
-// Nombres legibles de los ref_type más comunes; el resto se muestra tal cual
+// Readable names of the most common ref_types; the rest are shown as they are
 const REF_TYPES: Record<string, Record<Lang, string>> = {
   bounty_prizes: { es: 'Recompensas (ratting)', en: 'Bounties (ratting)', de: 'Kopfgelder (Ratting)' },
   ess_escrow_transfer: { es: 'ESS', en: 'ESS', de: 'ESS' },
   agent_mission_reward: { es: 'Misiones', en: 'Missions', de: 'Missionen' },
   agent_mission_time_bonus_reward: { es: 'Bonus de misión', en: 'Mission time bonus', de: 'Missions-Zeitbonus' },
   market_transaction: { es: 'Mercado', en: 'Market', de: 'Markt' },
-  // ESI asienta así las compras de mercado del comprador (y el escrow de las órdenes de compra)
+  // This is how ESI books the buyer's market purchases (and the escrow of buy orders)
   market_escrow: { es: 'Compras de mercado', en: 'Market purchases', de: 'Marktkäufe' },
   transaction_tax: { es: 'Impuesto de venta', en: 'Sales tax', de: 'Verkaufssteuer' },
   brokers_fee: { es: 'Comisión de broker', en: 'Broker fee', de: 'Maklergebühr' },
@@ -135,10 +135,10 @@ const REF_TYPES: Record<string, Record<Lang, string>> = {
   manufacturing: { es: 'Fabricación', en: 'Manufacturing', de: 'Fertigung' },
   insurance: { es: 'Seguros', en: 'Insurance', de: 'Versicherung' },
   kill_right_fee: { es: 'Kill rights', en: 'Kill rights', de: 'Kill-Rights' },
-  // No son ref_types de ESI: escalaciones vendidas (donaciones redondas de fuera) y loot vendido al buyback (PvE)
+  // Not ESI ref_types: sold escalations (round donations from outside) and loot sold to the buyback (PvE)
   escalation_sale: { es: 'Escalaciones vendidas', en: 'Escalations sold', de: 'Verkaufte Eskalationen' },
   loot_buyback: { es: 'Loot vendido (buyback)', en: 'Loot sold (buyback)', de: 'Verkaufter Loot (Buyback)' },
-  // Tampoco: el resumen mueve a PvP la reposición y el courier de las naves perdidas
+  // Neither are these: the summary moves the replacement and courier of lost ships to PvP
   ship_replacement: { es: 'Reposición de naves perdidas', en: 'Lost ship replacement', de: 'Ersatz verlorener Schiffe' },
   ship_transport: { es: 'Courier de naves perdidas', en: 'Lost ship courier', de: 'Kurier verlorener Schiffe' },
   war_fee: { es: 'Tasas de guerra', en: 'War fees', de: 'Kriegsgebühren' },
