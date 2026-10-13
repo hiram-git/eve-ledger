@@ -40,7 +40,7 @@ jobs:
       build: ${{ steps.decide.outputs.build }}
       tag: ${{ steps.decide.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Versión y release
         id: decide
@@ -135,7 +135,7 @@ jobs:
             echo "::notice::Sin claves del actualizador: estos instaladores no buscarán versiones nuevas (ver apps/desktop/README.md)."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Dependencias de Tauri (Linux)
         if: matrix.name == 'linux'
@@ -194,7 +194,7 @@ jobs:
       # SHA-256 sums, which are uploaded to the release next to the installers
       - name: Atestación de origen
         if: ${{ !github.event.repository.private }}
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             apps/desktop/src-tauri/target/release/bundle/**/*.exe
@@ -225,7 +225,7 @@ jobs:
           if [ -n "$TAG" ]; then gh release upload "$TAG" "SHA256SUMS-${{ matrix.name }}.txt" --clobber; fi
 
       - name: Guardar los instaladores
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: eve-ledger-${{ matrix.name }}
           path: |
