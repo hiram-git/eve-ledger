@@ -9,7 +9,8 @@
     "db:migrate": "bun src/db/migrate.ts",
     "export:debug": "bun scripts/export-debug.ts",
     "import:debug": "bun scripts/import-debug.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "bench": "bun scripts/bench.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.0",

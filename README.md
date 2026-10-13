@@ -2,7 +2,7 @@
 
 **Are your characters making or losing ISK?** EVE Ledger is a free desktop app that pulls the wallets, assets, lost ships and skills of all your EVE Online characters from ESI and answers that at a glance. It runs entirely on your computer.
 
-[Español](#español) · [Download](../../releases/latest) · Windows · macOS (Apple Silicon) · Linux · English / Español / Deutsch
+[Español](#español) · [Download](../../releases/latest) · [Changelog](CHANGELOG.md) · Windows · macOS (Apple Silicon) · Linux · English / Español / Deutsch
 
 ![EVE Ledger dashboard: net result for the period, today, net by activity and lost ships](docs/brochure/shot-dashboard-en.jpg)
 
@@ -129,5 +129,6 @@ EVE Ledger es una app de escritorio gratuita que consolida los wallets, el inven
 
 - **Descarga:** [Releases](../../releases/latest) (Windows, macOS con Apple Silicon y Linux).
 - **Guía de instalación:** [apps/desktop/INSTALAR.md](apps/desktop/INSTALAR.md).
+- **Novedades de cada versión:** [CHANGELOG.md](CHANGELOG.md) (en inglés).
 - **Compilar y publicar versiones:** [apps/desktop/README.md](apps/desktop/README.md).
 - **Licencia:** [MIT](LICENSE) © 2026 Sirrohan Yassavi. EVE Online y sus marcas son de CCP hf.; este programa no está afiliado a CCP.

@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, inArray, lt, min, sql } from 'drizzle-orm';
-import { db } from '../db/client';
+import { db, rawDb } from '../db/client';
 import {
   characters,
   killmails,
@@ -135,31 +135,29 @@ export async function fetchLosses(characterId: number, r: { pages: number; fetch
   }
 }
 
-// Naves perdidas en los últimos `days` días y cómo tocan el wallet. La nave se pagó al comprarla (un gasto de
-// trading); perderla no mueve el wallet. Lo que lo mueve, por pérdida:
-// - el seguro que la paga (+, en el wallet de quien la perdió);
-// - la reposición (−): casco y equipo perdidos comprados en el mercado por CUALQUIERA de tus pilotos en los
-//   días siguientes (p. ej. un alter de compras en Jita), sin las operaciones entre tus pilotos;
-// - el transporte (−): el courier que emite cualquiera de tus pilotos y lleva ese casco o ese equipo
-//   (recompensa + comisión; hace falta el permiso de contratos para saber qué lleva).
-// Las donaciones, contratos y trades entre tus pilotos para moverla no cuentan: suman cero.
-// Las primas de seguro del período van aparte: también pagan naves que sigues volando.
-// Todo ya está en el neto del resumen (seguro en PvP, compras en trading, courier en logística): esto lo explica.
-// Valor perdido: casco + equipo (destruido y soltado) al precio medio de ESI, como el inventario
-export async function shipLosses(days: number, characterId?: number) {
-  const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+// El reparto de compras, seguros y couriers entre TODAS las pérdidas guardadas: lo caro de shipLosses. No depende
+// del período ni de la vista, y el Resumen, «Naves perdidas» e Indicadores lo piden varias veces por página: se
+// guarda hasta que cambia la base (total_changes() de la conexión: todas las escrituras pasan por ella, también
+// restaurar una copia) o pasa un minuto (el estado «pendiente» depende de la hora)
+let cached: { key: string; value: Promise<Awaited<ReturnType<typeof computeLosses>>> } | null = null;
 
+function allLosses(now: Date) {
+  const changes = (rawDb().query('select total_changes() as n').get() as { n: number }).n;
+  const key = `${changes}|${Math.floor(now.getTime() / 60_000)}`;
+  if (cached?.key !== key) {
+    const value = computeLosses(now).catch((err) => {
+      if (cached?.value === value) cached = null;
+      throw err;
+    });
+    cached = { key, value };
+  }
+  return cached.value;
+}
+
+async function computeLosses(now: Date) {
   const pilots = await db.select({ id: characters.id, name: characters.name, scopes: characters.scopes }).from(characters);
   const linked = new Set(pilots.map((p) => p.id));
   const linkedIds = [...linked];
-  const inView = pilots.filter((p) => !characterId || p.id === characterId);
-  const lacks = (scope: string) => (p: (typeof pilots)[number]) => !p.scopes.split(' ').includes(scope);
-  // Pilotos de esta vista que no pueden leer sus killmails (vinculados antes de pedir el permiso)
-  const missingScope = inView.filter(lacks(LOSSES_SCOPE)).map(({ id, name }) => ({ id, name }));
-  // Cualquiera de tus pilotos puede emitir el courier: sin el permiso de contratos, su transporte no se ve
-  const missingContracts = pilots.filter(lacks(CONTRACTS_SCOPE)).map(({ id, name }) => ({ id, name }));
   const nameOf = new Map(pilots.map((p) => [p.id, p.name]));
 
   // Todas las pérdidas guardadas de tus pilotos (no solo las de la vista ni las del período): las compras y los
@@ -281,9 +279,21 @@ export async function shipLosses(days: number, characterId?: number) {
           .orderBy(asc(walletTransactions.date))
       ).filter((t) => !t.clientId || !linked.has(t.clientId))
     : [];
-  // Cantidad aún sin usar de cada compra (id de ESI + piloto)
-  const keyOf = (t: { id: number; characterId: number }) => `${t.id}|${t.characterId}`;
-  const qtyLeft0 = new Map(purchases.map((t) => [keyOf(t), t.quantity]));
+  // Cantidad aún sin usar de cada compra (por su posición en `purchases`, que va por fecha)
+  const qtyLeft = purchases.map((t) => t.quantity);
+  const purchaseTimes = purchases.map((t) => t.date.getTime());
+  // Primera compra con fecha >= t (búsqueda binaria: con un año de compras, recorrerlas todas por cada pérdida
+  // costaba medio segundo por cada página)
+  const firstPurchaseFrom = (t: number) => {
+    let lo = 0;
+    let hi = purchaseTimes.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (purchaseTimes[mid] < t) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
 
   // Couriers de tus pilotos tras las pérdidas (los cancelados o borrados devuelven la recompensa) y sus comisiones
   const couriers = rows.length
@@ -348,36 +358,50 @@ export async function shipLosses(days: number, characterId?: number) {
     let substitutes = 0;
     let hull: (typeof purchases)[number] | undefined;
     const buyers = new Map<number, number>(); // piloto → ISK gastado en reponer
-    const take = (t: (typeof purchases)[number], qty: number) => {
-      qtyLeft0.set(keyOf(t), (qtyLeft0.get(keyOf(t)) ?? 0) - qty);
+    const take = (i: number, qty: number) => {
+      const t = purchases[i];
+      qtyLeft[i] -= qty;
       replacement += qty * t.unitPrice;
       buyers.set(t.characterId, (buyers.get(t.characterId) ?? 0) + qty * t.unitPrice);
       spend.push({ transactionId: t.id, journalRefId: t.journalRefId, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
     };
-    const inWindowPurchases = purchases.filter((t) => inWindow(t.date));
-    for (const t of inWindowPurchases) {
-      if (hullNeed && t.typeId === r.shipTypeId && (qtyLeft0.get(keyOf(t)) ?? 0) > 0) {
-        take(t, 1);
+    // Las compras de la ventana: posiciones [start, end) de `purchases`
+    const start = firstPurchaseFrom(at);
+    let end = start;
+    while (end < purchases.length && purchaseTimes[end] <= windowEndsAt.getTime()) end++;
+    for (let i = start; i < end; i++) {
+      const t = purchases[i];
+      if (hullNeed && t.typeId === r.shipTypeId && qtyLeft[i] > 0) {
+        take(i, 1);
         hullNeed = 0;
         hull ??= t;
       }
       for (const need of [fitNeed, cargoNeed]) {
-        const left = qtyLeft0.get(keyOf(t)) ?? 0;
+        const left = qtyLeft[i];
         const want = need.get(t.typeId) ?? 0;
-        if (!left || !want) continue;
+        if (left <= 0 || !want) continue;
         const qty = Math.min(left, want);
-        take(t, qty);
+        take(i, qty);
         need.set(t.typeId, want - qty);
       }
     }
-    for (const t of inWindowPurchases) {
+    // Equipo que falta, por grupo de mercado: una compra solo mira los tipos de su grupo
+    const missingByGroup = new Map<number, number[]>();
+    for (const [typeId, want] of fitNeed) {
+      const group = groupOf.get(typeId);
+      if (!want || group === undefined) continue;
+      missingByGroup.set(group, [...(missingByGroup.get(group) ?? []), typeId]);
+    }
+    for (let i = start; i < end && missingByGroup.size; i++) {
+      const t = purchases[i];
       const group = groupOf.get(t.typeId);
       if (group === undefined || t.typeId === r.shipTypeId) continue;
-      for (const [typeId, want] of fitNeed) {
-        const left = qtyLeft0.get(keyOf(t)) ?? 0;
-        if (!left || !want || typeId === t.typeId || groupOf.get(typeId) !== group) continue;
+      for (const typeId of missingByGroup.get(group) ?? []) {
+        const want = fitNeed.get(typeId) ?? 0;
+        const left = qtyLeft[i];
+        if (left <= 0 || !want || typeId === t.typeId) continue;
         const qty = Math.min(left, want);
-        take(t, qty);
+        take(i, qty);
         fitNeed.set(typeId, want - qty);
         substitutes += qty;
       }
@@ -460,6 +484,34 @@ export async function shipLosses(days: number, characterId?: number) {
       courier: courier ? { contractId: courier.contractId, by: nameOf.get(courier.issuerId) ?? null, at: courier.dateIssued } : null,
     };
   });
+
+  return { pilots, nameOf, rows, losses, unpriced, historyFrom, spend, usedCouriers };
+}
+
+// Naves perdidas en los últimos `days` días y cómo tocan el wallet. La nave se pagó al comprarla (un gasto de
+// trading); perderla no mueve el wallet. Lo que lo mueve, por pérdida:
+// - el seguro que la paga (+, en el wallet de quien la perdió);
+// - la reposición (−): casco y equipo perdidos comprados en el mercado por CUALQUIERA de tus pilotos en los
+//   días siguientes (p. ej. un alter de compras en Jita), sin las operaciones entre tus pilotos;
+// - el transporte (−): el courier que emite cualquiera de tus pilotos y lleva ese casco o ese equipo
+//   (recompensa + comisión; hace falta el permiso de contratos para saber qué lleva).
+// Las donaciones, contratos y trades entre tus pilotos para moverla no cuentan: suman cero.
+// Las primas de seguro del período van aparte: también pagan naves que sigues volando.
+// Todo ya está en el neto del resumen (seguro en PvP, compras en trading, courier en logística): esto lo explica.
+// Valor perdido: casco + equipo (destruido y soltado) al precio medio de ESI, como el inventario
+export async function shipLosses(days: number, characterId?: number) {
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+
+  const { pilots, nameOf, rows, losses, unpriced, historyFrom, spend, usedCouriers } = await allLosses(now);
+  const inView = pilots.filter((p) => !characterId || p.id === characterId);
+  const lacks = (scope: string) => (p: (typeof pilots)[number]) => !p.scopes.split(' ').includes(scope);
+  // Pilotos de esta vista que no pueden leer sus killmails (vinculados antes de pedir el permiso)
+  const missingScope = inView.filter(lacks(LOSSES_SCOPE)).map(({ id, name }) => ({ id, name }));
+  // Cualquiera de tus pilotos puede emitir el courier: sin el permiso de contratos, su transporte no se ve
+  const missingContracts = pilots.filter(lacks(CONTRACTS_SCOPE)).map(({ id, name }) => ({ id, name }));
+
 
   // Primas de seguro pagadas en el período: aparte, porque también aseguran naves que sigues volando
   const [prem] = await db

@@ -72,8 +72,12 @@ jobs:
               ;;
           esac
           if [ "$build" = true ] && [ -n "$tag" ] && ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "EVE Ledger $version" \
-              --notes "Instaladores de EVE Ledger de escritorio. Guía de instalación: apps/desktop/INSTALAR.md"
+            # Las notas: la sección de esta versión en CHANGELOG.md (de «## x.y.z» a la siguiente «## »)
+            awk -v v="$version" 'index($0, "## " v " ") == 1 || $0 == "## " v { f = 1; next } f && /^## / { exit } f' CHANGELOG.md >/tmp/notes.md
+            [ -s /tmp/notes.md ] || echo "Desktop installers for EVE Ledger $version." >/tmp/notes.md
+            printf '\nInstall guide: %s/%s/blob/main/apps/desktop/INSTALAR.md · Changelog: %s/%s/blob/main/CHANGELOG.md\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" >>/tmp/notes.md
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "EVE Ledger $version" --notes-file /tmp/notes.md
             echo "::notice::Borrador de la release $tag creado: publícalo cuando estén los tres instaladores"
           fi
           echo "build=$build" >>"$GITHUB_OUTPUT"
