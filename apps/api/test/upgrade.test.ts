@@ -1,7 +1,7 @@
-// Actualizar desde cada versión publicada de escritorio: una base con el esquema de entonces y datos como los
-// guardaba (killmails sin `flag`, pilotos vinculados con Client Secret), y la API actual arrancando
-// encima: copia `update` antes de migrar, todas las migraciones, ningún dato perdido, las mismas cifras desde
-// cualquier versión de partida, y la copia de antes se puede restaurar
+// Upgrading from each published desktop version: a database with that version's schema and data as it
+// stored it (killmails without `flag`, pilots linked with Client Secret), and the current API starting
+// on top: `update` backup before migrating, all migrations, no data lost, the same figures from
+// any starting version, and the backup from before can be restored
 import { expect, test } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,7 @@ import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 const MIGRATIONS = join(import.meta.dir, '../drizzle');
 const KNOWN = (JSON.parse(readFileSync(join(MIGRATIONS, 'meta/_journal.json'), 'utf8')) as { entries: unknown[] }).entries.length;
 
-// Migraciones que traía cada versión de escritorio publicada
+// Migrations shipped with each published desktop version
 const RELEASES: [string, number][] = [
   ['0.1.0', 9],
   ['0.1.9', 11],
@@ -34,7 +34,7 @@ const DAY = 86_400;
 const now = Math.floor(Date.now() / 1000);
 const at = (daysAgo: number, hour = 12) => now - daysAgo * DAY + (hour - 12) * 3600;
 
-// Inserta solo las columnas que tiene la tabla en esa versión
+// Inserts only the columns the table has in that version
 function insert(sqlite: Database, table: string, rows: Record<string, unknown>[]) {
   const cols = new Set((sqlite.query(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
   if (!cols.size) return 0;
@@ -46,7 +46,7 @@ function insert(sqlite: Database, table: string, rows: Record<string, unknown>[]
 }
 
 function oldDatabase(dir: string, migrations: number) {
-  // Las migraciones de entonces: las mismas SQL con el journal recortado
+  // That version's migrations: the same SQL with the journal trimmed
   const old = join(dir, 'drizzle-old');
   cpSync(MIGRATIONS, old, { recursive: true });
   const journalPath = join(old, 'meta/_journal.json');
@@ -78,10 +78,10 @@ function oldDatabase(dir: string, migrations: number) {
       tx.push({ transaction_id: t, character_id: KADE, date: at(d, 15), type_id: 34, quantity: 10_000_000, unit_price: 4, is_buy: 0, location_id: JITA_STATION, client_id: STRANGER, journal_ref_id: id - 1 });
     }
   }
-  // Donación entre tus pilotos: el mismo id en los dos journals (desde la 0007, que ya traía la 0.1.0)
+  // Donation between your pilots: the same id in both journals (since 0007, already in 0.1.0)
   entry(ARIA, at(10, 18), 'player_donation', -300_000_000, ARIA, KADE, { journal_id: 999_999 });
   entry(KADE, at(10, 18), 'player_donation', 300_000_000, ARIA, KADE, { journal_id: 999_999 });
-  // Kade pierde un Rifter y el seguro paga
+  // Kade loses a Rifter and the insurance pays
   entry(KADE, at(5, 21), 'insurance', 300_000, NPC, KADE);
   insert(sqlite, 'wallet_journal', journal_);
   insert(sqlite, 'wallet_transactions', tx);
@@ -99,7 +99,7 @@ function oldDatabase(dir: string, migrations: number) {
     { type_id: 34, average_price: 4, adjusted_price: 4, updated_at: at(0) },
     { type_id: RIFTER, average_price: 600_000, adjusted_price: 590_000, updated_at: at(0) },
   ]);
-  // Ítems sin `flag`: así se guardaban antes de separar equipo y carga
+  // Items without `flag`: how they were stored before separating fitting and cargo
   insert(sqlite, 'killmails', [
     { killmail_id: 7001, hash: 'h', character_id: KADE, killmail_time: at(5, 20), solar_system_id: JITA, victim_character_id: KADE, ship_type_id: RIFTER, items: JSON.stringify([{ typeId: 34, destroyed: 100, dropped: 0 }]), attackers: 2 },
   ]);
@@ -136,7 +136,7 @@ for (const [version, migrations] of RELEASES) {
     if (Bun.env.UPGRADE_DEBUG) console.log(version, JSON.stringify(r));
     expect(r.before).toBe(migrations);
     expect(r.after).toBe(KNOWN);
-    // La copia de antes de actualizar es la base de entonces, tal cual
+    // The backup from before the update is that version's database, as-is
     expect(r.update).not.toBeNull();
     expect(r.update.migrations).toBe(migrations);
     expect(r.counts).toMatchObject({
@@ -146,12 +146,12 @@ for (const [version, migrations] of RELEASES) {
       assets: 2,
       killmails: 1,
     });
-    // Un piloto vinculado antes de la 0009 (Client Secret) queda como `secret`: hay que revincularlo
+    // A pilot linked before 0009 (Client Secret) stays as `secret`: it has to be relinked
     expect(r.authMethods).toEqual(migrations > 9 ? ['pkce', 'pkce'] : ['secret', 'secret']);
     expect(r.losses.count).toBe(1);
     expect(r.ratting.ticks).toBe(28 * 3);
     expect(r.inventory).toBe(4_600_000);
-    // Restaurar la copia de antes deja la base con todo lo de entonces
+    // Restoring the backup from before leaves the database with everything from back then
     expect(r.restored).toMatchObject({ migrations, entries: old.journal, after: old.journal });
   }, 30_000);
 }

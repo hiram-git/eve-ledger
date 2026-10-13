@@ -1,22 +1,22 @@
-// Nombres de las estructuras de jugadores (citadelas, IDs > 1e12). POST /universe/names no las conoce: hace falta
-// GET /universe/structures/{id} con el token de un piloto que tenga el scope esi-universe.read_structures.v1 y
-// acceso a la estructura (si no, ESI responde 403). Con el nombre y el sistema, el inventario dice «Perimeter -
-// Tranquility Trading Tower» en vez de «Estructura #1028…» y el mapa la sitúa en su sistema
+// Names of player structures (citadels, IDs > 1e12). POST /universe/names does not know them: it takes
+// GET /universe/structures/{id} with the token of a pilot that has the esi-universe.read_structures.v1 scope and
+// access to the structure (otherwise ESI answers 403). With the name and system, the inventory says «Perimeter -
+// Tranquility Trading Tower» instead of «Estructura #1028…» and the map places it in its system
 import { and, eq, gt, inArray, isNull, lt, notInArray, or, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { assets, characters, contracts, names, stationSystems, structureLookups, walletTransactions } from '../db/schema';
 import { EsiError, esiGet } from '../lib/esi';
 
 export const STRUCTURES_SCOPE = 'esi-universe.read_structures.v1';
-// Las estructuras de jugadores tienen IDs por encima de 1e12 (las estaciones NPC, 60–64 millones)
+// Player structures have IDs above 1e12 (NPC stations, 60–64 million)
 export const STRUCTURE_MIN_ID = 1_000_000_000_000;
 
-// Tope por sync: cada 403 cuenta contra el límite de errores de ESI (100 por minuto entre todo)
+// Cap per sync: every 403 counts against ESI's error limit (100 per minute across everything)
 const MAX_LOOKUPS = 30;
 const MAX_DENIED = 15;
-// Sin acceso hoy puede haberlo mañana (el piloto entra en la corp, cambian los permisos de la estructura)
+// No access today may become access tomorrow (the pilot joins the corp, the structure's permissions change)
 const RETRY_FORBIDDEN_MS = 7 * 86_400_000;
-// 404: destruida o no existe; se vuelve a mirar al mes
+// 404: destroyed or does not exist; checked again after a month
 const RETRY_MISSING_MS = 30 * 86_400_000;
 
 type EsiStructure = { name: string; solar_system_id: number; owner_id?: number; type_id?: number };
@@ -27,9 +27,9 @@ const fetchStructure: FetchStructure = async (id, characterId) =>
 
 const isStructure = (col: typeof assets.rootLocationId) => gt(col, STRUCTURE_MIN_ID);
 
-// Estructuras que aparecen en el inventario, las transacciones y los contratos y que aún no tienen nombre; las que
-// dieron 403 o 404 hace poco esperan a su reintento. Primero las que más se ven (más pilas en el inventario, luego
-// más transacciones): con el tope por sync, las que importan se resuelven antes
+// Structures that appear in the inventory, transactions and contracts and still have no name; those that
+// returned 403 or 404 recently wait for their retry. Most visible first (most stacks in the inventory, then
+// most transactions): with the per-sync cap, the ones that matter are resolved first
 export async function pendingStructures(now = Date.now()): Promise<number[]> {
   const due = or(
     isNull(structureLookups.id),
@@ -56,9 +56,9 @@ export async function pendingStructures(now = Date.now()): Promise<number[]> {
   return [...weight.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([id]) => id);
 }
 
-// Qué pilotos probar con una estructura, de los que tienen el permiso: los que guardan algo en ella o compraron y
-// vendieron allí (tienen o tuvieron acceso). Si ninguno da con ella, nadie más la verá: no se gastan más 403.
-// Sin ninguno así (solo sale en un contrato), como mucho dos de los demás
+// Which pilots to try for a structure, among those with the permission: those that store something there or bought and
+// sold there (they have or had access). If none of them finds it, nobody else will see it: no more 403s are spent.
+// With none like that (it only shows up in a contract), at most two of the others
 const MAX_STRANGERS = 2;
 async function candidates(structureId: number, withScope: number[]): Promise<number[]> {
   if (!withScope.length) return [];
@@ -113,7 +113,7 @@ export async function resolvePendingStructures(fetch: FetchStructure = fetchStru
           outcome = 'missing';
           break;
         }
-        // 403: este piloto no tiene acceso; se prueba con el siguiente. 401: su token no vale (lo dice su sync)
+        // 403: this pilot has no access; try the next one. 401: its token is invalid (its sync says so)
         if (err.status === 403 || err.status === 401) {
           denied++;
           continue;
@@ -121,7 +121,7 @@ export async function resolvePendingStructures(fetch: FetchStructure = fetchStru
         throw err;
       }
     }
-    // Un 403 solo cuenta si se probó con todos: si el tope cortó antes, se sigue en el siguiente sync
+    // A 403 only counts if every pilot was tried: if the cap cut it short, it continues in the next sync
     if (outcome === 'forbidden' && tried < pilotsToTry.length) continue;
     await mark(id, outcome);
     result[outcome === 'ok' ? 'resolved' : outcome]++;

@@ -1,5 +1,5 @@
-//! La API (Elysia) y la web (Astro SSR) corren como dos procesos de Bun, el «sidecar» que trae el instalador.
-//! Escuchan solo en 127.0.0.1; su salida va a api.log y web.log en la carpeta de registros.
+//! The API (Elysia) and the web (Astro SSR) run as two Bun processes, the «sidecar» shipped by the installer.
+//! They only listen on 127.0.0.1; their output goes to api.log and web.log in the logs folder.
 
 use crate::config::Config;
 use std::fs::{self, OpenOptions};
@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
-/// Un proceso en marcha y, si terminó, cómo
+/// A running process and, if it finished, how
 struct Running {
     name: &'static str,
     child: Option<CommandChild>,
@@ -24,7 +24,7 @@ pub struct Services {
     running: Mutex<Vec<Running>>,
 }
 
-/// Rutas de la instalación y del usuario
+/// Installation and user paths
 pub struct Paths {
     pub server: PathBuf,
     pub data: PathBuf,
@@ -40,15 +40,15 @@ pub fn paths(app: &AppHandle) -> Result<Paths, String> {
     })
 }
 
-/// En Windows, Tauri da rutas «verbatim» (`\\?\C:\Program Files\…`) que Bun no sabe abrir
-/// («Module not found»): se quita el prefijo. `\\?\UNC\servidor\…` pasa a `\\servidor\…`. En el resto, igual
+/// On Windows, Tauri gives «verbatim» paths (`\\?\C:\Program Files\…`) that Bun cannot open
+/// («Module not found»): the prefix is stripped. `\\?\UNC\server\…` becomes `\\server\…`. Elsewhere, unchanged
 pub fn plain(path: PathBuf) -> PathBuf {
     PathBuf::from(strip_verbatim(&path.to_string_lossy()))
 }
 
-/// Copia los recursos del servidor (API, web y lanzador) a `dest/<huella>` si aún no están, y devuelve esa carpeta.
-/// La huella es la versión más el tamaño y la fecha de los archivos principales: una compilación nueva con la
-/// misma versión también se vuelve a copiar. Las copias de versiones anteriores se borran
+/// Copies the server resources (API, web and launcher) to `dest/<fingerprint>` if not there yet, and returns that folder.
+/// The fingerprint is the version plus the size and date of the main files: a new build with the
+/// same version is also copied again. Copies from earlier versions are deleted
 pub fn install_server(src: &Path, dest_root: &Path, version: &str) -> std::io::Result<PathBuf> {
     let mut stamp = version.to_string();
     for f in ["launch.js", "api/api.js", "web/server/entry.js"] {
@@ -64,7 +64,7 @@ pub fn install_server(src: &Path, dest_root: &Path, version: &str) -> std::io::R
         copy_dir(src, &dest)?;
         fs::write(&marker, &stamp)?;
     }
-    // Limpieza de copias viejas (si alguna está en uso, se queda para la próxima vez)
+    // Clean up old copies (if one is in use, it stays until next time)
     if let Ok(entries) = fs::read_dir(dest_root) {
         for e in entries.flatten() {
             if e.file_name().to_string_lossy() != name.as_str() {
@@ -99,10 +99,10 @@ fn strip_verbatim(path: &str) -> String {
     }
 }
 
-/// Evento con el resultado de vincular un piloto (la consulta de `/pilotos?…`: `linked=ID` o `error=…`)
+/// Event with the result of linking a pilot (the `/pilotos?…` query: `linked=ID` or `error=…`)
 pub const AUTH_RESULT_EVENT: &str = "auth-result";
 
-/// La API escribe `[auth] result:<consulta>` al terminar el login de EVE (apps/api/src/routes/auth.ts)
+/// The API writes `[auth] result:<query>` when the EVE login finishes (apps/api/src/routes/auth.ts)
 fn auth_result(output: &str) -> Option<String> {
     output.lines().find_map(|l| l.trim().strip_prefix("[auth] result:")).map(str::to_string)
 }
@@ -115,7 +115,7 @@ fn port_open(port: u16) -> bool {
     TcpStream::connect_timeout(&SocketAddr::from((Ipv4Addr::LOCALHOST, port)), Duration::from_millis(300)).is_ok()
 }
 
-/// Las últimas líneas de un registro, para explicar por qué no arrancó
+/// The last lines of a log, to explain why it did not start
 pub fn log_tail(path: &Path, lines: usize) -> String {
     let text = fs::read_to_string(path).unwrap_or_default();
     let all: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -123,7 +123,7 @@ pub fn log_tail(path: &Path, lines: usize) -> String {
 }
 
 impl Services {
-    /// Para lo que esté en marcha y arranca la API y la web con esta configuración
+    /// Stops whatever is running and starts the API and the web with this configuration
     pub fn start(&self, app: &AppHandle, cfg: &Config) -> Result<(), String> {
         self.stop();
         let p = paths(app)?;
@@ -134,8 +134,8 @@ impl Services {
         }
         fs::create_dir_all(&p.data).map_err(|e| e.to_string())?;
         fs::create_dir_all(&p.logs).map_err(|e| e.to_string())?;
-        // Bun no ejecuta nada desde la carpeta de instalación (en Windows, «EPERM reading» en C:\Program Files):
-        // corre una copia en la carpeta de datos local del usuario
+        // Bun runs nothing from the installation folder (on Windows, «EPERM reading» in C:\Program Files):
+        // it runs a copy in the user's local data folder
         let local = plain(app.path().app_local_data_dir().map_err(|e| e.to_string())?);
         let server = install_server(&p.server, &local.join("server"), &app.package_info().version.to_string())
             .map_err(|e| format!("copy:{e}"))?;
@@ -167,7 +167,7 @@ impl Services {
             .shell()
             .sidecar("bun")
             .map_err(|e| e.to_string())?
-            // launch.js sale cuando se cierra la app (aunque muera sin avisar) y luego importa el script
+            // launch.js exits when the app closes (even if it dies without warning) and then imports the script
             .args([launcher.to_string_lossy().to_string(), script.to_string_lossy().to_string()])
             .envs(env)
             .current_dir(&p.data)
@@ -179,7 +179,7 @@ impl Services {
         let exited_task = exited.clone();
         let app_task = app.clone();
         tauri::async_runtime::spawn(async move {
-            // Se reescribe en cada arranque: lo que interesa es la sesión actual
+            // Rewritten on every start: what matters is the current session
             let mut log = OpenOptions::new().create(true).write(true).truncate(true).open(&log_path).ok();
             while let Some(event) = rx.recv().await {
                 match event {
@@ -209,7 +209,7 @@ impl Services {
         Ok(Running { name, child: Some(child), exited })
     }
 
-    /// Espera a que los dos procesos acepten conexiones. Si uno termina antes, devuelve qué dijo
+    /// Waits until both processes accept connections. If one exits earlier, returns what it said
     pub fn wait_ready(&self, app: &AppHandle, cfg: &Config, timeout: Duration) -> Result<(), String> {
         let logs = paths(app)?.logs;
         let start = Instant::now();
@@ -239,7 +239,7 @@ impl Services {
         }
         running.clear();
         drop(running);
-        // Que los puertos queden libres antes de volver a arrancar
+        // Make sure the ports are free before starting again
         std::thread::sleep(Duration::from_millis(300));
     }
 }
@@ -265,11 +265,11 @@ mod tests {
         assert_eq!(fs::read_to_string(dest.join("api/drizzle/0000.sql")).unwrap(), "s");
         assert_eq!(fs::read_to_string(dest.join("web/client/x.css")).unwrap(), "c");
         assert!(!root.join("0.0.9-viejo").exists());
-        // Segunda vez: misma carpeta, sin volver a copiar (un archivo tocado en la copia sigue igual)
+        // Second time: same folder, no copying again (a file touched in the copy stays the same)
         fs::write(dest.join("web/client/x.css"), "tocado").unwrap();
         assert_eq!(install_server(&src, &root, "0.1.1").unwrap(), dest);
         assert_eq!(fs::read_to_string(dest.join("web/client/x.css")).unwrap(), "tocado");
-        // Otra versión: carpeta nueva
+        // Another version: new folder
         assert_ne!(install_server(&src, &root, "0.1.2").unwrap(), dest);
         let _ = fs::remove_dir_all(&tmp);
     }

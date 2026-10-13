@@ -7,8 +7,8 @@ import { marketReview } from './transactions';
 
 const DAY_MS = 86_400_000;
 
-// La transacción de mercado de un movimiento del journal (mismo piloto, journal_ref_id = journal_id): su
-// contraparte (client_id) y su id, que comparten los dos lados de una compraventa entre tus pilotos
+// The market transaction of a journal entry (same pilot, journal_ref_id = journal_id): its
+// counterparty (client_id) and its id, which both sides of a trade between your pilots share
 const linkedTx = (col: string) =>
   sql.raw(
     `(select t.${col} from wallet_transactions t where t.character_id = wallet_journal.character_id and t.journal_ref_id = wallet_journal.journal_id limit 1)`,
@@ -16,12 +16,12 @@ const linkedTx = (col: string) =>
 const txClient = linkedTx('client_id');
 const txId = linkedTx('transaction_id');
 
-// Transferencias entre mis propios personajes: en el consolidado se anulan
-// (una sale de un wallet y entra en otro), así que no cuentan como ingreso ni gasto.
-// - Dos pilotos DISTINTOS en las partes: donaciones, contratos, trades y el lado del vendedor de una compraventa.
-// - Una compra de mercado (market_escrow) lleva al propio comprador en las dos partes: es un gasto salvo que su
-//   transacción tenga como contraparte a otro de tus pilotos (comprar la orden de venta de tu alter), y por el
-//   importe entero de esa transacción (una orden de compra que llenan varios vendedores no se anula)
+// Transfers between my own characters: they cancel out in the consolidated view
+// (one leaves a wallet and enters another), so they count as neither income nor expense.
+// - Two DIFFERENT pilots as the parties: donations, contracts, trades and the seller's side of a trade.
+// - A market purchase (market_escrow) carries the buyer itself as both parties: it is an expense unless its
+//   transaction has another of your pilots as the counterparty (buying your alt's sell order), and for the
+//   whole amount of that transaction (a buy order filled by several sellers is not cancelled out)
 export const isInternal = sql<number>`(case
   when ${walletJournal.firstPartyId} in (select id from characters)
     and ${walletJournal.secondPartyId} in (select id from characters)
@@ -39,7 +39,7 @@ const expenses = sql<number>`coalesce(sum(case when ${walletJournal.amount} < 0 
 
 export type Totals = { income: number; expenses: number; net: number };
 
-// Tipo de movimiento para el detalle: el ref_type de ESI, salvo escalaciones vendidas y loot del buyback
+// Movement type for the detail: ESI's ref_type, except sold escalations and buyback loot
 const refKind = refKindOf(walletJournal.refType, walletJournal.amount, walletJournal.firstPartyId);
 export const activity = activityOf(walletJournal.refType, walletJournal.contextId, refKind);
 
@@ -48,11 +48,11 @@ const withNet = <T extends { income: number; expenses: number }>(r: T): T & { ne
   net: r.income - r.expenses,
 });
 
-// Fecha UTC (hora de EVE) en formato YYYY-MM-DD
+// UTC date (EVE time) in YYYY-MM-DD format
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
-// Ingresos, gastos y neto entre dos instantes, sin transferencias internas. Brutos: las compras de
-// mercado son gasto y las ventas ingreso; el margen del trading solo se muestra en byActivity
+// Income, expenses and net between two instants, without internal transfers. Gross: market purchases
+// are expenses and sales income; the trading margin is only shown in byActivity
 async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date, withoutAccounts = false) {
   const [row] = await db
     .select({ income, expenses })
@@ -69,9 +69,9 @@ async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date, withou
   return withNet(row);
 }
 
-// Neto diario de un piloto en los últimos `days` días, medido solo sobre los días de los que hay datos:
-// desde su primer movimiento (si es posterior al inicio) hasta su último sync. Un piloto con el sync
-// atascado cuenta con su ritmo hasta ese sync; sin sync, o sin datos en la ventana, devuelve null
+// Daily net of a pilot over the last `days` days, measured only over the days with data:
+// from its first movement (if later than the start) up to its last sync. A pilot with a stuck
+// sync counts at its rate up to that sync; with no sync, or no data in the window, returns null
 export async function dailyNetRate(characterId: number, lastSyncAt: Date | null, days: number) {
   if (!lastSyncAt) return null;
   const now = new Date();
@@ -85,13 +85,13 @@ export async function dailyNetRate(characterId: number, lastSyncAt: Date | null,
   const to = lastSyncAt < now ? lastSyncAt : now;
   const span = (to.getTime() - from.getTime()) / DAY_MS;
   if (span <= 0) return null;
-  // Sin el PLEX: comprarlo ES pagar el Omega, no el ritmo con el que lo pagas
+  // Without PLEX: buying it IS paying for Omega, not the rate at which you pay for it
   const flow = await flowBetween(eq(walletJournal.characterId, characterId), from, to, true);
-  // Menos de un día de datos: se divide por un día entero para no inflar el ritmo
+  // Less than a day of data: divide by a whole day so the rate is not inflated
   return flow.net / Math.max(1, span);
 }
 
-// PLEX comprado y vendido en el mercado en el período (sin operaciones entre tus pilotos)
+// PLEX bought and sold on the market in the period (without operations between your pilots)
 async function plexTraded(from: Date, characterId?: number) {
   const [row] = await db
     .select({
@@ -110,12 +110,12 @@ async function plexTraded(from: Date, characterId?: number) {
   return { plexBought: row?.bought ?? 0, plexSold: row?.sold ?? 0 };
 }
 
-// characterId opcional: el ledger de un solo piloto. Las transferencias entre tus pilotos no cuentan en
-// ningún neto (mover ISK no es ganarlo); la lista de pilotos se devuelve siempre completa.
-// Saldo = el balance del último movimiento sincronizado del personaje
-// Saldo anterior: el balance con el que el piloto entró en el período (el de su último movimiento antes de
-// `from`). Si su historial empieza dentro del período, el balance de su primer movimiento menos ese movimiento,
-// y `partial` lo dice. Saldo anterior + variación del wallet = saldo, salvo movimientos que ESI ya no daba
+// Optional characterId: the ledger of a single pilot. Transfers between your pilots do not count in
+// any net (moving ISK is not earning it); the pilot list is always returned in full.
+// Balance = the balance of the character's last synced movement
+// Opening balance: the balance the pilot entered the period with (that of its last movement before
+// `from`). If its history starts inside the period, the balance of its first movement minus that movement,
+// and `partial` says so. Opening balance + wallet change = balance, except for movements ESI no longer returned
 export async function openingBalance(characterId: number, from: Date) {
   const [before] = await db
     .select({ balance: walletJournal.balance, date: walletJournal.date })
@@ -134,9 +134,9 @@ export async function openingBalance(characterId: number, from: Date) {
   return { balance: null, at: null, partial: true };
 }
 
-// Saldo actual: el del wallet que da ESI en cada sync (el real) y, si aún no lo hay, el balance del último
-// movimiento del journal. journalBalance es siempre el del journal: con él cuadra la conciliación (saldo anterior +
-// neto + entre tus pilotos), porque el wallet real puede llevar movimientos que el journal aún no da
+// Current balance: the wallet balance ESI returns on each sync (the real one) and, if there is none yet, the balance of the last
+// journal movement. journalBalance is always the journal's: the reconciliation adds up with it (opening balance +
+// net + between your pilots), because the real wallet may include movements the journal does not return yet
 export async function lastBalance(characterId: number) {
   const [last] = await db
     .select({ balance: walletJournal.balance, date: walletJournal.date })
@@ -155,7 +155,7 @@ export async function lastBalance(characterId: number) {
 
 export async function getSummary(days: number, characterId?: number) {
   const now = new Date();
-  // Desde el inicio del día UTC, para que el primer día de la serie esté completo
+  // From the start of the UTC day, so the first day of the series is complete
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
   const pilot = characterId ? eq(walletJournal.characterId, characterId) : undefined;
@@ -172,12 +172,12 @@ export async function getSummary(days: number, characterId?: number) {
     expenses: activityRows.reduce((n, r) => n + r.expenses, 0),
   });
 
-  // «Hoy» = día de EVE en curso (desde 00:00 UTC) y el período anterior de igual duración
+  // «Hoy» (Today) = current EVE day (since 00:00 UTC) and the previous period of equal length
   const today = await flowBetween(pilot, todayStart);
   const previousFrom = new Date(from.getTime() - days * DAY_MS);
   const previous = await flowBetween(pilot, previousFrom, from);
 
-  // Cobertura: el historial empieza con el primer movimiento guardado, no con el período pedido
+  // Coverage: history starts with the first stored movement, not with the requested period
   const [first] = await db.select({ at: min(walletJournal.date) }).from(walletJournal).where(pilot);
   const firstEntryAt = first?.at ?? null;
   const coveredDays = !firstEntryAt
@@ -185,14 +185,14 @@ export async function getSummary(days: number, characterId?: number) {
     : firstEntryAt <= from
       ? days
       : Math.floor((todayStart.getTime() - Date.UTC(firstEntryAt.getUTCFullYear(), firstEntryAt.getUTCMonth(), firstEntryAt.getUTCDate())) / DAY_MS) + 1;
-  // El período anterior solo es comparable si el historial lo cubre entero
+  // The previous period is only comparable if history covers it entirely
   const previousComplete = !!firstEntryAt && firstEntryAt <= previousFrom;
 
-  // Movido entre tus pilotos en el período: quién envió y quién recibió cada
-  // transferencia. ESI da el mismo id a los dos lados y basta uno para saberlo (el signo dice quién paga; la otra
-  // parte es el otro piloto), así que cuadra también con movimientos de antes de que el journal guardara los dos
-  // lados (migración 0007). No cuentan en ningún neto (decisión del usuario: el neto de un piloto es lo ganado en
-  // juego; mover ISK no es ganarlo). Van aparte para la conciliación: saldo anterior + neto + entre tus pilotos = saldo
+  // Moved between your pilots in the period: who sent and who received each
+  // transfer. ESI gives both sides the same id and one is enough to know (the sign says who pays; the other
+  // party is the other pilot), so it also adds up with movements from before the journal stored both
+  // sides (migration 0007). They count in no net (user's decision: a pilot's net is what was earned in
+  // game; moving ISK is not earning it). Kept apart for the reconciliation: opening balance + net + between your pilots = balance
   const internalRows = await db
     .select({
       journalId: walletJournal.journalId,
@@ -206,19 +206,19 @@ export async function getSummary(days: number, characterId?: number) {
     })
     .from(walletJournal)
     .where(and(gte(walletJournal.date, from), eq(isInternal, 1)));
-  // Una transferencia por clave: el id de la transacción en una compraventa de mercado (el escrow del comprador
-  // y el market_transaction del vendedor tienen ids de journal distintos), el del journal en lo demás
+  // One transfer per key: the transaction id in a market trade (the buyer's escrow
+  // and the seller's market_transaction have different journal ids), the journal id otherwise
   const transfers = new Map<string, { from: number; to: number; amount: number; date: Date }>();
   for (const r of internalRows) {
     const key = r.txId !== null ? `tx${r.txId}` : `j${r.journalId}`;
     if (transfers.has(key) || !r.amount) continue;
-    // La otra parte: la que no es este piloto; en el escrow del comprador (él en las dos), el cliente de la transacción
+    // The other party: the one that is not this pilot; in the buyer's escrow (him on both sides), the transaction's client
     const other =
       r.firstPartyId !== r.characterId ? r.firstPartyId! : r.secondPartyId !== r.characterId ? r.secondPartyId! : r.txClient!;
     const [sender, receiver] = r.amount < 0 ? [r.characterId, other] : [other, r.characterId];
     transfers.set(key, { from: sender, to: receiver, amount: Math.abs(r.amount), date: r.date });
   }
-  // Recibido y enviado por un piloto (o movido entre todos) entre dos instantes
+  // Received and sent by a pilot (or moved among all) between two instants
   const internalBetween = (id: number | undefined, a: Date, b?: Date) => {
     let received = 0;
     let sent = 0;
@@ -243,7 +243,7 @@ export async function getSummary(days: number, characterId?: number) {
     r.received += t.amount;
     internalByCharacter.set(t.to, r);
   }
-  // Vista de un piloto: lo movido con tus otros pilotos cada día (para el gráfico; no está en el neto del día)
+  // Single-pilot view: what was moved with your other pilots each day (for the chart; not in the day's net)
   const internalDay = new Map<string, number>();
   if (characterId) {
     for (const x of transfers.values()) {
@@ -264,17 +264,17 @@ export async function getSummary(days: number, characterId?: number) {
     .select({ refType, activity, income, expenses, count: sql<number>`count(*)` })
     .from(walletJournal)
     .where(inPeriod)
-    // La misma comisión de contrato puede ser logística (courier) o trading (compraventa)
+    // The same contract fee can be logistics (courier) or trading (item exchange)
     .groupBy(refType, activity);
 
-  // «PvP con naves» (decisión del usuario): reponer una nave perdida y llevarla cuesta PvP, no trading ni
-  // logística. Las compras de reposición (emparejadas por shipLosses, también las de pérdidas de los 7 días
-  // previos al período) salen del asiento del journal de cada compra (market_escrow para el comprador;
-  // market_transaction en datos antiguos), y los movimientos de los couriers que llevaron naves perdidas
-  // (recompensa y comisión, con el contrato como context_id) salen de logística
+  // «PvP con naves» (PvP with ships, user's decision): replacing a lost ship and hauling it costs PvP, not trading or
+  // logistics. Replacement purchases (matched by shipLosses, including those for losses in the 7 days
+  // before the period) come out of each purchase's journal entry (market_escrow for the buyer;
+  // market_transaction in old data), and the movements of couriers that carried lost ships
+  // (reward and fee, with the contract as context_id) come out of logistics
   const shipFlow = await shipLosses(days + REPLACEMENT_DAYS);
   const replacementSpend = shipFlow.spend.filter((s) => s.date >= from && (!characterId || s.characterId === characterId));
-  // El asiento de una compra es el del journal del mismo piloto (el id puede repetirse en el del vendedor)
+  // A purchase's entry is the journal entry of the same pilot (the id may repeat in the seller's)
   const refIds = [...new Set(replacementSpend.map((s) => s.journalRefId).filter((id): id is number => id !== null))];
   const refOf = new Map(
     (refIds.length
@@ -285,9 +285,9 @@ export async function getSummary(days: number, characterId?: number) {
       : []
     ).map((r) => [`${r.id}|${r.characterId}`, r]),
   );
-  // Lo que sale de cada fila (ref_type + actividad). Una compra repartida entre dos pérdidas es un solo movimiento,
-  // y una que repone solo en parte (dos Rifter, uno para la pérdida) se queda en su fila con lo que no es reposición:
-  // el contador de la fila solo pierde los asientos que se van enteros a PvP
+  // What leaves each row (ref_type + activity). A purchase split between two losses is a single movement,
+  // and one that only partly replaces (two Rifters, one for the loss) stays in its row with what is not replacement:
+  // the row's counter only loses the entries that move entirely to PvP
   const used = new Map<string, number>();
   const fromRows = new Map<string, { amount: number; ids: Set<string>; whole: number }>();
   for (const s of replacementSpend) {
@@ -347,17 +347,17 @@ export async function getSummary(days: number, characterId?: number) {
   const accountsDay = sql<number>`coalesce(sum(case when ${activity} = 'accounts' then ${walletJournal.amount} end), 0)`;
   const dailyRows = await db.select({ day, income, expenses, accounts: accountsDay }).from(walletJournal).where(inPeriod).groupBy(day);
 
-  // Serie diaria completa, con ceros en los días sin movimientos
+  // Full daily series, with zeros on days without movements
   const dailyMap = new Map(dailyRows.map((r) => [r.day, r]));
   const daily = Array.from({ length: days }, (_, i) => {
     const d = isoDay(new Date(from.getTime() + i * DAY_MS));
-    // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos: el gráfico lo señala
+    // accounts: PLEX bought (−) or sold (+) that day, already included in income/expenses: the chart marks it
     const row = withNet({ date: d, income: dailyMap.get(d)?.income ?? 0, expenses: dailyMap.get(d)?.expenses ?? 0, accounts: dailyMap.get(d)?.accounts ?? 0 });
-    // internal: en la vista de un piloto, lo movido con tus otros pilotos ese día (aparte del neto)
+    // internal: in single-pilot view, what was moved with your other pilots that day (apart from the net)
     return { ...row, internal: internalDay.get(d) ?? 0 };
   });
 
-  // Saldo = el del wallet de ESI en el último sync (o el balance del último movimiento, si aún no lo hay)
+  // Balance = the ESI wallet balance at the last sync (or the balance of the last movement, if there is none yet)
   const chars = await db.select({ id: characters.id, name: characters.name, lastSyncAt: characters.lastSyncAt }).from(characters);
   const charMap = new Map(byCharacter.map((r) => [r.characterId, r]));
   const perCharacter = await Promise.all(
@@ -383,8 +383,8 @@ export async function getSummary(days: number, characterId?: number) {
         expenses,
         internalReceived,
         internalSent,
-        // El neto de un piloto es lo ganado en juego (decisión del usuario): la suma de los pilotos es el consolidado.
-        // Lo que cambió su wallet suma además lo movido con tus otros pilotos (saldo anterior + walletChange = saldo)
+        // A pilot's net is what was earned in game (user's decision): the sum of the pilots is the consolidated total.
+        // What changed its wallet also adds what was moved with your other pilots (opening balance + walletChange = balance)
         net: income - expenses,
         walletChange: income - expenses + internalReceived - internalSent,
       };
@@ -401,16 +401,16 @@ export async function getSummary(days: number, characterId?: number) {
     internalReceived: internal.received,
     internalSent: internal.sent,
     characters: perCharacter,
-    // Por actividad, con brutos y detalle por ref_type; el neto del trading es su margen
-    // Las compras de reposición y los couriers de naves perdidas ya están movidos a PvP (ship_replacement,
-    // ship_transport); los brutos de cada actividad son la suma de sus ref_types
+    // By activity, with gross amounts and detail per ref_type; trading's net is its margin
+    // Replacement purchases and couriers of lost ships are already moved to PvP (ship_replacement,
+    // ship_transport); each activity's gross amounts are the sum of its ref_types
     byActivity: ACTIVITIES.map((a) => {
       const refTypes = [
         ...byRefType.filter((r) => r.activity === a).map((r) => shift(a, r)),
         ...(a === 'pvp' ? shipRefTypes : []),
       ]
-        // Sin redondeo: una fila que queda en 0 (todas sus compras eran reposición) desaparece; mientras le quede
-        // dinero se queda, para que la suma de las actividades sea siempre el total
+        // No rounding: a row left at 0 (all its purchases were replacements) disappears; while it still has
+        // money it stays, so the sum of the activities is always the total
         .filter((r) => Math.abs(r.income) > 0.005 || Math.abs(r.expenses) > 0.005)
         .map((r) => ({ ...r, count: Math.max(r.count, 1) }))
         .map(withNet)
@@ -423,14 +423,14 @@ export async function getSummary(days: number, characterId?: number) {
         refTypes,
       });
     }).filter((a) => a.count > 0),
-    // Lo movido a PvP por «PvP con naves» (para las notas de la web)
+    // What «PvP con naves» moved to PvP (for the web's notes)
     shipFlow: { replacement: moved.replacement, transport: moved.transport.expenses - moved.transport.income },
     daily,
     today,
     previous: { ...previous, complete: previousComplete },
     coverage: { firstEntryAt, coveredDays },
     market: await marketReview(from, characterId),
-    // PLEX / cuentas: aparte del resultado de juego (el neto de la actividad está en byActivity)
+    // PLEX / accounts: apart from the game result (the activity's net is in byActivity)
     accounts: await plexTraded(from, characterId),
   };
 }

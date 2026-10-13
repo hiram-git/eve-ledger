@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { BACKUP_NAME, fetchBackup } from '../../lib/api';
 
-// Descargar una copia de seguridad: la web la pide a la API (que solo escucha en esta máquina) y la entrega tal cual
+// Download a backup: the web requests it from the API (which only listens on this machine) and hands it over as-is
 export const GET: APIRoute = async ({ params }) => {
   const name = params.name ?? '';
   if (!BACKUP_NAME.test(name)) return new Response('Not found', { status: 404 });

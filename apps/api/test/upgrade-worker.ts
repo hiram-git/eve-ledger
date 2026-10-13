@@ -1,10 +1,10 @@
-// Arranque de la API sobre una base de una versión anterior (lo lanza test/upgrade.test.ts en su propio proceso,
-// porque la base se abre al importar el cliente): copia `update`, migraciones y las cifras de cada pantalla
+// Starts the API on a database from an earlier version (launched by test/upgrade.test.ts in its own process,
+// because the database is opened when the client is imported): `update` backup, migrations and every screen's figures
 const API = `${import.meta.dir}/../src`;
 const { appliedMigrations, knownMigrations, rawDb, runMigrations } = await import(`${API}/db/client.ts`);
 const backups = await import(`${API}/services/backups.ts`);
 
-// Lo mismo que hace src/index.ts al arrancar
+// Same as what src/index.ts does on startup
 const before = appliedMigrations();
 const update = backups.backupBeforeMigrations();
 runMigrations();
@@ -25,7 +25,7 @@ const indicators = await getIndicators();
 const inventory = await getInventory();
 const doctrines = await listDoctrines();
 
-// Y una copia de antes de actualizar se puede restaurar encima (vuelve a dejar lo mismo)
+// And a backup from before the update can be restored on top (it leaves the same state again)
 const restored = update ? backups.restoreFromFile(backups.backupPath(update.name)) : null;
 
 console.log(

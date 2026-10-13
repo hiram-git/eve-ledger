@@ -5,7 +5,7 @@ import { esiGet } from '../lib/esi';
 
 export const CONTRACTS_SCOPE = 'esi-contracts.read_character_contracts.v1';
 
-// GET /characters/{id}/contracts (solo los campos que guardamos)
+// GET /characters/{id}/contracts (only the fields we store)
 type EsiContract = {
   contract_id: number;
   issuer_id: number;
@@ -24,7 +24,7 @@ type EsiContract = {
 type EsiContractItem = { type_id: number; quantity: number; is_included: boolean };
 
 const CHUNK = 500;
-// Ítems de courier por sync: el resto en el siguiente
+// Courier items per sync: the rest in the next one
 const MAX_ITEMS = 50;
 
 export async function fetchContracts(characterId: number, r: { pages: number; fetched: number; inserted: number }) {
@@ -38,7 +38,7 @@ export async function fetchContracts(characterId: number, r: { pages: number; fe
   }
   r.fetched = all.length;
 
-  // El estado cambia (outstanding → in_progress → finished): upsert, sin tocar los ítems ya guardados
+  // The status changes (outstanding → in_progress → finished): upsert, without touching items already stored
   const now = new Date();
   const rows = all.map((c) => ({
     contractId: c.contract_id,
@@ -75,7 +75,7 @@ export async function fetchContracts(characterId: number, r: { pages: number; fe
   });
   r.inserted = rows.length;
 
-  // Qué lleva cada courier que emitió este piloto (los ítems no cambian: una sola vez)
+  // What each courier issued by this pilot carries (items do not change: only once)
   const pending = await db
     .select({ id: contracts.contractId })
     .from(contracts)
@@ -88,7 +88,7 @@ export async function fetchContracts(characterId: number, r: { pages: number; fe
   }
 }
 
-// Couriers emitidos por tus pilotos desde un instante, con lo que llevan
+// Couriers issued by your pilots since a given instant, with what they carry
 export async function courierContracts(issuers: number[], from: Date) {
   if (!issuers.length) return [];
   return db

@@ -1,5 +1,5 @@
 ---
-// Barras horizontales ordenadas: una serie por lista, el título la nombra
+// Sorted horizontal bars: one series per list, the title names it
 import { isk, iskFull } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
@@ -75,7 +75,7 @@ const total = sorted.reduce((n, r) => n + r.value, 0);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Pista tenue detrás de la barra: da escala sin añadir tinta de datos */
+  /* Faint track behind the bar: gives scale without adding data ink */
   .track {
     position: relative;
     display: flex;

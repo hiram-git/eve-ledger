@@ -1,5 +1,5 @@
 ---
-// Pilotos: vincular personajes (vuelta del login de EVE), su estado de sync, permisos y cifras
+// Pilots: link characters (return from the EVE login), their sync status, permissions and figures
 import { PILOT_SLOTS } from 'astro:env/server';
 import ActionNotice from '../components/ActionNotice.astro';
 import Icon from '../components/Icon.astro';
@@ -51,7 +51,7 @@ try {
   apiError = err instanceof Error ? err.message : String(err);
 }
 
-// Vuelta del login de EVE
+// Return from the EVE login
 const linkedId = Number(q.get('linked') ?? 0);
 const linked = pilots.find((p) => p.id === linkedId);
 const loginError = q.get('error');
@@ -62,7 +62,7 @@ const synced = q.get('synced');
 const syncErrors = q.get('syncErrors');
 const syncFailed = q.get('syncFailed');
 
-// Cifras por piloto: saldo y neto del resumen, inventario del inventario
+// Figures per pilot: balance and net from the summary, inventory from the inventory
 const flows = new Map(summary?.characters.map((c) => [c.id, c]));
 const invByPilot = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.value]));
 
@@ -74,7 +74,7 @@ const SCOPE_LABELS: Record<string, string> = {
   'esi-skills.read_skills.v1': m.scopeSkills,
 };
 const REQUIRED = Object.keys(SCOPE_LABELS);
-// Permiso opcional: nombres y sistema de las citadelas (la API lo da aparte, en missingOptionalScopes)
+// Optional permission: citadel names and systems (the API returns it separately, in missingOptionalScopes)
 const STRUCTURES_SCOPE = 'esi-universe.read_structures.v1';
 
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
@@ -85,7 +85,7 @@ const pending = rows.some((r) => r.state.kind === 'pending');
 const freeSlots = Math.max(0, PILOT_SLOTS - pilots.length);
 const portrait = (id: number, size = 128) => `https://images.evetech.net/characters/${id}/portrait?size=${size}`;
 
-// Copias de seguridad: la última, cuántas y cuánto ocupan; el resultado de una acción vuelve con at=copias
+// Backups: the latest, how many and how much space they take; the result of an action comes back with at=copias
 const backupList = backups?.backups ?? [];
 const latestBackup = backupList[0];
 const backupBytes = backupList.reduce((n, b) => n + b.size, 0);
@@ -118,7 +118,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     <div>
       <h1>{m.pilots}</h1>
       <p class="subtitle">
-        {/* Más pilotos que plazas (PILOT_SLOTS): no «6 de 5», solo cuántos hay */}
+        {/* More pilots than slots (PILOT_SLOTS): not «6 de 5», just how many there are */}
         {pilots.length > PILOT_SLOTS ? m.pilotsLinkedOnly(pilots.length) : m.pilotsLinked(pilots.length, PILOT_SLOTS)}
         {freeSlots > 0 && <span>{m.pilotsHurry}</span>}
       </p>
@@ -136,7 +136,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
         <div>
           <strong>{m.linkedTitle(linked.name)}</strong>
           <p>
-            {/* Solo cuenta un sync posterior al vínculo: al revincular, el anterior era con el token viejo */}
+            {/* Only a sync after the link counts: when relinking, the previous one used the old token */}
             {linked.lastSyncAt && linked.lastSyncAt >= linked.linkedAt ? m.linkedDone(rel(linked.lastSyncAt)) : m.linkedPending}
           </p>
         </div>
@@ -236,7 +236,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
               )}
             </div>
 
-            {/* Solo los permisos que faltan: listar los concedidos era ruido en cada piloto sano */}
+            {/* Only the missing permissions: listing the granted ones was noise on every healthy pilot */}
             <ul class="scopes" aria-label={m.permissions}>
               {p.missingScopes.length === 0 ? (
                 <li>
@@ -252,7 +252,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
                   </li>
                 ))
               )}
-              {/* Opcional (nombres de las citadelas): sin ámbar; el chip entero lleva al login de EVE para concederlo */}
+              {/* Optional (citadel names): no amber; the whole chip leads to the EVE login to grant it */}
               {(p.missingOptionalScopes ?? []).includes(STRUCTURES_SCOPE) && (
                 <li class="optional">
                   <a href={loginUrl} title={`${m.scopeStructuresHint} ${m.relinkAs(p.name)}`}>
@@ -273,7 +273,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
               </div>
               <div>
                 <dt>{m.inventory}</dt>
-                {/* Sin el permiso de inventario, lo guardado es una foto anterior: se ve apagado y lo dice */}
+                {/* Without the inventory permission, what is stored is an older snapshot: it is dimmed and says so */}
                 <dd
                   class:list={{ stale: invByPilot.has(p.id) && p.missingScopes.includes('esi-assets.read_assets.v1') }}
                   title={
@@ -287,7 +287,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
                   {invByPilot.has(p.id) ? fmt(invByPilot.get(p.id)!) : '—'}
                 </dd>
               </div>
-              {/* Neto = lo ganado en juego (el mismo que en el Resumen); lo movido con tus otros pilotos va debajo, sin color */}
+              {/* Net = what was earned in game (the same as in the Summary); what was moved with your other pilots goes below, without color */}
               <div>
                 <dt>{m.net30(DAYS)}</dt>
                 <dd
@@ -311,7 +311,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
             </dl>
 
             <div class="actions">
-              {/* Alfa u Omega: lo usan las Doctrinas (un Alfa entrena a la mitad y no usa todas las skills) */}
+              {/* Alpha or Omega: used by Doctrinas (an Alpha trains at half speed and cannot use every skill) */}
               <form method="post" action="/clone" class="clone-toggle" role="group" aria-label={`${m.cloneToggle}: ${p.name}`} title={m.cloneHint}>
                 <input type="hidden" name="back" value="/pilotos" />
                 <input type="hidden" name="character" value={p.id} />
@@ -473,8 +473,8 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
 </Base>
 
 <script>
-  // Copias de seguridad: restaurar pide confirmación (data-confirm) y las acciones muestran que están trabajando
-  // (botón ocupado y una nota) hasta que vuelve la página. data-busy-note, no data-pending: ese atributo recarga Pilotos
+  // Backups: restoring asks for confirmation (data-confirm) and the actions show they are working
+  // (busy button and a note) until the page comes back. data-busy-note, not data-pending: that attribute reloads Pilotos
   document.addEventListener('submit', (e) => {
     const form = e.target as HTMLFormElement;
     const msg = form.dataset.confirm;
@@ -485,7 +485,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     const note = form.dataset.busyNote;
     if (!note) return;
     const button = form.querySelector<HTMLButtonElement>('button[type=submit]');
-    // Después del envío: deshabilitarlo antes cancelaría el propio envío en algunos navegadores
+    // After submitting: disabling it before would cancel the submission itself in some browsers
     setTimeout(() => {
       if (button) {
         button.disabled = true;
@@ -505,13 +505,13 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     });
     document.querySelectorAll('.pending-note').forEach((n) => n.remove());
   });
-  // Vuelta de una acción de copias: el aviso recibe el foco (el salto al ancla se lo quitaría)
+  // Return from a backup action: the notice gets focus (jumping to the anchor would take it away)
   if (new URLSearchParams(location.search).get('at') === 'copias') {
     const focus = () => document.querySelector<HTMLElement>('#copias .action-notice')?.focus();
     window.addEventListener('load', () => setTimeout(focus, 0));
   }
 
-  // Mientras algún piloto hace su primer sync, recargar cada 15 s (como mucho 2 min)
+  // While some pilot is doing its first sync, reload every 15 s (at most 2 min)
   if (document.querySelector('[data-pending]')) {
     const tries = Number(sessionStorage.getItem('pilotos-reload') ?? 0);
     if (tries < 8) {
@@ -570,7 +570,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     font: 12px var(--mono);
   }
 
-  /* Lista de pilotos: una fila por personaje, columnas alineadas entre filas */
+  /* Pilot list: one row per character, columns aligned across rows */
   .roster {
     display: grid;
     grid-template-columns: minmax(13rem, 1.2fr) minmax(12rem, 1.1fr) auto minmax(17rem, 1.4fr) auto;
@@ -580,7 +580,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     padding: 0;
     list-style: none;
   }
-  /* Cada fila hereda las columnas de la lista: todo queda alineado entre pilotos */
+  /* Each row inherits the list's columns: everything stays aligned across pilots */
   .pilot {
     grid-column: 1 / -1;
     display: grid;
@@ -624,7 +624,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     font-size: 13px;
     color: var(--text-muted);
   }
-  /* La fecha no se parte, pero la línea sí puede bajar: en una columna estrecha se metía bajo «Último sync» */
+  /* The date does not break, but the line may wrap: in a narrow column it slid under «Último sync» */
   .since time {
     white-space: nowrap;
   }
@@ -661,7 +661,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     border-color: #6b5530;
     color: var(--warning);
   }
-  /* Aviso de estado en ámbar: el rojo queda para el neto negativo */
+  /* Status notice in amber: red is reserved for negative net */
   .chip.error {
     border-color: #6b5530;
     background: #2a2216;
@@ -671,7 +671,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     font-size: 13px;
     color: var(--text-muted);
   }
-  /* Explicación del error: texto de los tokens (el rojo queda para el neto negativo) y suelo de 13 px */
+  /* Error explanation: token text colors (red is reserved for negative net) and a 13 px floor */
   .error-msg {
     max-width: 34ch;
     font-size: 13px;
@@ -712,7 +712,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
   .scopes li.missing .icon {
     color: var(--warning);
   }
-  /* Opcional: borde discontinuo y texto apagado; no es un problema, es una mejora a un clic */
+  /* Optional: dashed border and dimmed text; it is not a problem, it is an improvement one click away */
   .scopes li.optional {
     padding: 0;
     border: 1px dashed #2d4556;
@@ -756,14 +756,14 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
   .figures dd.neg {
     color: var(--critical);
   }
-  /* Lo movido con tus otros pilotos: nota bajo el neto, sin verde/rojo (no es ganancia ni pérdida) */
+  /* What was moved with your other pilots: note under the net, without green/red (it is neither gain nor loss) */
   .figures dd.between {
     font: 400 13px var(--font);
     letter-spacing: 0;
     color: var(--text-muted);
     white-space: normal;
   }
-  /* Alfa | Omega sobre la acción: en fila ensanchaba la última columna (en alemán, la página desbordaba) */
+  /* Alpha | Omega above the action: in a row it widened the last column (in German, the page overflowed) */
   .actions {
     display: flex;
     flex-direction: column;
@@ -771,7 +771,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     gap: 8px;
     justify-self: end;
   }
-  /* Alfa | Omega: control segmentado discreto, como el de Patrimonio */
+  /* Alpha | Omega: discreet segmented control, like the one in Patrimonio */
   .clone-toggle {
     display: inline-flex;
     padding: 2px;
@@ -799,7 +799,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     padding: 7px 12px;
   }
 
-  /* Plazas libres: invitación a vincular, sin competir con los pilotos reales */
+  /* Free slots: an invitation to link, without competing with the real pilots */
   .pilot.empty {
     display: block;
     padding: 0;
@@ -838,7 +838,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     color: var(--text-muted);
   }
 
-  /* ───── Copias de seguridad ───── */
+  /* ───── Backups ───── */
   .backups {
     margin-bottom: 24px;
   }
@@ -855,7 +855,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     font-size: 13px;
     color: var(--text-muted);
   }
-  /* La ruta de la carpeta puede ser larga (Windows): se parte donde haga falta en vez de desbordar */
+  /* The folder path can be long (Windows): it breaks wherever needed instead of overflowing */
   .backup-status code {
     font: 12px var(--mono);
     color: var(--text-secondary);
@@ -913,7 +913,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     text-transform: uppercase;
     color: var(--text-muted);
   }
-  /* La fecha es un dato (cifras en mono) y el tipo, texto: sin las mayúsculas ni la mono globales de th/td */
+  /* The date is data (figures in mono) and the type is text: without the global uppercase and mono of th/td */
   .backup-list tbody th {
     font: 500 13px var(--mono);
     letter-spacing: 0;
@@ -971,7 +971,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     font-size: 13px;
     color: var(--text-secondary);
   }
-  /* Móvil: cada copia en dos líneas (fecha, tipo y tamaño; debajo, las acciones) en vez de una tabla que se desliza */
+  /* Mobile: each backup on two lines (date, type and size; below, the actions) instead of a table that scrolls */
   @media (max-width: 600px) {
     .backup-list thead {
       position: absolute;
@@ -993,7 +993,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
       padding: 0;
       border: 0;
     }
-    /* «Vor dem Wiederherstellen» no cabe en una línea junto a la fecha y el tamaño */
+    /* «Vor dem Wiederherstellen» does not fit on one line next to the date and size */
     .backup-list td.kind {
       white-space: normal;
     }
@@ -1034,7 +1034,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     .roster {
       grid-template-columns: minmax(0, 1fr) auto;
     }
-    /* identidad | permisos · estado | acción · cifras a lo ancho */
+    /* identity | permissions · status | action · figures full width */
     .who {
       grid-area: 1 / 1;
     }
@@ -1088,7 +1088,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
       min-height: 40px;
       padding: 0 12px;
     }
-    /* Objetivos táctiles de 40 px también aquí */
+    /* 40 px touch targets here too */
     .actions .secondary-button,
     .page-head .secondary-button {
       min-height: 40px;

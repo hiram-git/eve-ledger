@@ -2,11 +2,11 @@ import type { APIRoute } from 'astro';
 import { safeBackUrl } from '../lib/safe-back';
 import { syncAll, syncOne } from '../lib/api';
 
-// Botones «Sincronizar»: todos los pilotos, o uno solo si el formulario trae `character`.
-// Vuelve a la página de origen con el resultado en la query
+// «Sincronizar» buttons: all pilots, or just one if the form carries `character`.
+// Returns to the originating page with the result in the query
 export const POST: APIRoute = async ({ request, redirect }) => {
   const form = await request.formData();
-  // Solo rutas locales: nunca redirigir fuera del dashboard
+  // Local paths only: never redirect outside the dashboard
   const back = safeBackUrl(String(form.get('back') ?? '/'));
   const character = Number(form.get('character') ?? 0);
   try {
