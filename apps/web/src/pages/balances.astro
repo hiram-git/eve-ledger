@@ -1,8 +1,8 @@
 ---
-// Balances: las cifras del resumen presentadas como un libro. Balance general (qué tienes al último sync:
-// wallets e inventario frente a los compromisos: el Omega del próximo mes y las naves por reponer) y estado de
-// resultados del período (ingresos y gastos por actividad y tipo de movimiento, resultado del wallet, ajustes al
-// resultado de juego) con la conciliación del wallet (saldo anterior + variación = saldo actual)
+// Balances: the summary figures presented as a ledger. Balance sheet (what you hold at the last sync:
+// wallets and inventory against commitments: next month's Omega and the ships still to replace) and income
+// statement for the period (income and expenses by activity and entry type, wallet result, adjustments to the
+// game result) with the wallet reconciliation (opening balance + change = current balance)
 import Base from '../layouts/Base.astro';
 import Icon from '../components/Icon.astro';
 import {
@@ -49,7 +49,7 @@ let pilots: Pilot[] = [];
 let apiError: string | undefined;
 try {
   [status, pilots] = await Promise.all([getSyncStatus(), getPilots()]);
-  // Un enlace a un piloto desvinculado vuelve al consolidado
+  // A link to an unlinked pilot falls back to the consolidated view
   if (pilotId && !pilots.some((p) => p.id === pilotId)) pilotId = undefined;
   if (pilots.length > 0) {
     [summary, losses, inventory, indicators] = await Promise.all([
@@ -68,21 +68,21 @@ const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfter
 
 const chars = summary?.characters ?? [];
 const selected = pilotId ? chars.find((c) => c.id === pilotId) : undefined;
-// Filas de wallet: todos los pilotos o solo el filtrado
+// Wallet rows: all pilots or only the filtered one
 const walletRows = selected ? [selected] : chars;
 const hasData = walletRows.some((c) => c.lastSyncAt);
 const lastSync = walletRows.map((c) => c.lastSyncAt).filter((x): x is string => !!x).sort().at(-1) ?? null;
 
-// ---- Balance general ----
+// ---- Balance sheet ----
 const o = indicators?.omega;
 const wallets = walletRows.reduce((n, c) => n + (c.balance ?? 0), 0);
-// La conciliación suma los pilotos con movimientos guardados (como la tabla de pilotos del resumen): uno sin
-// primer sync no tiene saldo ni saldo anterior, y no debe dejar en «—» el de todos
+// The reconciliation adds up the pilots with stored entries (like the summary's pilot table): one without
+// a first sync has no balance or opening balance, and must not leave everyone's at «—»
 const recRows = walletRows.filter((c) => c.journalBalance !== null);
 const openingKnown = recRows.length > 0 && recRows.every((c) => c.openingBalance !== null);
 const opening = recRows.reduce((n, c) => n + (c.openingBalance ?? 0), 0);
 const invValue = inventory?.value ?? 0;
-// PLEX guardado valorado a la media de ESI (como el inventario); solo se conoce en el consolidado
+// Stored PLEX valued at the ESI average (like the inventory); only known in the consolidated view
 const plexValue = !selected && o && o.plexOwned > 0 && o.plexAveragePrice !== null ? o.plexOwned * o.plexAveragePrice : 0;
 const otherInv = Math.max(0, invValue - plexValue);
 const assets = wallets + invValue;
@@ -91,14 +91,14 @@ const toReplace = losses && losses.totals.toReplace >= 0.5 ? losses.totals.toRep
 const liabilities = (omegaCost ?? 0) + toReplace;
 const equity = assets - liabilities;
 
-// ---- Estado de resultados ----
+// ---- Income statement ----
 const acts = summary?.byActivity ?? [];
 const tot = summary?.totals ?? { income: 0, expenses: 0, net: 0 };
 const incomeGroups = acts.filter((a) => a.income > 0.5).map((a) => ({ a, lines: a.refTypes.filter((r) => r.income > 0.5) }));
 const expenseGroups = acts.filter((a) => a.expenses > 0.5).map((a) => ({ a, lines: a.refTypes.filter((r) => r.expenses > 0.5) }));
 const walletResult = tot.income - tot.expenses;
-// Vista de un piloto: lo movido con tus otros pilotos no es resultado (no se ganó en juego), pero cambia su wallet:
-// va en la conciliación. En el consolidado se anula
+// Single-pilot view: what was moved with your other pilots isn't a result (it wasn't earned in game), but it changes their wallet:
+// it goes in the reconciliation. In the consolidated view it cancels out
 const internal = selected ? (summary?.internalReceived ?? 0) - (summary?.internalSent ?? 0) : 0;
 const walletChange = walletResult + internal;
 const accountsNet = acts.find((a) => a.activity === 'accounts')?.net ?? 0;
@@ -106,9 +106,9 @@ const unreplaced = losses?.totals.unreplaced ?? 0;
 const gameResult = walletResult - accountsNet - unreplaced - toReplace;
 const prev = summary?.previous;
 
-// ---- Conciliación del wallet ----
-// Con el saldo del journal; lo que el wallet real (ESI, en cada sync) lleva de más va en su propia fila: movimientos
-// que el journal aún no da (ESI lo cachea hasta 1 h)
+// ---- Wallet reconciliation ----
+// With the journal balance; whatever extra the real wallet (ESI, on each sync) has goes in its own row: entries
+// the journal doesn't return yet (ESI caches it up to 1 h)
 const journalWallets = recRows.reduce((n, c) => n + (c.journalBalance ?? 0), 0);
 const recWallets = recRows.reduce((n, c) => n + (c.balance ?? 0), 0);
 const pending = recWallets - journalWallets;
@@ -167,7 +167,7 @@ const partialAt = recRows
   {
     summary && (
       <>
-        {/* Filtro de piloto: todos o uno (el mismo ?pilot= que el resumen) */}
+        {/* Pilot filter: all or one (the same ?pilot= as the summary) */}
         {chars.length > 1 && (
           <nav class="pilot-filter" aria-label={m.pilots}>
             <ul>
@@ -191,7 +191,7 @@ const partialAt = recRows
           <p class="empty-note">{m.acctNoData}</p>
         ) : (
           <div class="books">
-            {/* ---------- Balance general ---------- */}
+            {/* ---------- Balance sheet ---------- */}
             <section class="panel" aria-labelledby="bs-title">
               <div class="panel-heading">
                 <h2 id="bs-title">{m.bsTitle}</h2>
@@ -307,7 +307,7 @@ const partialAt = recRows
                       <span aria-hidden="true">=</span>
                       <span class="sr-only">{m.opEquals}</span>
                     </td>
-                    {/* Patrimonio: una cifra de stock, sin «+»; en rojo solo si es negativo */}
+                    {/* Net worth: a stock figure, without «+»; red only if negative */}
                     <td class:list={{ neg: equity < -0.5 }} title={full(equity)}>
                       {fmt(equity)}
                     </td>
@@ -317,7 +317,7 @@ const partialAt = recRows
               <p class="panel-note">{m.bsNote}</p>
             </section>
 
-            {/* ---------- Estado de resultados ---------- */}
+            {/* ---------- Income statement ---------- */}
             <section class="panel" aria-labelledby="is-title">
               <div class="panel-heading">
                 <h2 id="is-title">{m.isTitle}</h2>
@@ -465,7 +465,7 @@ const partialAt = recRows
               <p class="panel-note">{m.isNote}</p>
             </section>
 
-            {/* ---------- Conciliación del wallet ---------- */}
+            {/* ---------- Wallet reconciliation ---------- */}
             <section class="panel" aria-labelledby="rec-title">
               <div class="panel-heading">
                 <h2 id="rec-title">{m.recTitle}</h2>
@@ -565,8 +565,8 @@ const partialAt = recRows
     font-size: 13px;
     color: var(--text-muted);
   }
-  /* Filtro de piloto: chips de 40 px, en una fila con scroll en estrecho */
-  /* Como elemento de la rejilla de <main>, sin min-width: 0 la fila de chips ensanchaba la columna en móvil */
+  /* Pilot filter: 40 px chips, in a single row that scrolls when narrow */
+  /* As a grid item of <main>, without min-width: 0 the chip row widened the column on mobile */
   .pilot-filter {
     min-width: 0;
   }
@@ -600,11 +600,11 @@ const partialAt = recRows
     border-color: #30506480;
     background: #16304070;
   }
-  /* Balance a la izquierda (con la conciliación debajo), resultados a la derecha; apilado en estrecho */
+  /* Balance sheet on the left (with the reconciliation below), results on the right; stacked when narrow */
   .books {
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    /* La conciliación va justo bajo el balance: la primera fila mide lo que mide el balance */
+    /* The reconciliation goes right under the balance sheet: the first row is as tall as the balance sheet */
     grid-template-rows: max-content 1fr;
     grid-template-areas:
       'bs is'
@@ -630,7 +630,7 @@ const partialAt = recRows
         'rec';
     }
   }
-  /* Estado contable: etiqueta (con su nota debajo), operador, importe y, en resultados, % del total */
+  /* Accounting statement: label (with its note below), operator, amount and, in results, % of total */
   .statement {
     width: 100%;
     border-collapse: collapse;
@@ -686,7 +686,7 @@ const partialAt = recRows
     font-size: 13px;
     color: var(--text-muted);
   }
-  /* Cabecera de grupo (ACTIVO, INGRESOS…) */
+  /* Group header (ACTIVO, INGRESOS…) */
   .statement tr.group th {
     padding-top: 14px;
     padding-bottom: 6px;
@@ -710,7 +710,7 @@ const partialAt = recRows
   .statement tr.total td {
     font-weight: 500;
   }
-  /* Totales: línea fuerte arriba; resultados: doble línea, como un libro */
+  /* Totals: strong line above; results: double line, like a ledger */
   .statement tr.total th,
   .statement tr.total td {
     border-top: 1px solid var(--line-strong);
@@ -729,7 +729,7 @@ const partialAt = recRows
   .statement td.neg {
     color: var(--critical);
   }
-  /* Lo estimado (por reponer, precio medio) en gris */
+  /* Estimates (still to replace, average price) in gray */
   .statement tr.estimate th,
   .statement tr.estimate td,
   .statement td.estimate {

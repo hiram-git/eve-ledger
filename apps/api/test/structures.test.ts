@@ -1,5 +1,5 @@
-// Nombres de las citadelas: se piden con el token de un piloto con el permiso de estructuras (primero el que guarda
-// algo en ella), un 403 prueba con el siguiente y, si nadie tiene acceso, no se repite hasta pasados 7 días
+// Citadel names: requested with the token of a pilot with the structures scope (first the one that stores
+// something there), a 403 tries the next one and, if nobody has access, it isn't repeated until 7 days have passed
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,13 +19,13 @@ const { resolvePendingStructures, pendingStructures, STRUCTURES_SCOPE } = await 
 const { eq, inArray } = await import('drizzle-orm');
 runMigrations();
 
-const OWNER = 9201; // guarda cosas en la citadela A
-const OTHER = 9202; // tiene el permiso, pero no guarda nada
-const NOSCOPE = 9203; // sin el permiso
-const A = 1_035_466_617_946; // con acceso (OTHER no, OWNER sí)
-const B = 1_035_466_617_947; // destruida (404)
-const C = 1_035_466_617_948; // nadie tiene acceso (403)
-const D = 1_035_466_617_949; // solo en una transacción de mercado
+const OWNER = 9201; // stores things in citadel A
+const OTHER = 9202; // has the scope, but stores nothing
+const NOSCOPE = 9203; // without the scope
+const A = 1_035_466_617_946; // with access (OTHER no, OWNER yes)
+const B = 1_035_466_617_947; // destroyed (404)
+const C = 1_035_466_617_948; // nobody has access (403)
+const D = 1_035_466_617_949; // only in a market transaction
 const STRUCTURES = [A, B, C, D];
 const PILOTS = [OWNER, OTHER, NOSCOPE];
 
@@ -72,7 +72,7 @@ beforeEach(async () => {
 });
 afterAll(clean);
 
-// ESI simulado: quién pidió qué y lo que contesta cada estructura según el piloto
+// Mocked ESI: who requested what and what each structure answers depending on the pilot
 function fakeEsi() {
   const calls: [number, number][] = [];
   const fetch = async (id: number, characterId: number) => {
@@ -90,15 +90,15 @@ test('resuelve el nombre y el sistema con el piloto que guarda algo allí; 404 y
   const esi = fakeEsi();
   const r = await resolvePendingStructures(esi.fetch);
   expect(r).toEqual({ resolved: 2, forbidden: 1, missing: 1 });
-  // A: primero el dueño (guarda algo allí), y no hace falta probar con nadie más
+  // A: first the owner (stores something there), and no need to try anyone else
   expect(esi.calls.filter(([id]) => id === A)).toEqual([[A, OWNER]]);
-  // C: los dos pilotos con el permiso dicen 403; el que no tiene el permiso ni se prueba
+  // C: both pilots with the scope get 403; the one without the scope isn't even tried
   expect(esi.calls.filter(([id]) => id === C).map(([, c]) => c).sort()).toEqual([OWNER, OTHER].sort());
   expect(esi.calls.some(([, c]) => c === NOSCOPE)).toBe(false);
 
   const name = await db.query.names.findFirst({ where: eq(s.names.id, A) });
   expect(name).toMatchObject({ name: 'Perimeter - Tranquility Trading Tower', category: 'structure' });
-  // El sistema, para el mapa (como el de una estación)
+  // The system, for the map (like a station's)
   expect(await db.query.stationSystems.findFirst({ where: eq(s.stationSystems.stationId, A) })).toMatchObject({ systemId: 30000144 });
   expect((await db.query.names.findFirst({ where: eq(s.names.id, D) }))?.name).toBe('Jita - Keepstar');
   const status = Object.fromEntries((await db.select().from(s.structureLookups).where(inArray(s.structureLookups.id, STRUCTURES))).map((l) => [l.id, l.status]));

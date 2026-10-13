@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Regenera las capturas del README y del brochure con datos inventados (seed.ts) y el ESI simulado (esi-mock.ts):
-# base nueva en una carpeta temporal, API y web de la demo en puertos propios, doctrina de ejemplo y capturas.
-# El sync automático va encendido para que la cabecera no avise; el siguiente toca a la hora del último sync
-# sembrado (hace 12 min), así que no llega a correr mientras se capturan.
-# Requisitos: bun install en apps/api y apps/web, y Playwright con Chromium. Uso: docs/brochure/demo/run.sh
+# Regenerates the README and brochure screenshots with made-up data (seed.ts) and the mocked ESI (esi-mock.ts):
+# new database in a temporary folder, demo API and web on their own ports, sample doctrine and screenshots.
+# Automatic sync is on so the header doesn't warn; the next one is due an hour after the last seeded
+# sync (12 min ago), so it doesn't get to run while the screenshots are taken.
+# Requirements: bun install in apps/api and apps/web, and Playwright with Chromium. Usage: docs/brochure/demo/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"

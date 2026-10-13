@@ -1,6 +1,6 @@
-// Dogma de los tipos que usan las doctrinas: nombre, categoría, skills requeridas y, en las skills, rango y atributos.
-// Público y estático (GET /universe/types/{id} y /universe/groups/{id}): se pide una vez y se guarda en type_dogma.
-// Las skills requeridas se siguen en cadena (los prerrequisitos de los prerrequisitos) hasta tenerlas todas
+// Dogma of the types used by doctrines: name, category, required skills and, for skills, rank and attributes.
+// Public and static (GET /universe/types/{id} and /universe/groups/{id}): requested once and stored in type_dogma.
+// Required skills are followed in a chain (the prerequisites of the prerequisites) until all are known
 import { inArray } from 'drizzle-orm';
 import { db } from '../db/client';
 import { typeDogma, type RequiredSkill } from '../db/schema';
@@ -8,7 +8,7 @@ import { EsiError, esiGet, esiPost } from '../lib/esi';
 
 export const CATEGORY = { ship: 6, module: 7, charge: 8, skill: 16, drone: 18, implant: 20, subsystem: 32, fighter: 87 } as const;
 
-// requiredSkill1…6 y su nivel (requiredSkill1Level…6Level), rango (skillTimeConstant) y atributos de la skill
+// requiredSkill1…6 and their level (requiredSkill1Level…6Level), rank (skillTimeConstant) and skill attributes
 const REQUIRED = [
   [182, 277],
   [183, 278],
@@ -20,7 +20,7 @@ const REQUIRED = [
 const RANK = 275;
 const PRIMARY = 180;
 const SECONDARY = 181;
-// canNotBeTrainedOnTrial: la skill es solo Omega (los topes de nivel de Alfa no están en ESI: cloneGrades del SDE)
+// canNotBeTrainedOnTrial: the skill is Omega-only (Alpha level caps aren't in ESI: cloneGrades in the SDE)
 const OMEGA_ONLY = 1047;
 
 type EsiType = { type_id: number; name: string; group_id: number; dogma_attributes?: { attribute_id: number; value: number }[] };
@@ -29,7 +29,7 @@ type EsiIds = { inventory_types?: { id: number; name: string }[] };
 
 export type TypeInfo = typeof typeDogma.$inferSelect;
 
-// Como mucho estas llamadas a ESI por importación (un fit con su plan pide unas 150 la primera vez)
+// At most this many ESI calls per import (a fit with its plan needs about 150 the first time)
 const MAX_LOOKUPS = 600;
 
 export function dogmaRow(t: EsiType, categoryId: number): typeof typeDogma.$inferInsert {
@@ -60,8 +60,8 @@ export async function loadDogma(ids: number[]): Promise<Map<number, TypeInfo>> {
   return new Map(rows.map((r) => [r.typeId, r]));
 }
 
-// Los tipos pedidos y todas las skills que requieren (en cadena). Devuelve los que se conocen al final; un id que
-// ESI no reconoce (404) se queda fuera
+// The requested types and all the skills they require (in a chain). Returns those known at the end; an id that
+// ESI doesn't recognize (404) is left out
 export async function ensureDogma(ids: number[]): Promise<Map<number, TypeInfo>> {
   const known = await loadDogma(ids);
   const groupCategory = new Map<number, number>();
@@ -74,13 +74,13 @@ export async function ensureDogma(ids: number[]): Promise<Map<number, TypeInfo>>
     if (seen.has(id)) continue;
     seen.add(id);
     let row = known.get(id);
-    // Una skill guardada antes de leer el atributo 1047 se vuelve a pedir una vez
+    // A skill stored before attribute 1047 was read is requested again once
     if (row && row.categoryId === CATEGORY.skill && row.omegaOnly === null) row = undefined;
     if (!row) {
       const stored = (await loadDogma([id])).get(id);
       const stale = !!stored && stored.categoryId === CATEGORY.skill && stored.omegaOnly === null;
       if (stored && !stale) row = stored;
-      // Sin llamadas que gastar, la fila vieja sirve igual (solo le falta saber si es solo Omega)
+      // With no calls left to spend, the old row still works (it only lacks whether it's Omega-only)
       else if (lookups >= MAX_LOOKUPS) row = stored;
       else {
         try {
@@ -97,7 +97,7 @@ export async function ensureDogma(ids: number[]): Promise<Map<number, TypeInfo>>
           row = (await loadDogma([id])).get(id);
         } catch (err) {
           if (err instanceof EsiError && err.status === 404) continue;
-          // ESI caído al refrescar una skill ya guardada: se sigue con la que había
+          // ESI down while refreshing an already stored skill: keep the one we had
           if (!stored) throw err;
           row = stored;
         }
@@ -109,8 +109,8 @@ export async function ensureDogma(ids: number[]): Promise<Map<number, TypeInfo>>
   return known;
 }
 
-// Nombres en inglés (los del EFT) → id de tipo, con POST /universe/ids (hasta 500 nombres por llamada).
-// La clave del mapa va en minúsculas: el EFT de algunas webs no respeta las mayúsculas
+// English names (the EFT ones) → type id, with POST /universe/ids (up to 500 names per call).
+// The map key is lowercase: some websites' EFT doesn't respect capitalization
 export async function resolveTypeNames(names: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];

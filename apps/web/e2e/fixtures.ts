@@ -1,8 +1,8 @@
-// Lo que comparten la semilla (bun) y las pruebas (Playwright, en Node): sin importar nada de la API
+// What the seed (bun) and the tests (Playwright, on Node) share: without importing anything from the API
 export const PILOTS = {
-  aria: { id: 9_000_001, name: 'Aria Vex' }, // Omega, todos los permisos
-  kade: { id: 9_000_002, name: 'Kade Morrow' }, // Alfa, sin el permiso opcional de citadelas
-  nyx: { id: 9_000_003, name: 'Nyx Adari' }, // vinculado hace 3 h, sin ningún sync
+  aria: { id: 9_000_001, name: 'Aria Vex' }, // Omega, all scopes
+  kade: { id: 9_000_002, name: 'Kade Morrow' }, // Alpha, without the optional citadels scope
+  nyx: { id: 9_000_003, name: 'Nyx Adari' }, // linked 3 h ago, without any sync
 } as const;
 
 export const API_PORT = Number(process.env.E2E_API_PORT ?? 3999);

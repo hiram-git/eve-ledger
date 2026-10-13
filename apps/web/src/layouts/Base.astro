@@ -1,5 +1,5 @@
 ---
-// Marco común de las páginas: barra superior (marca, secciones, estado del sync, botón), pie y scripts
+// Common page frame: top bar (brand, sections, sync status, button), footer and scripts
 import { APP_VERSION } from 'astro:env/server';
 import '@fontsource-variable/inter';
 import '@fontsource/ibm-plex-mono/400.css';
@@ -18,14 +18,14 @@ interface Props {
   section: 'resumen' | 'indicadores' | 'balances' | 'doctrinas' | 'pilotos' | 'legal';
   status?: SyncStatus;
   pilots?: number;
-  // Pilotos con el sync roto, viejo o sin primer sync: un punto ámbar junto a «Pilotos»
+  // Pilots with a broken or stale sync or no first sync: an amber dot next to «Pilotos»
   pilotIssues?: number;
 }
 const { title, section, status, pilots, pilotIssues } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 
-// Tras sincronizar se vuelve a la misma página (sin los parámetros de un aviso anterior)
+// After syncing, return to the same page (without the parameters of an earlier notice)
 const back = new URL(Astro.url);
 for (const k of ['synced', 'syncErrors', 'syncFailed', 'linked', 'error', 'detail']) back.searchParams.delete(k);
 const backPath = back.pathname + back.search;
@@ -75,7 +75,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
           aria-label={pilots !== undefined ? m.pilotsNav(pilots, pilotIssues ?? 0) : undefined}
           title={pilotIssues ? m.pilotIssues(pilotIssues) : undefined}
         >
-          {/* El punto ámbar va pegado a la palabra, como marca de aviso: junto al contador se leía «4 problemas» */}
+          {/* The amber dot sits next to the word, as a warning mark: next to the counter it read as «4 problems» */}
           <span class="nav-label">
             {m.pilots}
             {!!pilotIssues && <i class="issue-dot" aria-hidden="true" />}
@@ -103,7 +103,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
           )
         }
         {
-          // Sin pilotos no hay nada que sincronizar: la única acción es vincular el primero
+          // With no pilots there's nothing to sync: the only action is linking the first one
           pilots !== 0 && (
             <form method="post" action="/sync" class="sync-form">
               <input type="hidden" name="back" value={backPath} />
@@ -117,7 +117,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       </div>
     </header>
 
-    <!-- Franja de marca: mapa estelar animado detrás del título (decorativa) -->
+    <!-- Brand strip: animated star map behind the title (decorative) -->
     <section class="hero" aria-label="EVE Ledger">
       <StarMap />
       <div class="hero-lockup shell">
@@ -128,11 +128,11 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       </div>
     </section>
 
-    <!-- Destino de «Saltar al contenido»: antes de las pestañas de período, que son controles del contenido -->
+    <!-- Target of «Saltar al contenido» (Skip to content): before the period tabs, which are controls of the content -->
     <div id="contenido" class="skip-target" tabindex="-1"></div>
     <slot name="nav" />
 
-    <!-- Aviso de datos nuevos: sustituye a la recarga cuando el usuario está leyendo (detalles abiertos o scroll) -->
+    <!-- New data notice: replaces the reload when the user is reading (details open or scrolled) -->
     <div class="update-notice" role="status" hidden>
       <span>{m.newData}</span>
       <button type="button">{m.refreshNow}</button>
@@ -152,7 +152,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
 </html>
 
 <script>
-  // Tiempos relativos vivos: la página puede quedarse horas abierta en el segundo monitor
+  // Live relative times: the page may stay open for hours on the second monitor
   const rtf = new Intl.RelativeTimeFormat(document.documentElement.lang, { numeric: 'always', style: 'short' });
   const ago = (iso: string) => {
     const min = (Date.now() - new Date(iso).getTime()) / 60_000;
@@ -166,8 +166,8 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   };
   setInterval(tick, 30_000);
 
-  // Auto-refresco: cuando termina un sync automático nuevo se recargan los datos, pero solo si la
-  // recarga no tira la lectura (arriba del todo y sin detalles abiertos); si no, un aviso lo ofrece
+  // Auto-refresh: when a new automatic sync finishes the data is reloaded, but only if the
+  // reload doesn't disrupt reading (scrolled to the top and no details open); otherwise a notice offers it
   const lastRunAt = document.body.dataset.lastRun || null;
   const notice = document.querySelector<HTMLElement>('.update-notice')!;
   notice.querySelector('button')!.addEventListener('click', () => location.reload());
@@ -185,11 +185,11 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
         else notice.hidden = false;
       }
     } catch {
-      // API caída: se reintenta en el siguiente ciclo
+      // API down: retried on the next cycle
     }
   }, 60_000);
 
-  // Estado de carga en cualquier formulario de sync: puede tardar; evita envíos dobles
+  // Loading state on any sync form: it may take a while; prevents double submits
   for (const form of document.querySelectorAll<HTMLFormElement>('form.sync-form')) {
     form.addEventListener('submit', () => {
       const button = form.querySelector('button')!;
@@ -332,7 +332,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       margin: 0;
       height: 40px;
     }
-    /* Cinco secciones en 358 px: menos aire entre ellas y, si aun así no caben (alemán), la fila se desliza */
+    /* Five sections in 358 px: less spacing between them and, if they still don't fit (German), the row scrolls */
     .sections {
       gap: 0;
       overflow-x: auto;
@@ -342,11 +342,11 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       flex-shrink: 0;
       padding: 0 7px;
     }
-    /* El contador de pilotos sobra aquí: lo dice el aria-label y la página; el punto ámbar se queda */
+    /* The pilot counter is unnecessary here: the aria-label and the page say it; the amber dot stays */
     .sections .count {
       display: none;
     }
-    /* Con overflow, la raya de 1 px por debajo se recortaría */
+    /* With overflow, the 1 px line below would be clipped */
     .sections a[aria-current='page']::after {
       left: 7px;
       right: 7px;
@@ -358,8 +358,8 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     .sections a:first-child[aria-current='page']::after {
       left: 0;
     }
-    /* Sync automático desactivado: chip ámbar con texto corto (solo un punto era una señal solo de color);
-       para hacerle sitio, Sincronizar pasa a solo icono mientras dure el aviso */
+    /* Automatic sync disabled: amber chip with short text (a lone dot was a color-only signal);
+       to make room for it, Sincronizar becomes icon-only while the notice lasts */
     .text-short {
       display: inline;
     }
@@ -374,7 +374,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     .utility-right:has(.status-badge.off) .sync-form .primary-button {
       padding-inline: 12px;
     }
-    /* Objetivos táctiles de 40 px: el selector de idioma medía 21 px de alto y la marca 26 */
+    /* 40 px touch targets: the language selector was 21 px tall and the brand 26 */
     .micro-brand {
       margin-left: -7px;
       padding: 7px;

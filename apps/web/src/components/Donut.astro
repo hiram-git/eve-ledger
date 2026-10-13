@@ -1,8 +1,8 @@
 ---
-// Gráfico de torta (anillo) para un reparto: cada porción es un arco con un hueco de 2 px entre vecinas, en la
-// paleta categórica validada sobre el fondo de los paneles (--cat-1…7, orden fijo: la porción i siempre lleva el
-// color i, también en la tabla de al lado, que hace de leyenda y de vista en tabla). Sin etiquetas sobre el anillo:
-// el nombre, la cifra y el % van en la tabla; cada arco lleva un <title> para el hover y el svg un aria-label
+// Donut chart (ring) for a breakdown: each slice is an arc with a 2 px gap between neighbors, in the
+// categorical palette validated on the panel background (--cat-1…7, fixed order: slice i always gets
+// color i, also in the table beside it, which acts as legend and table view). No labels on the ring:
+// the name, figure and % go in the table; each arc has a <title> for hover and the svg an aria-label
 import type { Lang } from '../lib/i18n';
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
   label: string;
   format: (v: number) => string;
   lang: Lang;
-  // Texto del centro (p. ej. el total)
+  // Center text (e.g. the total)
   center?: string;
   centerSub?: string;
 }
@@ -18,7 +18,7 @@ const { slices, label, format, lang, center, centerSub } = Astro.props;
 
 const R = 44;
 const WIDTH = 16;
-const GAP = 2 / R; // 2 px de hueco medidos sobre el radio del anillo (viewBox de 120, el svg se escala)
+const GAP = 2 / R; // 2 px gap measured on the ring's radius (viewBox of 120, the svg scales)
 const total = slices.reduce((n, s) => n + Math.max(0, s.value), 0);
 const pct = new Intl.NumberFormat(lang, { style: 'percent', maximumFractionDigits: 0 });
 const polar = (a: number) => [60 + R * Math.cos(a - Math.PI / 2), 60 + R * Math.sin(a - Math.PI / 2)];
@@ -30,9 +30,9 @@ const arcs = slices
     const a0 = start;
     start += sweep;
     if (share <= 0) return null;
-    // Una sola porción: el anillo entero (dos semicírculos, un arco no puede dar la vuelta completa)
+    // A single slice: the whole ring (two semicircles, an arc can't go all the way around)
     if (share >= 0.9999) return { i, s, share, d: `M60,16 A44,44 0 1 1 60,104 A44,44 0 1 1 60,16` };
-    // El hueco se reparte a los dos lados; una porción más fina que el hueco se dibuja como un hilo
+    // The gap is split on both sides; a slice thinner than the gap is drawn as a thread
     const g = Math.min(GAP, sweep / 2 - 0.004);
     const [x0, y0] = polar(a0 + g / 2);
     const [x1, y1] = polar(a0 + sweep - g / 2);
@@ -62,8 +62,8 @@ const summary = arcs.map((a) => `${a.s.label} ${pct.format(a.share)}`).join(', '
 </svg>
 
 <style is:global>
-  /* Paleta categórica para repartos (validada en modo oscuro sobre #111c27: banda de luminosidad, croma, separación
-     CVD ≥ 8,4 entre vecinas, contraste ≥ 3:1). Orden fijo; nunca para interfaz ni para ingresos/gastos */
+  /* Categorical palette for breakdowns (validated in dark mode on #111c27: lightness band, chroma, CVD
+     separation ≥ 8.4 between neighbors, contrast ≥ 3:1). Fixed order; never for UI nor for income/expenses */
   :root {
     --cat-1: #3987e5;
     --cat-2: #d95926;

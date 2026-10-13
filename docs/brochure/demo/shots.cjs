@@ -1,5 +1,5 @@
-// Capturas de la demo para el README y el brochure (node): shot-<pantalla>-<idioma>.jpg en docs/brochure.
-// Playwright de apps/web (bun install allí); la web de la demo en DEMO_WEB (la arranca run.sh)
+// Demo screenshots for the README and the brochure (node): shot-<screen>-<language>.jpg in docs/brochure.
+// Playwright from apps/web (bun install there); the demo web at DEMO_WEB (started by run.sh)
 const { join } = require('node:path');
 const { chromium } = require(require.resolve('@playwright/test', { paths: [join(__dirname, '../../../apps/web')] }));
 const U = process.env.DEMO_WEB ?? 'http://127.0.0.1:4398';
@@ -14,7 +14,7 @@ const OUT = join(__dirname, '..');
     await p.goto(U + '/?days=30&inv=1');
     await p.waitForTimeout(1500);
     await p.screenshot(jpg('dashboard'));
-    // La doctrina a 1040 px: la tabla entera (con los iconos de «Para volarlo ya») cabe en el hueco de la pieza
+    // The doctrine at 1040 px: the whole table (with the «Para volarlo ya» icons) fits the space in the piece
     await p.setViewportSize({ width: 1040, height: 860 });
     await p.goto(U + '/doctrinas');
     await p.waitForTimeout(1200);

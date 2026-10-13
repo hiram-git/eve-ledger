@@ -17,7 +17,7 @@ import { refreshPlexQuote } from './quotes';
 import { refreshIncursions } from './deductions';
 import { fetchSkills, SKILLS_SCOPE } from './skills';
 
-// GET /characters/{id}/wallet/journal (solo los campos que guardamos)
+// GET /characters/{id}/wallet/journal (only the fields we store)
 type EsiJournalEntry = {
   id: number;
   date: string;
@@ -53,36 +53,36 @@ export type StepResult = { pages: number; fetched: number; inserted: number; err
 export type SyncResult = {
   characterId: number;
   name?: string;
-  inserted: number; // movimientos nuevos: journal + transacciones
+  inserted: number; // new entries: journal + transactions
   journal?: StepResult;
   transactions?: StepResult;
-  assets?: StepResult; // foto completa: inserted = ítems guardados, no "nuevos"
-  killmails?: StepResult; // inserted = killmails nuevos (muertes y pérdidas)
-  contracts?: StepResult; // foto de los contratos: inserted = contratos guardados
-  skills?: StepResult; // foto de las skills: inserted = skills guardadas
+  assets?: StepResult; // full snapshot: inserted = items stored, not 'new'
+  killmails?: StepResult; // inserted = new killmails (kills and losses)
+  contracts?: StepResult; // snapshot of the contracts: inserted = contracts stored
+  skills?: StepResult; // snapshot of the skills: inserted = skills stored
   skipped?: string[];
   namesResolved?: number;
   error?: string;
 };
 
-// Cada página trae hasta 2500 filas × ~10 columnas: se inserta por lotes
-// para no pasar el límite de variables de SQLite
+// Each page brings up to 2500 rows × ~10 columns: inserted in batches
+// so as not to exceed SQLite's variable limit
 const CHUNK = 500;
 
-// ESI devuelve como mucho 2500 transacciones por llamada; las anteriores se piden con from_id
+// ESI returns at most 2500 transactions per call; older ones are requested with from_id
 const TX_PAGE_SIZE = 2500;
 const TX_MAX_PAGES = 20;
 
-// Evita dos syncs simultáneos del mismo personaje; los pedidos con queue (al revincular) se repiten al acabar
+// Prevents two simultaneous syncs of the same character; those requested with queue (when relinking) are repeated afterwards
 const running = new Set<number>();
 const rerun = new Set<number>();
 
-// Algún sync en marcha: restaurar una copia de seguridad espera a que acabe (src/services/backups.ts)
+// Some sync in progress: restoring a backup waits for it to finish (src/services/backups.ts)
 export const syncBusy = () => running.size > 0;
 
 type Table = typeof walletJournal | typeof walletTransactions;
 
-// Inserta en lotes dentro de una transacción y devuelve cuántas filas eran nuevas
+// Inserts in batches inside a transaction and returns how many rows were new
 function insertChunked<T extends Table>(table: T, rows: T['$inferInsert'][]): number {
   if (rows.length === 0) return 0;
   return db.transaction((tx) => {
@@ -116,8 +116,8 @@ const journalRow = (characterId: number, e: EsiJournalEntry): typeof walletJourn
   taxReceiverId: e.tax_receiver_id ?? null,
 });
 
-// Los movimientos guardados antes de leer el impuesto (escritorio 0.1.17) lo tienen a null: ESI aún da los de
-// ~30 días, y aquí se completan (solo los que no lo tienen)
+// Entries stored before the tax was read (desktop 0.1.17) have it as null: ESI still returns those from
+// ~30 days, and they're filled in here (only those without it)
 function fillTax(characterId: number, data: EsiJournalEntry[]) {
   db.transaction((tx) => {
     for (const e of data) {
@@ -158,8 +158,8 @@ async function fetchJournal(characterId: number, r: StepResult) {
   }
 }
 
-// Sin X-Pages: se va hacia atrás con from_id mientras lleguen páginas llenas.
-// Si una página no trae nada nuevo, lo anterior ya está guardado y se para
+// No X-Pages: go backwards with from_id while full pages keep arriving.
+// If a page brings nothing new, everything before it is already stored and we stop
 async function fetchTransactions(characterId: number, r: StepResult) {
   let fromId: number | undefined;
   for (let page = 1; page <= TX_MAX_PAGES; page++) {
@@ -178,7 +178,7 @@ async function fetchTransactions(characterId: number, r: StepResult) {
   }
 }
 
-// Ejecuta un paso registrándolo en sync_log; nunca lanza, el error queda en el resultado
+// Runs a step and records it in sync_log; never throws, the error stays in the result
 async function logged(characterId: number, kind: Kind, fn: (r: StepResult) => Promise<void>): Promise<StepResult> {
   const r: StepResult = { pages: 0, fetched: 0, inserted: 0 };
   let logId: number | undefined;
@@ -216,8 +216,8 @@ export const syncContracts = (characterId: number) =>
 
 export const syncSkills = (characterId: number) => logged(characterId, 'skills', (r) => fetchSkills(characterId, r));
 
-// Tareas públicas (sin token) tras sincronizar: fallan sin invalidar los datos ya guardados
-// y se reintentan en el próximo sync
+// Public tasks (no token) after syncing: they fail without invalidating the data already stored
+// and are retried on the next sync
 async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
   try {
     return await fn();
@@ -226,21 +226,21 @@ async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | u
   }
 }
 
-// Saldo real del wallet (GET /characters/{id}/wallet, mismo scope que el journal). Sin él, el saldo es el balance
-// del último movimiento del journal, que llega con hasta 1 h de retraso y falta si el piloto no movió ISK en 30 días
+// Real wallet balance (GET /characters/{id}/wallet, same scope as the journal). Without it, the balance is the balance
+// of the last journal entry, which arrives up to 1 h late and is missing if the pilot didn't move ISK in 30 days
 async function syncWallet(characterId: number) {
   const { data } = await esiGet<number>(`/characters/${characterId}/wallet`, characterId);
   if (typeof data !== 'number' || !Number.isFinite(data)) return;
   await db.update(characters).set({ walletBalance: data, walletAt: new Date() }).where(eq(characters.id, characterId));
 }
 
-// Journal + transacciones + inventario de un personaje; después precios y nombres que falten
+// Journal + transactions + inventory of a character; then any missing prices and names
 export async function syncCharacter(characterId: number, opts: { queue?: boolean } = {}): Promise<SyncResult> {
   const ch = await db.query.characters.findFirst({ where: eq(characters.id, characterId) });
   if (!ch) throw new Error(`Personaje ${characterId} no vinculado`);
 
   const result: SyncResult = { characterId, name: ch.name, inserted: 0 };
-  // Restaurando una copia de seguridad: la base se está cambiando
+  // Restoring a backup: the database is being changed
   if (maintenance.active()) return { ...result, error: 'Restaurando una copia de seguridad; vuelve a sincronizar en un momento' };
   if (running.has(characterId)) {
     if (opts.queue) rerun.add(characterId);
@@ -250,12 +250,12 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
 
   try {
     result.journal = await syncJournal(characterId);
-    // Si el token falló en el journal, fallará igual aquí: no gastar errores de ESI
+    // If the token failed on the journal, it will fail here too: don't waste ESI errors
     const tokenOk = !result.journal.error;
     if (tokenOk) {
       await bestEffort('wallet', () => syncWallet(characterId));
       result.transactions = await syncTransactions(characterId);
-      // Personajes vinculados antes de pedir estos scopes: hay que revincularlos
+      // Characters linked before these scopes were requested: they must be relinked
       const scopes = ch.scopes.split(' ');
       result.skipped = [];
       if (scopes.includes(ASSETS_SCOPE)) result.assets = await syncAssets(characterId);
@@ -280,24 +280,24 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
     if (errors.length) result.error = errors.join(' | ');
     else await db.update(characters).set({ lastSyncAt: new Date() }).where(eq(characters.id, characterId));
 
-    // Precio del PLEX (Omega): público, se pide en cada sync aunque el token de este piloto haya fallado
+    // PLEX price (Omega): public, requested on every sync even if this pilot's token failed
     await bestEffort('quotes', refreshPlexQuote);
-    // Sistemas con incursión ahora (público): sin este registro no se puede estimar su penalización de recompensas
+    // Systems with an incursion right now (public): without this record their bounty penalty can't be estimated
     await bestEffort('incursions', refreshIncursions);
-    // Venta más baja en Jita de lo que llevan las doctrinas y de los inyectores (como mucho cada hora: una vez por ronda)
+    // Lowest sell in Jita for what the doctrines carry and for injectors (at most once an hour: once per round)
     await bestEffort('jita', refreshDoctrinePrices);
-    // Skills de las doctrinas guardadas antes de saber si son solo Omega (público; solo pide las que faltan)
+    // Doctrine skills stored before knowing whether they're Omega-only (public; only requests the missing ones)
     await bestEffort('dogma', refreshDoctrineDogma);
 
     if (tokenOk) {
-      // Solo llaman a ESI si hace falta: precios de más de 1 h, IDs sin nombre (reintenta fallos anteriores)
-      // Valoran el inventario y las naves perdidas
+      // They only call ESI if needed: prices older than 1 h, IDs without a name (retries earlier failures)
+      // They value the inventory and the lost ships
       if ((result.assets && !result.assets.error) || result.killmails?.inserted) await bestEffort('prices', refreshPricesIfStale);
       result.namesResolved = await bestEffort('names', resolvePendingNames);
-      // Citadelas: nombre y sistema con el permiso de estructuras (antes de geo, que sitúa su sistema en el mapa)
+      // Citadels: name and system with the structures scope (before geo, which places their system on the map)
       await bestEffort('structures', () => resolvePendingStructures());
       await bestEffort('geo', resolvePendingGeo);
-      // Grupo de mercado de lo perdido y lo comprado: reconoce el equipo equivalente al reponer una nave
+      // Market group of what was lost and what was bought: recognizes equivalent equipment when replacing a ship
       await bestEffort('types', resolvePendingTypes);
     }
   } finally {
@@ -312,7 +312,7 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
   return result;
 }
 
-// Secuencial: un personaje tras otro para no disparar el rate limit de ESI
+// Sequential: one character after another so as not to trigger ESI's rate limit
 export async function syncAll(): Promise<SyncResult[]> {
   const all = await db.select({ id: characters.id }).from(characters);
   const results: SyncResult[] = [];

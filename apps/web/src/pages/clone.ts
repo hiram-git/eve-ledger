@@ -2,8 +2,8 @@ import type { APIRoute } from 'astro';
 import { safeBackUrl } from '../lib/safe-back';
 import { setClone } from '../lib/api';
 
-// Alfa u Omega de un piloto (conmutador de Pilotos): lo usan las Doctrinas para el tiempo de entrenamiento y las
-// skills que un Alfa no puede usar. Vuelve a la página de origen
+// A pilot's Alpha or Omega (Pilotos toggle): Doctrines use it for training time and for the
+// skills an Alpha can't use. Returns to the originating page
 export const POST: APIRoute = async ({ request, redirect }) => {
   const form = await request.formData();
   const back = safeBackUrl(String(form.get('back') ?? '/pilotos'));

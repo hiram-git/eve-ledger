@@ -1,4 +1,4 @@
-// Doctrina de ejemplo para las capturas: tres fits EFT y un plan .emp, por la API de la demo (con el ESI simulado)
+// Sample doctrine for the screenshots: three EFT fits and an .emp plan, via the demo API (with the mocked ESI)
 const A = process.env.DEMO_API ?? 'http://127.0.0.1:3998';
 const j = (r: Response) => r.json();
 const post = (p: string, b: unknown, m = 'POST') => fetch(A + p, { method: m, headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(j);
