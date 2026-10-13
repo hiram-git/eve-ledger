@@ -23,6 +23,10 @@ const JITA_STATION = 60003760;
 const CITADEL_NAMED = 1_035_466_617_946;
 const CITADEL_UNKNOWN = 1_035_466_617_999;
 const NPC_CORP = 1000125;
+// Corporación NPC de Aria y Kade: se lleva el 10 % de las recompensas y del ESS (impuesto de corporación)
+const TAX_CORP = 1000044;
+// Sistema con incursión: Kade rattea allí del día 4 al 2 y las recompensas se pagan a la mitad
+const INCURSION_SYS = 30002090;
 const STRANGER = 95_000_001;
 const T = { rifter: 587, tritanium: 34, plex: 44992, autocannon: 2873 };
 
@@ -47,12 +51,13 @@ export function seed() {
     .run();
 
   // Movimientos en orden de fecha por piloto, con el saldo acumulado como lo da ESI
-  type Entry = { char: number; date: Date; ref: string; amount: number; first?: number; second?: number; ctx?: [number, string] };
+  type Entry = { char: number; date: Date; ref: string; amount: number; first?: number; second?: number; ctx?: [number, string]; tax?: number };
   const entries: Entry[] = [];
   for (let d = 35; d >= 1; d--) {
     // Aria rattea a diario (recompensas cada 20 min: tres pagos) y cobra el ESS cada semana
-    for (const h of [9, 10, 11]) entries.push({ char: aria.id, date: ago(d, h), ref: 'bounty_prizes', amount: 18_000_000 + (d % 7) * 2_000_000, first: NPC_CORP, second: aria.id, ctx: [AMARR, 'system_id'] });
-    if (d % 7 === 0) entries.push({ char: aria.id, date: ago(d, 13), ref: 'ess_escrow_transfer', amount: 140_000_000, first: NPC_CORP, second: aria.id });
+    for (const h of [9, 10, 11]) entries.push({ char: aria.id, date: ago(d, h), ref: 'bounty_prizes', amount: 18_000_000 + (d % 7) * 2_000_000, first: NPC_CORP, second: aria.id, ctx: [AMARR, 'system_id'], tax: 2_000_000 + (d % 7) * 222_222 });
+    if (d % 7 === 0) entries.push({ char: aria.id, date: ago(d, 13), ref: 'ess_escrow_transfer', amount: 140_000_000, first: NPC_CORP, second: aria.id, tax: 15_555_556 });
+    if (d >= 2 && d <= 4) entries.push({ char: kade.id, date: ago(d, 10), ref: 'bounty_prizes', amount: 9_000_000, first: NPC_CORP, second: kade.id, ctx: [INCURSION_SYS, 'system_id'], tax: 1_000_000 });
     // Kade vende Tritanium en Jita cada dos días y paga el impuesto
     if (d % 2 === 0) {
       entries.push({ char: kade.id, date: ago(d, 15), ref: 'market_transaction', amount: 45_000_000, first: STRANGER, second: kade.id });
@@ -96,6 +101,8 @@ export function seed() {
       secondPartyId: e.second,
       contextId: ctx?.[0],
       contextIdType: ctx?.[1],
+      tax: e.tax ?? 0,
+      taxReceiverId: e.tax ? TAX_CORP : null,
     };
   });
   for (let i = 0; i < journal.length; i += 200) db.insert(s.walletJournal).values(journal.slice(i, i + 200)).run();
@@ -186,6 +193,8 @@ export function seed() {
       { id: CITADEL_NAMED, name: 'Perimeter - Tranquility Trading Tower', category: 'structure' },
       { id: JITA, name: 'Jita', category: 'solar_system' },
       { id: AMARR, name: 'Amarr', category: 'solar_system' },
+      { id: INCURSION_SYS, name: 'Kamela', category: 'solar_system' },
+      { id: TAX_CORP, name: 'School of Applied Knowledge', category: 'corporation' },
     ])
     .run();
   db.insert(s.systems)
@@ -193,8 +202,12 @@ export function seed() {
       { id: JITA, name: 'Jita', security: 0.95, x: -1.29e17, y: 6.07e16, z: 1.17e17 },
       { id: PERIMETER, name: 'Perimeter', security: 0.95, x: -1.3e17, y: 6.1e16, z: 1.16e17 },
       { id: AMARR, name: 'Amarr', security: 1, x: -2.3e17, y: 4.2e16, z: -1.5e16 },
+      { id: INCURSION_SYS, name: 'Kamela', security: 0.5, x: -2.2e17, y: 4.1e16, z: -1.4e16 },
     ])
     .run();
+  // Incursiones apuntadas desde hace 10 días; Kamela, infestada del día 5 a hoy
+  db.insert(s.esiChecks).values({ name: 'incursions', firstAt: ago(10), checkedAt: minutesAgo(10) }).run();
+  db.insert(s.incursionSystems).values({ systemId: INCURSION_SYS, constellationId: 20000306, firstSeen: ago(5), lastSeen: minutesAgo(10) }).run();
   db.insert(s.stationSystems)
     .values([
       { stationId: JITA_STATION, systemId: JITA },

@@ -310,6 +310,19 @@ export type Indicators = {
   };
   // Comisiones e impuestos del mercado frente a lo vendido
   fees: { days: number; total: number; sales: number; share: number | null; byType: { refType: string; total: number }[] };
+  // Descuentos: impuesto de corporación (exacto) y penalización de incursión (estimada)
+  deductions: {
+    days: number;
+    tax: number;
+    byCorp: { corpId: number | null; name: string | null; npc: boolean; tax: number; gross: number; rate: number | null; byType: { refType: string; tax: number }[] }[];
+    taxUnknown: number;
+    incursion: number;
+    penalty: number;
+    bySystem: { systemId: number; name: string | null; security: number | null; ticks: number; paid: number; lost: number }[];
+    incursionsSince: string | null;
+    iskPerHour: number | null;
+    grossPerHour: number | null;
+  };
 };
 export const getIndicators = () => call<Indicators>('/indicators');
 

@@ -20,6 +20,7 @@
   - Ratting ISK per hour by character and by system.
   - Your lost ships measured in hours of ratting.
   - Market fees and taxes.
+  - Deductions from what you earn: the corporation tax on bounties, ESS and missions (exact, from the journal) and the bounty penalty in incursion systems (an estimate).
 - **Balances.** Your numbers presented as books: a balance sheet, an income statement and a wallet reconciliation that adds up to the ISK.
 - **Your history, kept.** ESI only serves about 30 days of wallet history, so EVE Ledger stores everything it syncs.
   - It runs in the system tray and can start when you sign in, syncing every hour.

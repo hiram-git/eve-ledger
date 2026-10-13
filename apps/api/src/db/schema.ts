@@ -44,6 +44,10 @@ export const walletJournal = sqliteTable(
     secondPartyId: integer('second_party_id'),
     contextId: integer('context_id'),
     contextIdType: text('context_id_type'),
+    // Impuesto que se llevó una corporación (recompensas, misiones, ESS): `amount` ya viene sin él. null = movimiento
+    // guardado antes de leerlo (escritorio 0.1.17) y que ESI ya no da; 0 = sin impuesto
+    tax: real('tax'),
+    taxReceiverId: integer('tax_receiver_id'),
   },
   (t) => [
     primaryKey({ columns: [t.journalId, t.characterId] }),
@@ -154,6 +158,28 @@ export const systems = sqliteTable('systems', {
   x: real('x').notNull(),
   y: real('y').notNull(),
   z: real('z').notNull(),
+});
+
+// Incursiones: ESI solo dice las activas (GET /incursions/, público), así que en cada sync se apunta qué sistemas
+// están infestados. Un tramo por sistema y presencia: si se vuelve a ver antes de 24 h, se alarga; si no, otro tramo.
+// Con él se estima lo que la penalización de recompensas de una incursión se llevó (src/services/deductions.ts)
+export const incursionSystems = sqliteTable(
+  'incursion_systems',
+  {
+    systemId: integer('system_id').notNull(),
+    constellationId: integer('constellation_id').notNull(),
+    firstSeen: ts('first_seen').notNull(),
+    lastSeen: ts('last_seen').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.systemId, t.firstSeen] })],
+);
+
+// Consultas públicas que se apuntan aunque no traigan nada: desde cuándo (`firstAt`) y la última (`checkedAt`).
+// `incursions`: sin incursiones activas no queda ningún tramo, pero sí que se miró
+export const esiChecks = sqliteTable('esi_checks', {
+  name: text('name').primaryKey(),
+  firstAt: ts('first_at').notNull(),
+  checkedAt: ts('checked_at').notNull(),
 });
 
 export const stationSystems = sqliteTable('station_systems', {

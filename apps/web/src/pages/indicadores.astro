@@ -56,6 +56,9 @@ const plexValue = o && o.plexPrice !== null ? Math.min(o.plexOwned, o.plexNeeded
 const r = indicators?.ratting;
 const rep = indicators?.replacement;
 const fees = indicators?.fees;
+const ded = indicators?.deductions;
+// Sistemas cuyas recompensas cobró una incursión: se marcan en «Ratting por sistema»
+const incursionSystems = new Set((ded?.bySystem ?? []).map((x) => x.systemId));
 const dy = indicators?.days;
 const fmtSigned = (v: number) => isk(v, { lang, sign: true });
 const fullSigned = (v: number) => iskFull(v, lang, true);
@@ -67,7 +70,7 @@ const pilotSlices = fold(
 );
 // Recompensas por sistema: los 6 primeros, el resto agrupado y las que no dicen sistema
 const systemSlices = [
-  ...(r?.bySystem ?? []).map((sys) => ({ label: sys.name ?? `#${sys.systemId}`, sec: sys.security, value: sys.isk, hours: sys.hours, iskPerHour: sys.iskPerHour })),
+  ...(r?.bySystem ?? []).map((sys) => ({ label: sys.name ?? `#${sys.systemId}`, sec: sys.security, value: sys.isk, hours: sys.hours, iskPerHour: sys.iskPerHour, incursion: incursionSystems.has(sys.systemId) })),
   ...(r && r.bySystemRest.systems > 0 ? [{ label: m.systemsOther(r.bySystemRest.systems), sec: null, value: r.bySystemRest.isk, hours: r.bySystemRest.hours, iskPerHour: r.bySystemRest.isk / r.bySystemRest.hours }] : []),
   ...(r && r.bySystemUnknown.ticks > 0 ? [{ label: m.systemsUnknown, sec: null, value: r.bySystemUnknown.isk, hours: r.bySystemUnknown.hours, iskPerHour: r.bySystemUnknown.isk / r.bySystemUnknown.hours }] : []),
 ];
@@ -303,6 +306,9 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                               <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
                               {sys.label}
                               <span class="sec">{sec(sys.sec)}</span>
+                              {'incursion' in sys && sys.incursion && (
+                                <span class="tag" title={m.systemsIncursionTitle}>{m.systemsIncursion}</span>
+                              )}
                             </th>
                             <td>{hours(sys.hours)}</td>
                             <td title={full(sys.value)}>{fmt(sys.value)}</td>
@@ -315,6 +321,90 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                   <p class="price-meta">{m.systemsNote(r.tickMinutes)}</p>
                 </>
               )}
+            </div>
+          </section>
+        )}
+
+        {ded && (
+          <section class="panel" aria-labelledby="ded-title">
+            <div class="panel-heading">
+              <h2 id="ded-title">{m.dedTitle}</h2>
+              <span class="meta">{m.dedLead(ded.days)}</span>
+            </div>
+            <div class="panel-body">
+              {ded.tax === 0 && ded.incursion === 0 ? (
+                <p class="eta">{m.dedNone(ded.days)}</p>
+              ) : (
+                <>
+                  {/* Lo exacto (impuesto) es la cifra; lo estimado (incursión) va aparte, en gris con «~» */}
+                  <p class="answer">
+                    <span class="answer-label">{ded.tax > 0 ? m.dedTaxLabel : m.dedIncursionLabel}</span>
+                    {ded.tax > 0 ? (
+                      <span class="answer-value" title={full(ded.tax)}>
+                        {fmt(ded.tax)}<span class="unit"> ISK</span>
+                      </span>
+                    ) : (
+                      <span class="answer-value est" title={full(ded.incursion)}>
+                        ~{'\u2009'}{fmt(ded.incursion)}<span class="unit"> ISK</span>
+                      </span>
+                    )}
+                    {ded.tax > 0 && ded.incursion > 0 && <span class="answer-sub est">{m.dedIncursionSub(fmt(ded.incursion))}</span>}
+                  </p>
+                  {ded.grossPerHour !== null && ded.iskPerHour !== null && ded.grossPerHour > ded.iskPerHour && (
+                    <p class="ded-rate">
+                      {m.dedRate(fmt(ded.grossPerHour), fmt(ded.iskPerHour), pct.format(ded.grossPerHour / ded.iskPerHour - 1))}
+                    </p>
+                  )}
+                  <table class="mini ded">
+                    <caption class="sr-only">{m.dedTitle}</caption>
+                    <thead>
+                      <tr>
+                        <th>{m.dedConcept}</th>
+                        <th>{m.dedRateCol}</th>
+                        <th>ISK</th>
+                      </tr>
+                    </thead>
+                    {ded.byCorp.length > 0 && (
+                      <tbody>
+                        <tr class="group">
+                          <th scope="colgroup" colspan="3">{m.dedTaxGroup}</th>
+                        </tr>
+                        {ded.byCorp.map((c) => (
+                          <tr>
+                            <th scope="row" title={c.byType.map((b) => `${refTypeLabel(b.refType, lang)}: ${fmt(b.tax)} ISK`).join(' · ')}>
+                              {c.name ?? m.dedUnknownCorp}
+                              {c.npc && <span class="sec"> ·{'\u00a0'}{m.dedNpc}</span>}
+                            </th>
+                            <td>{c.rate !== null ? pctFine.format(c.rate) : '—'}</td>
+                            <td title={full(c.tax)}>{fmt(c.tax)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    )}
+                    {ded.bySystem.length > 0 && (
+                      <tbody>
+                        <tr class="group">
+                          <th scope="colgroup" colspan="3">{m.dedIncursionGroup}</th>
+                        </tr>
+                        {ded.bySystem.map((x) => (
+                          <tr class="est">
+                            <th scope="row">
+                              {x.name ?? `#${x.systemId}`}
+                              <span class="sec">{sec(x.security)} · {m.dedTicks(qty.format(x.ticks))}</span>
+                            </th>
+                            <td>−{pct.format(ded.penalty)}</td>
+                            <td title={full(x.lost)}>~{'\u2009'}{fmt(x.lost)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    )}
+                  </table>
+                </>
+              )}
+              <p class="price-meta">
+                {m.dedNote} {ded.incursionsSince ? m.dedSince(shortDate(ded.incursionsSince, lang)) : m.dedNotYet}
+                {ded.taxUnknown > 0 && <> {m.dedTaxUnknown(qty.format(ded.taxUnknown))}</>}
+              </p>
             </div>
           </section>
         )}
@@ -528,6 +618,39 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     color: var(--text-muted);
     font-family: var(--mono);
     font-weight: 400;
+  }
+  /* Descuentos: lo estimado (penalización de incursión) en gris, nunca como cifra firme */
+  .answer-value.est,
+  .answer-sub.est,
+  .mini tr.est th,
+  .mini tr.est td {
+    color: var(--text-muted);
+  }
+  /* «~ 27,0 M» no se parte entre el «~» y la cifra */
+  .mini.ded td {
+    white-space: nowrap;
+  }
+  .ded-rate {
+    margin: 0 0 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .mini tr.group th {
+    padding-top: 10px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .tag {
+    margin-left: 6px;
+    padding: 0 5px;
+    border: 1px solid var(--warning);
+    border-radius: 3px;
+    color: var(--warning);
+    font-size: 12px;
+    font-weight: 400;
+    white-space: nowrap;
   }
   /* Torta + tabla (leyenda y vista en tabla a la vez); en estrecho, la torta arriba */
   .donut-row {

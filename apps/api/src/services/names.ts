@@ -1,7 +1,7 @@
 import { and, between, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { db } from '../db/client';
-import { assets, killmails, names, walletTransactions } from '../db/schema';
+import { assets, killmails, names, walletJournal, walletTransactions } from '../db/schema';
 import { EsiError, esiPost } from '../lib/esi';
 
 type EsiName = { id: number; name: string; category: string };
@@ -75,7 +75,7 @@ async function missingIds(column: SQLiteColumn, table: SQLiteTable, range?: read
   return rows.map((r) => r.id);
 }
 
-// Ítems, estaciones y sistemas de transacciones, inventario y naves perdidas que aún no tienen nombre
+// Ítems, estaciones y sistemas de transacciones, inventario y naves perdidas, y corporaciones del impuesto, que aún no tienen nombre
 export async function resolvePendingNames(): Promise<number> {
   const ids = [
     ...(await missingIds(walletTransactions.typeId, walletTransactions)),
@@ -85,6 +85,8 @@ export async function resolvePendingNames(): Promise<number> {
     ...(await missingIds(assets.rootLocationId, assets, SYSTEM_RANGE)),
     ...(await missingIds(killmails.shipTypeId, killmails)),
     ...(await missingIds(killmails.solarSystemId, killmails, SYSTEM_RANGE)),
+    // Corporaciones que se llevaron impuesto (Descuentos, en Indicadores)
+    ...(await missingIds(walletJournal.taxReceiverId, walletJournal)),
   ];
   return resolveNames(ids);
 }

@@ -120,6 +120,13 @@
       "when": 1791760378486,
       "tag": "0016_great_jack_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1791877379559,
+      "tag": "0017_open_killer_shrike",
+      "breakpoints": true
     }
   ]
 }

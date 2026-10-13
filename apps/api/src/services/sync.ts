@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
 import { maintenance } from '../lib/maintenance';
 import { characters, syncLog, walletJournal, walletTransactions } from '../db/schema';
@@ -14,6 +14,7 @@ import { refreshPricesIfStale } from './prices';
 import { refreshDoctrineDogma } from './doctrines';
 import { refreshDoctrinePrices } from './jita';
 import { refreshPlexQuote } from './quotes';
+import { refreshIncursions } from './deductions';
 import { fetchSkills, SKILLS_SCOPE } from './skills';
 
 // GET /characters/{id}/wallet/journal (solo los campos que guardamos)
@@ -28,6 +29,8 @@ type EsiJournalEntry = {
   second_party_id?: number;
   context_id?: number;
   context_id_type?: string;
+  tax?: number;
+  tax_receiver_id?: number;
 };
 
 // GET /characters/{id}/wallet/transactions
@@ -109,7 +112,22 @@ const journalRow = (characterId: number, e: EsiJournalEntry): typeof walletJourn
   secondPartyId: e.second_party_id ?? null,
   contextId: e.context_id ?? null,
   contextIdType: e.context_id_type ?? null,
+  tax: Math.abs(e.tax ?? 0),
+  taxReceiverId: e.tax_receiver_id ?? null,
 });
+
+// Los movimientos guardados antes de leer el impuesto (escritorio 0.1.17) lo tienen a null: ESI aún da los de
+// ~30 días, y aquí se completan (solo los que no lo tienen)
+function fillTax(characterId: number, data: EsiJournalEntry[]) {
+  db.transaction((tx) => {
+    for (const e of data) {
+      tx.update(walletJournal)
+        .set({ tax: Math.abs(e.tax ?? 0), taxReceiverId: e.tax_receiver_id ?? null })
+        .where(and(eq(walletJournal.journalId, e.id), eq(walletJournal.characterId, characterId), isNull(walletJournal.tax)))
+        .run();
+    }
+  });
+}
 
 const transactionRow = (characterId: number, t: EsiTransaction): typeof walletTransactions.$inferInsert => ({
   transactionId: t.transaction_id,
@@ -136,6 +154,7 @@ async function fetchJournal(characterId: number, r: StepResult) {
     r.pages = page;
     r.fetched += data.length;
     r.inserted += insertChunked(walletJournal, data.map((e) => journalRow(characterId, e)));
+    fillTax(characterId, data);
   }
 }
 
@@ -263,6 +282,8 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
 
     // Precio del PLEX (Omega): público, se pide en cada sync aunque el token de este piloto haya fallado
     await bestEffort('quotes', refreshPlexQuote);
+    // Sistemas con incursión ahora (público): sin este registro no se puede estimar su penalización de recompensas
+    await bestEffort('incursions', refreshIncursions);
     // Venta más baja en Jita de lo que llevan las doctrinas y de los inyectores (como mucho cada hora: una vez por ronda)
     await bestEffort('jita', refreshDoctrinePrices);
     // Skills de las doctrinas guardadas antes de saber si son solo Omega (público; solo pide las que faltan)

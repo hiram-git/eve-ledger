@@ -135,6 +135,24 @@ test('el saldo es el del wallet de ESI y Balances concilia lo que el journal aú
   await expect(page.getByText(/va por delante del journal en Aria Vex/).first()).toBeAttached();
 });
 
+test('Descuentos: impuesto de corporación exacto y penalización de incursión estimada', async ({ page, request }) => {
+  const { deductions: d } = await (await request.get(`${API_URL}/indicators`)).json();
+  expect(d.byCorp[0].name).toBe('School of Applied Knowledge');
+  expect(d.byCorp[0].rate).toBeCloseTo(0.1, 2);
+  // Kade cobró 3 × 9 M en Kamela con la incursión: se perdió lo mismo
+  expect(d.bySystem).toEqual([expect.objectContaining({ name: 'Kamela', ticks: 3, lost: 27_000_000 })]);
+  expect(d.grossPerHour).toBeGreaterThan(d.iskPerHour);
+  await page.goto('/indicadores');
+  const card = page.locator('section', { has: page.getByRole('heading', { name: 'Descuentos' }) });
+  await expect(card.getByText('Se quedaron las corporaciones')).toBeVisible();
+  await expect(card.getByRole('rowheader', { name: /School of Applied Knowledge/ })).toBeVisible();
+  await expect(card.getByRole('rowheader', { name: /Kamela/ })).toBeVisible();
+  await expect(card.getByText(/~\u2009?27,0\u00a0M/).first()).toBeVisible();
+  // Y «Ratting por sistema» marca el sistema con la incursión
+  const systems = page.locator('section', { has: page.getByRole('heading', { name: 'Ratting por sistema' }) });
+  await expect(systems.getByRole('rowheader', { name: /Kamela/ }).getByText('incursión')).toBeVisible();
+});
+
 test('el pie enlaza el aviso legal con el texto original de CCP', async ({ page }) => {
   await page.goto('/');
   await page.locator('footer').getByRole('link', { name: 'Aviso legal' }).click();
