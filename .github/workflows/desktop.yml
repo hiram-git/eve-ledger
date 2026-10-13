@@ -77,6 +77,9 @@ jobs:
             [ -s /tmp/notes.md ] || echo "Desktop installers for EVE Ledger $version." >/tmp/notes.md
             printf '\nInstall guide: %s/%s/blob/main/apps/desktop/INSTALAR.md · Changelog: %s/%s/blob/main/CHANGELOG.md\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" >>/tmp/notes.md
+            # Sin firma de código: cómo comprobar que un instalador salió de este repositorio
+            printf '\n**Verify a download.** The installers are built by GitHub Actions from this repository and are not code-signed. Compare the file with `SHA256SUMS-<system>.txt` below, or, with the GitHub CLI: `gh attestation verify <file> --repo %s`\n' \
+              "$GITHUB_REPOSITORY" >>/tmp/notes.md
             gh release create "$tag" --draft --target "$GITHUB_SHA" --title "EVE Ledger $version" --notes-file /tmp/notes.md
             echo "::notice::Borrador de la release $tag creado: publícalo cuando estén los tres instaladores"
           fi
@@ -97,6 +100,12 @@ jobs:
           - os: ubuntu-22.04
             name: linux
     runs-on: ${{ matrix.os }}
+    # Atestación de origen de los instaladores (proyecto abierto, sin firma de código: así se puede comprobar que un
+    # instalador salió de este repositorio y de este workflow)
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
       # La clave pública no es secreta (va dentro de la app), pero se acepta también como secreto del repositorio
       UPDATER: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && (vars.EVE_LEDGER_UPDATER_PUBKEY != '' || secrets.EVE_LEDGER_UPDATER_PUBKEY != '') }}
@@ -180,6 +189,41 @@ jobs:
           # Borrador (ya creado en «version»): las apps instaladas se actualizan cuando lo publicas
           releaseDraft: true
 
+      # Sin firma de código (decisión del usuario: proyecto abierto), dos formas de comprobar un instalador: la
+      # atestación de origen de GitHub (gratis en repositorios públicos; en uno privado no está disponible) y las
+      # sumas SHA-256, que se suben a la release junto a los instaladores
+      - name: Atestación de origen
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+
+      - name: Sumas SHA-256
+        working-directory: apps/desktop/src-tauri/target/release/bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+        shell: bash
+        run: |
+          bun -e "
+            const { createHash } = await import('node:crypto');
+            const { basename } = await import('node:path');
+            const lines = [];
+            for (const ext of ['exe', 'msi', 'dmg', 'deb', 'AppImage'])
+              for await (const f of new Bun.Glob('**/*.' + ext).scan('.')) {
+                const hash = createHash('sha256').update(new Uint8Array(await Bun.file(f).arrayBuffer())).digest('hex');
+                lines.push(hash + '  ' + basename(f));
+              }
+            await Bun.write('SHA256SUMS-${{ matrix.name }}.txt', lines.join('\n') + '\n');
+            console.log(lines.join('\n'));
+          "
+          if [ -n "$TAG" ]; then gh release upload "$TAG" "SHA256SUMS-${{ matrix.name }}.txt" --clobber; fi
+
       - name: Guardar los instaladores
         uses: actions/upload-artifact@v4
         with:
@@ -190,4 +234,5 @@ jobs:
             apps/desktop/src-tauri/target/release/bundle/**/*.dmg
             apps/desktop/src-tauri/target/release/bundle/**/*.deb
             apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/release/bundle/SHA256SUMS-*.txt
           if-no-files-found: warn

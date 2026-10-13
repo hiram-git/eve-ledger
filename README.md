@@ -52,9 +52,10 @@
    - **Windows:** `.exe` or `.msi`
    - **macOS** (Apple Silicon): `.dmg`
    - **Linux:** `.deb` or `.AppImage`
-2. The installers aren't code-signed yet:
-   - **Windows:** SmartScreen shows a warning; choose **More info → Run anyway**.
-   - **macOS:** the first time, right-click the app and choose **Open**.
+2. The installers aren't code-signed: EVE Ledger is a free, open project, and signing certificates cost money every year. They're built in public by GitHub Actions from this repository, and every release lists how to check that a download came from here (SHA-256 sums and GitHub's build attestation). Your system warns you the first time:
+   - **Windows:** SmartScreen says "Windows protected your PC"; choose **More info → Run anyway**.
+   - **macOS:** if it says the app can't be opened or "is damaged", open **System Settings → Privacy & Security** and choose **Open Anyway** (on older macOS, right-click the app and choose **Open**). If that's not enough, run `xattr -cr "/Applications/EVE Ledger.app"` in Terminal.
+   - **Linux (.AppImage):** make it executable (`chmod +x`) and open it.
    - **Linux:** the tray icon needs AppIndicator. On plain GNOME, install the *AppIndicator and KStatusNotifierItem Support* extension.
 3. On first run, a short setup asks for your preferences:
    - how many pilots you'll link;
