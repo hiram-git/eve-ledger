@@ -1,6 +1,6 @@
 ---
-// Indicadores: metas y ritmos que responden preguntas de juego. Omega de todas las cuentas (contra el saldo de
-// los wallets), ISK por hora de ratting, fondo de reposición de las naves perdidas y comisiones del mercado
+// Indicadores: goals and rates that answer in-game questions. Omega for all accounts (against the balance of
+// the wallets), ISK per hour of ratting, replacement fund for lost ships and market fees
 import Base from '../layouts/Base.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import Donut from '../components/Donut.astro';
@@ -15,7 +15,7 @@ const m = t(lang);
 const fmt = (v: number) => isk(v, { lang });
 const full = (v: number) => iskFull(v, lang);
 const pct = new Intl.NumberFormat(lang, { style: 'percent', maximumFractionDigits: 0 });
-// Comisiones: un decimal (5,5 %), que la diferencia entre 4 % y 5 % importa
+// Fees: one decimal (5.5 %), since the difference between 4 % and 5 % matters
 const pctFine = new Intl.NumberFormat(lang, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const qty = new Intl.NumberFormat(lang, { useGrouping: 'always' });
 
@@ -32,17 +32,17 @@ try {
 const o = indicators?.omega;
 const covered = !!o && o.missing === 0;
 const priced = !!o && o.cost !== null;
-// Un progreso del 0 % o del 100 % exacto no se redondea a otra cosa por el formato
+// An exact 0 % or 100 % progress isn't rounded to something else by the format
 const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progress);
-// Valor en ISK del PLEX que ya tienes (solo hasta lo necesario): el término que faltaba en la cuenta
-// Mismo criterio de frescura que el Resumen: el saldo que suma Omega dice de quién es viejo o falta
+// ISK value of the PLEX you already have (only up to what's needed): the term that was missing from the sum
+// Same freshness criterion as the Resumen: the balance Omega adds up says whose is stale or missing
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
-// Lo que aporta cada piloto al saldo: la nota de cobertura dice cuánto de él es viejo
+// What each pilot contributes to the balance: the coverage note says how much of it is stale
 const balanceByPilot: Record<number, number> = Object.fromEntries(
   (o?.balances ?? []).map((b) => [b.characterId, b.balance ?? 0]),
 );
-// ¿Tus pilotos se pagan el Omega? Coste diario (un mes = 30 días) frente al neto diario de los últimos 7 días
+// Do your pilots pay for their Omega? Daily cost (one month = 30 days) versus the daily net of the last 7 days
 const paceLine =
   o && o.costPerDay !== null
     ? o.avgDailyNet <= 0
@@ -57,25 +57,25 @@ const r = indicators?.ratting;
 const rep = indicators?.replacement;
 const fees = indicators?.fees;
 const ded = indicators?.deductions;
-// Sistemas cuyas recompensas cobró una incursión: se marcan en «Ratting por sistema»
+// Systems whose bounties an incursion took a cut of: they're flagged in «Ratting por sistema»
 const incursionSystems = new Set((ded?.bySystem ?? []).map((x) => x.systemId));
 const dy = indicators?.days;
 const fmtSigned = (v: number) => isk(v, { lang, sign: true });
 const fullSigned = (v: number) => iskFull(v, lang, true);
 const otherPilots = m.otherPilots;
-// ISK de ratting por piloto (todo lo que suma al piloto: recompensas, ESS, escalaciones y loot)
+// Ratting ISK by pilot (everything that adds to the pilot: bounties, ESS, escalations and loot)
 const pilotSlices = fold(
   (r?.byPilot ?? []).map((p) => ({ label: p.name, value: p.isk, hours: p.hours, iskPerHour: p.iskPerHour })),
   otherPilots,
 );
-// Recompensas por sistema: los 6 primeros, el resto agrupado y las que no dicen sistema
+// Bounties by system: the top 6, the rest grouped, and those that don't say the system
 const systemSlices = [
   ...(r?.bySystem ?? []).map((sys) => ({ label: sys.name ?? `#${sys.systemId}`, sec: sys.security, value: sys.isk, hours: sys.hours, iskPerHour: sys.iskPerHour, incursion: incursionSystems.has(sys.systemId) })),
   ...(r && r.bySystemRest.systems > 0 ? [{ label: m.systemsOther(r.bySystemRest.systems), sec: null, value: r.bySystemRest.isk, hours: r.bySystemRest.hours, iskPerHour: r.bySystemRest.isk / r.bySystemRest.hours }] : []),
   ...(r && r.bySystemUnknown.ticks > 0 ? [{ label: m.systemsUnknown, sec: null, value: r.bySystemUnknown.isk, hours: r.bySystemUnknown.hours, iskPerHour: r.bySystemUnknown.isk / r.bySystemUnknown.hours }] : []),
 ];
 const systemIsk = systemSlices.reduce((n, s) => n + s.value, 0);
-// Saldo por piloto: de mayor a menor, con su nombre
+// Balance by pilot: largest to smallest, with their name
 const pilotName = new Map(pilots.map((p) => [p.id, p.name]));
 const balanceSlices = fold(
   (o?.balances ?? [])
@@ -85,8 +85,8 @@ const balanceSlices = fold(
   otherPilots,
 );
 const balanceTotal = balanceSlices.reduce((n, b) => n + b.value, 0);
-// «8 h», «2,3 h», «0,6 h»: una cifra decimal por debajo de 10 h; sin partirse entre líneas
-// Por debajo de una hora, en minutos (un Rifter son «1 min» de ratting, no «0 h»)
+// «8 h», «2,3 h», «0,6 h»: one decimal below 10 h; without breaking across lines
+// Under an hour, in minutes (a Rifter is «1 min» of ratting, not «0 h»)
 const hours = (h: number) =>
   (h < 1
     ? m.minutesShort(String(Math.max(1, Math.round(h * 60))))
@@ -136,7 +136,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                   )}
                   {covered && o.surplus! > 0 && <span class="answer-sub">{m.omegaSurplus(fmt(o.surplus!))}</span>}
                 </p>
-                {/* Una sola medida de avance: la parte del coste ya cubierta (saldo + PLEX guardado) */}
+                {/* A single progress measure: the part of the cost already covered (balance + stored PLEX) */}
                 <div
                   class="bar"
                   role="progressbar"
@@ -149,11 +149,11 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                   <i class:list={{ done: covered }} style={`width:${(percent * 100).toFixed(1)}%`} />
                 </div>
                 <p class="bar-caption">{m.omegaOfCost(pct.format(percent))}</p>
-                {/* ¿Se paga solo? Antes que el desglose: en móvil queda en la primera pantalla. También con el mes
-                    cubierto, porque el Omega se renueva cada mes */}
+                {/* Does it pay for itself? Before the breakdown: on mobile it stays on the first screen. Also with the month
+                    covered, because Omega renews every month */}
                 {paceLine && <p class="eta" title={m.omegaPaceTitle}>{paceLine}</p>}
 
-                {/* El desglose es la cuenta que lleva a la cifra de arriba: coste − saldo − PLEX guardado */}
+                {/* The breakdown is the sum that leads to the figure above: cost − balance − stored PLEX */}
                 <table class="equation">
                   <caption class="sr-only">{m.omegaBreakdown}</caption>
                   <tbody>
@@ -223,7 +223,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                     <span class="answer-sub">{m.rattingSub(hours(r.hours), r.ticks, fmt(r.isk).replace(' ', '\u00a0'))}</span>
                     {r.recent.iskPerHour !== null && <span class="answer-sub">{m.rattingRecent(r.recent.days, fmt(r.recent.iskPerHour))}</span>}
                   </p>
-                  {/* De dónde sale el ISK: no solo recompensas y ESS, también escalaciones vendidas y loot del buyback */}
+                  {/* Where the ISK comes from: not just bounties and ESS, also sold escalations and buyback loot */}
                   <p class="rat-parts">
                     {[
                       { label: m.ratPartBounties, value: r.parts.bounties },
@@ -336,7 +336,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                 <p class="eta">{m.dedNone(ded.days)}</p>
               ) : (
                 <>
-                  {/* Lo exacto (impuesto) es la cifra; lo estimado (incursión) va aparte, en gris con «~» */}
+                  {/* The exact part (tax) is the figure; the estimate (incursion) goes separately, in grey with «~» */}
                   <p class="answer">
                     <span class="answer-label">{ded.tax > 0 ? m.dedTaxLabel : m.dedIncursionLabel}</span>
                     {ded.tax > 0 ? (
@@ -420,7 +420,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                 <p class="eta">{m.replNoScope}</p>
               ) : (
                 <>
-                  {/* Lo que te costaron las pérdidas del período, en la moneda del jugador: horas de ratting */}
+                  {/* What the period's losses cost you, in the player's currency: hours of ratting */}
                   {rep.count > 0 ? (
                     <p class="answer">
                       <span class="answer-label">{m.replAnswerLabel(rep.days)}</span>
@@ -529,7 +529,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                     <span class="answer-value">{m.daysOf(dy.positive, dy.withData)}</span>
                     <span class="answer-sub">{m.daysStreak(dy.streak)}</span>
                   </p>
-                  {/* Un neto por fila: el signo en verde/rojo como en todo el ledger */}
+                  {/* One net per row: the sign in green/red as throughout the ledger */}
                   <table class="mini">
                     <caption class="sr-only">{m.daysTitle}</caption>
                     <tbody>
@@ -619,14 +619,14 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     font-family: var(--mono);
     font-weight: 400;
   }
-  /* Descuentos: lo estimado (penalización de incursión) en gris, nunca como cifra firme */
+  /* Descuentos: the estimate (incursion penalty) in grey, never as a firm figure */
   .answer-value.est,
   .answer-sub.est,
   .mini tr.est th,
   .mini tr.est td {
     color: var(--text-muted);
   }
-  /* «~ 27,0 M» no se parte entre el «~» y la cifra */
+  /* «~ 27,0 M» doesn't break between the «~» and the figure */
   .mini.ded td {
     white-space: nowrap;
   }
@@ -652,7 +652,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     font-weight: 400;
     white-space: nowrap;
   }
-  /* Torta + tabla (leyenda y vista en tabla a la vez); en estrecho, la torta arriba */
+  /* Donut + table (legend and table view at once); when narrow, the donut on top */
   .donut-row {
     display: grid;
     grid-template-columns: 136px minmax(0, 1fr);
@@ -694,7 +694,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
   }
   .cards {
     display: grid;
-    /* auto-fill deja huecos vacíos: una tarjeta sola no se estira a 1200 px */
+    /* auto-fill leaves empty slots: a lone card doesn't stretch to 1200 px */
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
     gap: 20px;
     align-items: start;
@@ -730,14 +730,14 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
   }
   .unit {
     font-size: 16px;
-    color: #6b9caf; /* el mismo del sufijo ISK del Resumen */
+    color: #6b9caf; /* the same as the ISK suffix in the Resumen */
     letter-spacing: 0;
   }
   .answer-sub {
     font-size: 13px;
     color: var(--text-muted);
   }
-  /* De dónde sale el ISK del ratting: sumandos en línea, la cifra en monoespaciada */
+  /* Where the ratting ISK comes from: inline addends, the figure in monospace */
   .rat-parts {
     display: flex;
     flex-wrap: wrap;
@@ -787,14 +787,14 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
   .equation td {
     padding: 9px 0;
     border-top: 1px solid var(--line);
-    /* Las tablas del tema llevan línea inferior en th: aquí solo separa la de arriba */
+    /* The theme's tables have a bottom border on th: here it only separates the top one */
     border-bottom: 0;
     vertical-align: baseline;
   }
   .equation th {
-    /* La etiqueta se queda el ancho sobrante: operador y cifra van juntos a la derecha */
+    /* The label takes the leftover width: operator and figure go together on the right */
     width: 100%;
-    /* El tema pone nowrap en th: aquí las etiquetas largas (alemán) se parten */
+    /* The theme sets nowrap on th: here long labels (German) can wrap */
     white-space: normal;
     padding-right: 16px;
     font: 400 13px var(--font);
@@ -824,7 +824,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     font-size: 13px;
     color: var(--text-muted);
   }
-  /* El resultado cierra la cuenta: doble línea como en un libro de contabilidad */
+  /* The result closes the sum: double line as in an accounting ledger */
   .equation tr.result th,
   .equation tr.result td {
     border-top: 3px double var(--line-strong);

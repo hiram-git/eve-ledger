@@ -1,12 +1,12 @@
 ---
-// Fondo de la cabecera: mapa esquemático de New Eden con rutas comerciales y
-// naves de transporte recorriéndolas. Puramente decorativo
+// Header background: schematic map of New Eden with trade routes and
+// transport ships travelling them. Purely decorative
 const W = 1200;
-// Franja compacta: las posiciones se diseñaron a 170 px de alto y se reescalan a esta altura
+// Compact strip: the positions were designed at 170 px high and are rescaled to this height
 const H = 118;
 const DESIGN_H = 170;
 
-// [nombre, x, y, sec]; las posiciones son estéticas, no geográficas
+// [name, x, y, sec]; the positions are aesthetic, not geographic
 const systems: [string, number, number, string][] = [
   ['JITA', 610, 70, '0.9'],
   ['PERIMETER', 560, 42, '1.0'],
@@ -26,9 +26,9 @@ const systems: [string, number, number, string][] = [
   ['RANCER', 1080, 70, '0.4'],
   ['HED-GP', 1140, 30, '-0.2'],
 ];
-// Margen inferior para que la línea de seguridad (y + 12) no se corte
+// Bottom margin so the security line (y + 12) isn't cut off
 for (const s of systems) s[2] = Math.round(s[2] * ((H - 16) / DESIGN_H));
-// Sin etiquetas detrás del título y el lema: solo puntos y rutas
+// No labels behind the title and the tagline: only dots and routes
 const LABEL_MIN_X = 460;
 const at = (name: string) => systems.find((s) => s[0] === name)!;
 
@@ -39,7 +39,7 @@ const links: [string, string][] = [
   ['AMARR', 'TAMA'], ['TAMA', 'RANCER'], ['RANCER', 'HED-GP'], ['AMARR', 'RANCER'], ['OURSULAERT', 'PERIMETER'],
 ];
 
-// Rutas de transporte: Jita ↔ Amarr y Jita ↔ Dodixie ↔ Rens
+// Transport routes: Jita ↔ Amarr and Jita ↔ Dodixie ↔ Rens
 const route = (names: string[]) => 'M ' + names.map((n) => `${at(n)[1]} ${at(n)[2]}`).join(' L ');
 const routes = [
   { d: route(['JITA', 'UEDAMA', 'NIARJA', 'AMARR']), dur: '26s', begin: '0s' },
@@ -47,7 +47,7 @@ const routes = [
   { d: route(['AMARR', 'NIARJA', 'UEDAMA', 'JITA', 'PERIMETER']), dur: '38s', begin: '-20s' },
 ];
 
-// Estrellas de fondo deterministas (mismo cielo en cada carga)
+// Deterministic background stars (same sky on every load)
 let seed = 42;
 const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r: rnd() * 0.9 + 0.2, o: rnd() * 0.5 + 0.15 }));
@@ -94,13 +94,13 @@ const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r:
   .star-map {
     position: absolute;
     inset: 0 auto;
-    /* Ancho de la columna de contenido: en pantallas anchas el recorte (slice) cortaría las etiquetas */
+    /* Width of the content column: on wide screens the crop (slice) would cut off the labels */
     left: 50%;
     width: min(100%, 1280px);
     transform: translateX(-50%);
     z-index: -1;
     opacity: 0.75;
-    /* Tenue detrás del título (izquierda), nítido a la derecha */
+    /* Faint behind the title (left), crisp on the right */
     mask-image: linear-gradient(90deg, #0000 0, #0002 30%, #000 48%, #000 92%, #0000);
   }
   svg {
@@ -125,7 +125,7 @@ const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r:
   .nodes circle {
     fill: #577689;
   }
-  /* Nombres atenuados: es decoración, no debe hablar el mismo idioma que los datos del mapa real */
+  /* Dimmed names: it's decoration, it must not speak the same language as the real map's data */
   .nodes text {
     font: 9px var(--mono);
     letter-spacing: 0.08em;
@@ -153,7 +153,7 @@ const stars = Array.from({ length: 90 }, () => ({ x: rnd() * W, y: rnd() * H, r:
       stroke-dashoffset: -80;
     }
   }
-  /* En móvil el título ocupa casi todo el ancho: el mapa queda como textura */
+  /* On mobile the title takes almost the full width: the map is left as texture */
   @media (max-width: 750px) {
     .star-map {
       opacity: 0.35;

@@ -1,6 +1,6 @@
-// Traducciones de la interfaz: español (predeterminado), inglés y alemán.
-// Los nombres de ítems, sistemas y pilotos vienen de ESI y no se traducen;
-// la notación k / M / B de ISK es la del juego y se mantiene en los tres idiomas
+// UI translations: Spanish (default), English and German.
+// Names of items, systems and pilots come from ESI and aren't translated;
+// the k / M / B ISK notation is the game's and is kept in all three languages
 import type { AstroGlobal } from 'astro';
 import type { Activity } from './api';
 
@@ -12,13 +12,13 @@ export const LANG_NAMES: Record<Lang, string> = { es: 'Español', en: 'English',
 
 export const isLang = (v: unknown): v is Lang => typeof v === 'string' && (LANGS as readonly string[]).includes(v);
 
-// Idioma de la petición: cookie del selector o el predeterminado
+// Request language: the selector's cookie or the default
 export function getLang(astro: Pick<AstroGlobal, 'cookies'>): Lang {
   const v = astro.cookies.get(LANG_COOKIE)?.value;
   return isLang(v) ? v : DEFAULT_LANG;
 }
 
-// Idioma para una página que se abre en el navegador del sistema (sin la cookie del dashboard): el del navegador
+// Language for a page opened in the system browser (without the dashboard cookie): the browser's
 export function getRequestLang(astro: Pick<AstroGlobal, 'cookies' | 'request'>): Lang {
   const v = astro.cookies.get(LANG_COOKIE)?.value;
   if (isLang(v)) return v;
@@ -29,7 +29,7 @@ export function getRequestLang(astro: Pick<AstroGlobal, 'cookies' | 'request'>):
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const es = {
-  // Marco
+  // Frame
   sections: 'Secciones',
   heroTagline: 'Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI',
   skipToContent: 'Saltar al contenido',
@@ -60,7 +60,7 @@ const es = {
   // Indicadores
   indicators: 'Indicadores',
   balances: 'Balances',
-  // Doctrinas: fits EFT, plan de skills (.emp) y quién vuela qué
+  // Doctrinas: EFT fits, skill plan (.emp) and who flies what
   doctrines: 'Doctrinas',
   doctrinesLead: 'Pega los fits de una doctrina en formato EFT y el plan de skills de la comunidad (.emp de EVEMon): ves qué pilotos pueden volar cada fit y cuánto le falta a cada uno.',
   doctrineNew: 'Nueva doctrina',
@@ -124,7 +124,7 @@ const es = {
   fitIgnored: (names: string) => `ESI no reconoce estas líneas y se ignoran: ${names}.`,
   planOk: (name: string, n: number) => `Plan «${name}» importado: ${n} skills.`,
   deletedOk: 'Borrado.',
-  // Doctrinas: iconos de «Para volarlo ya», avisos y carga
+  // Doctrinas: «Para volarlo ya» icons, notices and loading
   statusOmegaBlocked: 'Pide skills que un Alfa no puede entrenar ni usar.',
   chipSkillsOk: 'Listo',
   chipSkillsOkFull: 'Skills: tiene todas las que pide el fit',
@@ -164,7 +164,7 @@ const es = {
   pendingPlan: 'Importando el plan: pidiendo a ESI las skills que falten.',
   pendingPrices: 'Actualizando los precios de Jita…',
   pendingWorking: 'Un momento…',
-  // Doctrinas, entrega 2: precios de Jita, inyectores y presupuesto
+  // Doctrinas, part 2: Jita prices, injectors and budget
   fundsTitle: 'Con qué se paga',
   fundsWallet: 'Saldo de los wallets',
   fundsOmega: 'Omega del próximo mes por pagar',
@@ -219,7 +219,7 @@ const es = {
       esi: 'ESI no respondió: vuelve a intentarlo en un momento.',
     } as Record<string, string>)[code] ?? 'No se pudo guardar.',
   indicatorsLead: 'Metas y ritmos: el Omega frente a tu saldo, lo que rinde tu ratting, lo que cuestan tus pérdidas y lo que se lleva el mercado.',
-  // Indicadores: ratting, fondo de reposición, comisiones
+  // Indicadores: ratting, replacement fund, fees
   rattingTitle: 'ISK por hora de ratting',
   periodDays: (days: number) => `últimos ${days} días`,
   perHour: 'ISK/h',
@@ -336,7 +336,7 @@ const es = {
   now: 'ahora',
   never: 'nunca',
 
-  // Navegación del resumen
+  // Summary navigation
   period: 'Período',
   days: (n: number) => `${n} días`,
   eveTime: 'hora EVE',
@@ -346,7 +346,7 @@ const es = {
   updated: 'Actualizado',
   summaryH1: (days: number) => `Resumen de los últimos ${days} días`,
 
-  // Avisos
+  // Notices
   syncDone: (rows: string) => `Sincronización completa: ${rows} movimientos nuevos`,
   syncErrors: (n: number) => `${n} ${plural(n, 'piloto con error', 'pilotos con error')}: revisa el`,
   syncLog: 'registro de sync',
@@ -379,7 +379,7 @@ const es = {
   waitingAuto: 'Esta página se actualiza sola mientras dura el primer sync.',
   waitingHint: 'Si ya terminó y sigue vacío, pulsa «Sincronizar» o revisa el estado en Pilotos.',
 
-  // Resumen
+  // Summary
   netPeriod: (days: number) => `Neto · últimos ${days} días`,
   gain: '(ganancia)',
   loss: '(pérdida)',
@@ -395,7 +395,7 @@ const es = {
   refreshNow: 'Actualizar',
   pilotsStale: (n: number, total: number, list: string) => `${n} de ${total} ${n === 1 ? 'piloto' : 'pilotos'} sin sync reciente: ${list}`,
   reviewPilots: 'Revisar en Pilotos',
-  // Línea de salud bajo el filtro: causa corta y acción por piloto
+  // Health line under the filter: short cause and action per pilot
   healthToken: 'token caducado',
   healthFailed: (kind: string) => `falló el sync de ${kind}`,
   healthPending: 'primer sync en curso',
@@ -464,13 +464,13 @@ const es = {
   allPilotsTitle: (v: string, days: number) => `Todos tus pilotos: neto ${v} en ${days} días`,
   netPeriodPilot: (name: string, days: number) => `Neto de ${name} · últimos ${days} días`,
   summaryH1Pilot: (name: string, days: number) => `Resumen de ${name}: últimos ${days} días`,
-  // Resultado: el neto del wallet menos el patrimonio de las naves perdidas que no volvió o falta por reponer
+  // Result: the wallet net minus the net worth of lost ships that didn't come back or are still to replace
   result: 'Resultado',
   resultAccounts: (op: string, v: string) => `${op}\u00a0${v} de PLEX (cuentas, aparte)`,
   resultPeriod: (days: number) => `Resultado · últimos ${days} días`,
   resultPeriodPilot: (name: string, days: number) => `Resultado de ${name} · últimos ${days} días`,
   resultWallet: 'Neto del wallet',
-  // Vista de un piloto: su neto no es lo que cambió su wallet (lo movido con tus otros pilotos va aparte)
+  // Pilot view: their net isn't what changed their wallet (what was moved with your other pilots goes separately)
   resultWalletPilot: 'Neto en juego',
   resultNotBack: (v: string) => `−\u00a0${v} de naves que no volvieron`,
   resultToReplace: (v: string) => `−\u00a0~${v} por reponer (estimado)`,
@@ -529,7 +529,7 @@ const es = {
   sortBy: 'Ordenar por',
   sortByCol: (col: string) => `Ordenar por ${col}`,
   sortOriginal: 'Orden original',
-  // Naves perdidas
+  // Lost ships
   lossesPeriod: (days: number) => `Naves perdidas · últimos ${days} días`,
   lossesWallet: 'Efecto en el wallet',
   lossesCost: 'Te costaron',
@@ -640,10 +640,10 @@ const es = {
   noteBpc: '; las copias de blueprint cuentan como 0',
   noteUnpriced: (n: number) => ` y hay ${n} ${plural(n, 'tipo de ítem', 'tipos de ítem')} sin precio`,
 
-  // Componentes
+  // Components
   others: (n: number) => `Otros (${n})`,
 
-  // Contabilidad: balance general y estado de resultados
+  // Accounting: balance sheet and income statement
   acctLead: 'Las mismas cifras del resumen, presentadas como un libro: qué tienes (balance general) y qué ganaste o perdiste en el período (estado de resultados).',
   acctAt: (when: string) => `al último sync (${when})`,
   acctPilot: (name: string) => `Solo ${name}`,
@@ -733,7 +733,7 @@ const es = {
   mapUnplaced: (v: string, n: number) => `${v} sin ubicar (${n} ${plural(n, 'estructura', 'estructuras')})`,
   mapUnplacedTitle: 'Estructuras de jugadores: ubicarlas requiere el permiso esi-universe.read_structures.v1',
 
-  // Pilotos
+  // Pilots
   pilotsLinked: (n: number, slots: number) => `${n} de ${slots} vinculados`,
   pilotsLinkedOnly: (n: number) => `${n} vinculados`,
   pilotsHurry: ' · ESI solo guarda ~30 días de wallet: vincula los que faltan cuanto antes',
@@ -746,7 +746,7 @@ const es = {
   loginState: 'El enlace de inicio de sesión caducó (dura 10 minutos) o ya se había usado.',
   loginSso: 'EVE no aceptó el inicio de sesión.',
   loginGeneric: 'El inicio de sesión con EVE falló.',
-  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Piloto vinculado",
   doneLinked: (name: string) => `${name} ya está en EVE Ledger.`,
   doneClose: "Puedes cerrar esta página.",
@@ -780,7 +780,7 @@ const es = {
   pilotBetween: (v: string) => `${v} entre tus pilotos`,
   pilotNetBreakdown: (net: string, between: string, wallet: string) =>
     `Ganado en juego: ${net}. Entre tus pilotos: ${between} (no es neto). Su wallet cambió ${wallet}`,
-  // Copias de seguridad (panel de Pilotos)
+  // Backups (Pilotos panel)
   backupsTitle: 'Copias de seguridad',
   backupsLead:
     'Tu historial vive solo en este equipo: ESI borra el wallet a los ~30 días. La app guarda una copia al día y otra antes de cada actualización.',
@@ -1547,7 +1547,7 @@ const en: Messages = {
   loginState: 'The login link expired (it lasts 10 minutes) or had already been used.',
   loginSso: 'EVE did not accept the login.',
   loginGeneric: 'The EVE login failed.',
-  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Pilot linked",
   doneLinked: (name) => `${name} is now in EVE Ledger.`,
   doneClose: "You can close this page.",
@@ -2350,7 +2350,7 @@ const de: Messages = {
   loginState: 'Der Login-Link ist abgelaufen (gültig 10 Minuten) oder wurde bereits verwendet.',
   loginSso: 'EVE hat den Login nicht akzeptiert.',
   loginGeneric: 'Der EVE-Login ist fehlgeschlagen.',
-  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Pilot verknüpft",
   doneLinked: (name) => `${name} ist jetzt in EVE Ledger.`,
   doneClose: "Du kannst diese Seite schließen.",

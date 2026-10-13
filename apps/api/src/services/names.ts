@@ -8,17 +8,17 @@ type EsiName = { id: number; name: string; category: string };
 
 export const UNKNOWN = 'unknown';
 
-// Límite de ESI para POST /universe/names
+// ESI limit for POST /universe/names
 const MAX_IDS = 1000;
 
-// Estaciones NPC: se resuelven con /universe/names. Las estructuras de jugadores
-// (IDs > 1e12) necesitan otro endpoint y el scope esi-universe.read_structures.v1
+// NPC stations: resolved with /universe/names. Player structures
+// (IDs > 1e12) need another endpoint and the esi-universe.read_structures.v1 scope
 export const STATION_RANGE = [60_000_000, 64_000_000] as const;
-// Sistemas solares: ítems sueltos en el espacio (location_type solar_system)
+// Solar systems: loose items in space (location_type solar_system)
 export const SYSTEM_RANGE = [30_000_000, 33_000_000] as const;
 
-// Si un solo ID es inválido, ESI responde 404 para toda la petición:
-// se parte el lote en dos hasta aislar los IDs que no existen
+// If a single ID is invalid, ESI answers 404 for the whole request:
+// the batch is split in two until the IDs that don't exist are isolated
 async function fetchNames(ids: number[]): Promise<EsiName[]> {
   if (ids.length === 0) return [];
   try {
@@ -27,7 +27,7 @@ async function fetchNames(ids: number[]): Promise<EsiName[]> {
   } catch (err) {
     if (!(err instanceof EsiError) || err.status !== 404) throw err;
     if (ids.length === 1) {
-      // Se guarda igualmente para no volver a gastar un 404 en cada sync
+      // Saved anyway so as not to spend a 404 again on every sync
       console.warn(`[names] ESI no conoce el ID ${ids[0]}`);
       return [{ id: ids[0], name: `#${ids[0]}`, category: UNKNOWN }];
     }
@@ -36,7 +36,7 @@ async function fetchNames(ids: number[]): Promise<EsiName[]> {
   }
 }
 
-// Resuelve y guarda los nombres que aún no estén en caché. Devuelve cuántos se añadieron
+// Resolves and saves the names not yet cached. Returns how many were added
 export async function resolveNames(ids: number[]): Promise<number> {
   const unique = [...new Set(ids)].filter((id) => Number.isInteger(id) && id > 0 && id <= 2 ** 31 - 1);
   if (unique.length === 0) return 0;
@@ -65,7 +65,7 @@ export async function resolveNames(ids: number[]): Promise<number> {
   return added;
 }
 
-// IDs de una columna que aún no tienen nombre en caché
+// IDs in a column that don't have a cached name yet
 async function missingIds(column: SQLiteColumn, table: SQLiteTable, range?: readonly [number, number]) {
   const rows = await db
     .selectDistinct({ id: sql<number>`${column}` })
@@ -75,7 +75,7 @@ async function missingIds(column: SQLiteColumn, table: SQLiteTable, range?: read
   return rows.map((r) => r.id);
 }
 
-// Ítems, estaciones y sistemas de transacciones, inventario y naves perdidas, y corporaciones del impuesto, que aún no tienen nombre
+// Items, stations and systems from transactions, inventory and lost ships, and tax corporations, that don't have a name yet
 export async function resolvePendingNames(): Promise<number> {
   const ids = [
     ...(await missingIds(walletTransactions.typeId, walletTransactions)),
@@ -85,7 +85,7 @@ export async function resolvePendingNames(): Promise<number> {
     ...(await missingIds(assets.rootLocationId, assets, SYSTEM_RANGE)),
     ...(await missingIds(killmails.shipTypeId, killmails)),
     ...(await missingIds(killmails.solarSystemId, killmails, SYSTEM_RANGE)),
-    // Corporaciones que se llevaron impuesto (Descuentos, en Indicadores)
+    // Corporations that took tax (Descuentos, in Indicadores)
     ...(await missingIds(walletJournal.taxReceiverId, walletJournal)),
   ];
   return resolveNames(ids);

@@ -1,5 +1,5 @@
-// Aplica las migraciones pendientes sin arrancar la API (bun run db:migrate).
-// Las rutas (data/ledger.db y ./drizzle) son relativas a apps/api, igual que al arrancar
+// Applies pending migrations without starting the API (bun run db:migrate).
+// The paths (data/ledger.db and ./drizzle) are relative to apps/api, same as at startup
 import { runMigrations } from './client';
 
 runMigrations();

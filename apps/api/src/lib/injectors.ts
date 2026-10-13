@@ -1,7 +1,7 @@
-// Inyectores de skills: cuántos hacen falta para unos SP y cuánto cuestan.
-// Un Large Skill Injector da 500.000 SP por debajo de 5 M SP totales, 400.000 hasta 50 M, 300.000 hasta 80 M y
-// 150.000 desde ahí; el Small, la quinta parte. Cuenta el total del piloto con los SP sin asignar, que crece con
-// cada inyector (el tramo puede cambiar a mitad). Los SP sin asignar que ya tiene se gastan primero
+// Skill injectors: how many are needed for a number of SP and how much they cost.
+// A Large Skill Injector gives 500,000 SP below 5 M total SP, 400,000 up to 50 M, 300,000 up to 80 M and
+// 150,000 from there on; the Small, a fifth of that. It counts the pilot's total including unallocated SP, which grows with
+// each injector (the bracket can change midway). The unallocated SP they already have are spent first
 export const INJECTOR = { large: 40520, small: 45635 } as const;
 
 const TIERS: [number, number][] = [
@@ -14,16 +14,16 @@ export const largeYield = (totalSp: number) => TIERS.find(([max]) => totalSp < m
 export const smallYield = (totalSp: number) => largeYield(totalSp) / 5;
 
 export type InjectorPlan = {
-  // SP que hay que inyectar (lo que falta menos los SP sin asignar)
+  // SP to inject (what's missing minus the unallocated SP)
   sp: number;
   large: number;
   small: number;
-  // null si falta el precio de algún inyector que se usa
+  // null if the price of any injector used is missing
   cost: number | null;
 };
 
-// Más grandes mientras quepan; el resto con pequeños salvo que un grande salga más barato (o, sin precios, si
-// harían falta 5 o más pequeños)
+// Large ones while they fit; the rest with small ones unless a large one is cheaper (or, without prices, if
+// 5 or more small ones would be needed)
 export function injectorsFor(
   neededSp: number,
   totalSp: number,
@@ -35,7 +35,7 @@ export function injectorsFor(
   let total = totalSp + unallocatedSp;
   let large = 0;
   let small = 0;
-  // Tope de seguridad: más de 2000 inyectores no es un plan
+  // Safety cap: more than 2000 injectors isn't a plan
   while (need > 0 && large + small < 2000) {
     const y = largeYield(total);
     if (need >= y) {

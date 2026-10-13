@@ -1,6 +1,6 @@
 ---
-// «Tu New Eden»: dónde está tu inventario (tamaño = valor) y dónde ganaste ISK hoy.
-// Posiciones reales de ESI proyectadas sobre el plano galáctico (x, z), norte arriba
+// «Tu New Eden»: where your inventory is (size = value) and where you earned ISK today.
+// Real ESI positions projected onto the galactic plane (x, z), north up
 import type { GeoMap } from '../lib/api';
 import { isk, iskFull } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
@@ -15,17 +15,17 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 
 
-// El viewBox mide casi lo mismo que la tarjeta en escritorio (~430 px): las etiquetas de 12 px salen a ~11,5 px
+// The viewBox is almost the same size as the card on desktop (~430 px): 12 px labels come out at ~11.5 px
 const W = 440;
 const H = 160;
-const PAD = 40; // margen para que las etiquetas no se corten
+const PAD = 40; // margin so the labels aren't cut off
 
 const nodes = map.nodes;
 const xs = nodes.map((n) => n.x);
 const zs = nodes.map((n) => n.z);
 const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
 const [minZ, maxZ] = [Math.min(...zs), Math.max(...zs)];
-// Misma escala en ambos ejes para no deformar la galaxia
+// Same scale on both axes so the galaxy isn't distorted
 const span = Math.max(maxX - minX, (maxZ - minZ) * ((W - 2 * PAD) / (H - 2 * PAD)), 1);
 const scale = (W - 2 * PAD) / span;
 const cx = (minX + maxX) / 2;
@@ -36,7 +36,7 @@ const py = (z: number) => H / 2 - (z - cz) * scale;
 const maxInv = Math.max(1, ...nodes.map((n) => n.inventory));
 const radius = (v: number) => (v > 0 ? 3 + 11 * Math.sqrt(v / maxInv) : 2.5);
 
-// Etiquetas solo para lo que importa: los 4 sistemas con más inventario y los que dieron ISK hoy
+// Labels only for what matters: the 4 systems with the most inventory and the ones that gave ISK today
 const labelled = new Set([
   ...nodes.filter((n) => n.inventory > 0).slice(0, 4).map((n) => n.systemId),
   ...nodes.filter((n) => n.earnedToday > 0).map((n) => n.systemId),
@@ -63,13 +63,13 @@ const placed = nodes.map((n) => {
   return { ...n, x, y, r, lines, title };
 });
 
-// Los nodos ocupan su sitio antes que cualquier etiqueta
+// Nodes take their place before any label
 for (const n of placed) taken.push({ x1: n.x - n.r - 6, y1: n.y - n.r - 6, x2: n.x + n.r + 6, y2: n.y + n.r + 6 });
 
 type Label = { anchor: 'start' | 'end' | 'middle'; tx: number; ty: number };
 const labels = new Map<number, Label>();
 const inside = (b: Box) => b.x1 >= 2 && b.x2 <= W - 2 && b.y1 >= 2 && b.y2 <= H - 2;
-// Prioridad: primero lo ganado hoy (la historia del día), después el inventario por valor
+// Priority: first what was earned today (the day's story), then inventory by value
 const order = [...placed].sort((a, b) => b.earnedToday - a.earnedToday || b.inventory - a.inventory);
 for (const n of order) {
   if (!labelled.has(n.systemId)) continue;
@@ -77,7 +77,7 @@ for (const n of order) {
   const h = 15 + n.lines.length * 13;
   const gap = n.r + 8;
   const options: (Label & { box: Box })[] = [];
-  // A los lados (centrado, más arriba o más abajo) y encima/debajo
+  // To the sides (centred, higher or lower) and above/below
   for (const dy of [0, -h / 2 - 4, h / 2 + 4, -h - 6, h + 6]) {
     const top = n.y - 13 + dy;
     options.push({ anchor: 'start', tx: n.x + gap, ty: top + 11, box: { x1: n.x + gap, y1: top, x2: n.x + gap + w, y2: top + h } });
@@ -86,7 +86,7 @@ for (const n of order) {
   options.push({ anchor: 'middle', tx: n.x, ty: n.y + gap + 10, box: { x1: n.x - w / 2, y1: n.y + gap, x2: n.x + w / 2, y2: n.y + gap + h } });
   options.push({ anchor: 'middle', tx: n.x, ty: n.y - gap - h + 10, box: { x1: n.x - w / 2, y1: n.y - gap - h, x2: n.x + w / 2, y2: n.y - gap } });
   const self = (t: Box) => t.x1 === n.x - n.r - 6 && t.y1 === n.y - n.r - 6;
-  // Sin hueco libre no se dibuja: mejor sin etiqueta (queda en el tooltip) que solapada
+  // Without free space it isn't drawn: better no label (it stays in the tooltip) than an overlapping one
   const pick = options.find((o) => inside(o.box) && !taken.some((t) => !self(t) && hit(t, o.box)));
   if (!pick) continue;
   taken.push(pick.box);
@@ -169,7 +169,7 @@ const summary = m.mapSummary(invCount, earnCount);
     display: block;
     width: 100%;
     height: auto;
-    /* En tablet el ancho completo daba un mapa de casi 300 px de alto para 3 puntos */
+    /* On tablet the full width gave a map almost 300 px high for 3 dots */
     max-height: 230px;
     border-radius: 6px;
     background: radial-gradient(ellipse at 50% 50%, #0f2230, #0a121a 75%);
@@ -193,7 +193,7 @@ const summary = m.mapSummary(invCount, earnCount);
     stroke: var(--income);
     stroke-width: 2;
   }
-  /* Único movimiento del dashboard: comunica actividad de hoy en ese sistema */
+  /* The dashboard's only motion: it signals today's activity in that system */
   .ping {
     fill: none;
     stroke: var(--income);
@@ -266,7 +266,7 @@ const summary = m.mapSummary(invCount, earnCount);
     color: var(--text-muted);
     text-align: center;
   }
-  /* Accesible siempre; visible solo en pantallas estrechas, donde el texto del SVG sería ilegible */
+  /* Always accessible; visible only on narrow screens, where the SVG text would be illegible */
   .node-list {
     position: absolute;
     width: 1px;

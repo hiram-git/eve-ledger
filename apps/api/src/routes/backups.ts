@@ -9,8 +9,8 @@ import {
   restoreUpload,
 } from '../services/backups';
 
-// Lo que no vale (nombre desconocido, archivo que no es una copia, de una versión más nueva, sync en marcha)
-// da un código que la web traduce; 409 si hay que esperar
+// What isn't valid (unknown name, file that isn't a backup, from a newer version, sync running)
+// gives a code the web translates; 409 if you have to wait
 const fail = (err: unknown, status: (code: number, body: unknown) => unknown) => {
   if (err instanceof BackupError) {
     const code = err.code === 'not_found' ? 404 : err.code === 'busy' ? 409 : 400;
@@ -22,7 +22,7 @@ const fail = (err: unknown, status: (code: number, body: unknown) => unknown) =>
 export const backupRoutes = new Elysia({ prefix: '/backups' })
   .get('/', () => backupsView())
   .post('/', () => createBackup('manual'))
-  // Qué hay dentro de una copia (pilotos, movimientos y desde cuándo), para confirmar antes de restaurarla
+  // What's inside a backup (pilots, transactions and since when), to confirm before restoring it
   .get(
     '/:name/info',
     ({ params, status }) => {
@@ -62,8 +62,8 @@ export const backupRoutes = new Elysia({ prefix: '/backups' })
     },
     { params: t.Object({ name: t.String() }) },
   )
-  // Restaurar un archivo subido (una copia descargada antes o de otro equipo), en crudo: sin JSON ni base64,
-  // que con una base de cientos de MB pasaría del límite de la petición
+  // Restore an uploaded file (a backup downloaded earlier or from another machine), raw: no JSON or base64,
+  // which with a database of hundreds of MB would exceed the request limit
   .post(
     '/upload',
     async ({ request, status }) => {

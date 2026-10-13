@@ -1,5 +1,5 @@
-// La API de las pruebas (bun): una base nueva en una carpeta temporal con los datos de demostración, sin sync
-// automático (no llama a ESI) y en el puerto de las pruebas. La arranca Playwright (playwright.config.ts)
+// The test API (bun): a new database in a temporary folder with the demo data, without automatic
+// sync (doesn't call ESI) and on the test port. Playwright starts it (playwright.config.ts)
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
