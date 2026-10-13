@@ -1,8 +1,8 @@
-// Conciliación del resumen: con cualquier mezcla de movimientos, las cifras tienen que cuadrar entre sí.
-// - La suma de los pilotos es el consolidado (totals) y la suma de las actividades también.
-// - Saldo anterior + neto = saldo, en cada piloto.
-// Casos que antes no cuadraban: una compraventa de mercado entre dos de tus pilotos y una compra que repone
-// una nave perdida solo en parte (dos Rifter en una transacción, uno para la pérdida)
+// Summary reconciliation: with any mix of entries, the figures have to add up with each other.
+// - The sum of the pilots is the consolidated total (totals), and so is the sum of the activities.
+// - Opening balance + net = balance, for each pilot.
+// Cases that didn't add up before: a market trade between two of your pilots and a purchase that only partly
+// replaces a lost ship (two Rifters in one transaction, one for the loss)
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,13 +24,13 @@ runMigrations();
 
 const A = 9001;
 const B = 9002;
-const NPC = 1000125; // contraparte ajena (una corporación NPC)
+const NPC = 1000125; // outside counterparty (an NPC corporation)
 const RIFTER = 587;
 const SCOPES = 'esi-wallet.read_character_wallet.v1 esi-killmails.read_killmails.v1 esi-contracts.read_character_contracts.v1';
 const DAY = 86_400_000;
 const now = new Date();
 const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-// Ayer a una hora dada (siempre dentro del período de 7 días) y hace N días (antes del período)
+// Yesterday at a given hour (always inside the 7-day period) and N days ago (before the period)
 const yesterday = (h: number) => new Date(today - DAY + h * 3_600_000);
 const daysAgo = (n: number) => new Date(today - n * DAY + 12 * 3_600_000);
 
@@ -67,7 +67,7 @@ const journal = (rows: Entry[]) =>
     })),
   );
 
-// Lo que tiene que cuadrar siempre, sea cual sea el caso
+// What must always add up, whatever the case
 async function expectReconciles(days = 7) {
   const sum = await getSummary(days);
   const byPilots = sum.characters.reduce((n, c) => n + c.net, 0);
@@ -75,7 +75,7 @@ async function expectReconciles(days = 7) {
   expect(sum.byActivity.reduce((n, a) => n + a.income, 0)).toBeCloseTo(sum.totals.income, 2);
   expect(sum.byActivity.reduce((n, a) => n + a.expenses, 0)).toBeCloseTo(sum.totals.expenses, 2);
   for (const c of sum.characters) {
-    // Con el saldo del journal: el del wallet de ESI puede ir por delante (movimientos que el journal aún no da)
+    // With the journal balance: the ESI wallet's can be ahead (entries the journal doesn't have yet)
     if (c.openingBalance === null || c.journalBalance === null) continue;
     expect(c.openingBalance + c.walletChange).toBeCloseTo(c.journalBalance, 2);
     expect(c.walletChange).toBeCloseTo(c.net + c.internalReceived - c.internalSent, 2);
@@ -84,13 +84,13 @@ async function expectReconciles(days = 7) {
 }
 
 test('una compraventa de mercado entre tus pilotos suma cero en el consolidado', async () => {
-  // Saldos de partida (antes del período): A 1.000, B 5.000
+  // Starting balances (before the period): A 1.000, B 5.000
   await journal([
     { id: 1, char: A, date: daysAgo(10), ref: 'bounty_prizes', amount: 1000, balance: 1000, first: NPC },
     { id: 2, char: B, date: daysAgo(10), ref: 'bounty_prizes', amount: 5000, balance: 5000, first: NPC },
   ]);
-  // A compra por 100 la orden de venta de B. Como en ESI: el comprador apunta un market_escrow consigo mismo
-  // en las dos partes; el vendedor, un market_transaction de A a B. La transacción comparte id en los dos lados
+  // A buys B's sell order for 100. As in ESI: the buyer records a market_escrow with itself as both
+  // parties; the seller, a market_transaction from A to B. The transaction shares its id on both sides
   await journal([
     { id: 70001, char: A, date: yesterday(10), ref: 'market_escrow', amount: -100, balance: 900 },
     { id: 70002, char: B, date: yesterday(10), ref: 'market_transaction', amount: 100, balance: 5100, first: A, second: B },
@@ -102,11 +102,11 @@ test('una compraventa de mercado entre tus pilotos suma cero en el consolidado',
   ]);
 
   const sum = await expectReconciles();
-  // Solo cuenta la recompensa: la compraventa se anula
+  // Only the bounty counts: the trade cancels out
   expect(sum.totals).toEqual({ income: 1000, expenses: 0, net: 1000 });
   const a = sum.characters.find((c) => c.id === A)!;
   const b = sum.characters.find((c) => c.id === B)!;
-  // El neto de cada piloto es lo ganado en juego (A la recompensa, B nada); su wallet cambió además lo movido:
+  // Each pilot's net is what was earned in game (A the bounty, B nothing); their wallet also changed by the transfers:
   // A −100 + 1.000, B +100
   expect(a.net).toBeCloseTo(1000, 2);
   expect(a.walletChange).toBeCloseTo(900, 2);
@@ -114,7 +114,7 @@ test('una compraventa de mercado entre tus pilotos suma cero en el consolidado',
   expect(b.net).toBeCloseTo(0, 2);
   expect(b.walletChange).toBeCloseTo(100, 2);
   expect(b.internalReceived).toBeCloseTo(100, 2);
-  // En la vista de un piloto, su neto (y el de cada día) tampoco cuenta lo movido con tus otros pilotos
+  // In a pilot's view, their net (and each day's) doesn't count transfers with your other pilots either
   const viewA = await getSummary(7, A);
   expect(viewA.totals.net).toBeCloseTo(1000, 2);
   expect(viewA.daily.reduce((n, d) => n + d.net, 0)).toBeCloseTo(1000, 2);
@@ -135,7 +135,7 @@ test('una compra que repone una nave solo en parte no desaparece de «Por activi
     items: [],
     attackers: 1,
   });
-  // A compra dos Rifter en una sola transacción (20 M): uno repone la pérdida, el otro es trading
+  // A buys two Rifters in a single transaction (20 M): one replaces the loss, the other is trading
   await journal([
     { id: 2, char: A, date: daysAgo(10), ref: 'bounty_prizes', amount: 50_000_000, balance: 50_000_000, first: NPC },
     { id: 71001, char: A, date: yesterday(12), ref: 'market_escrow', amount: -20_000_000, balance: 30_000_000 },
@@ -146,26 +146,26 @@ test('una compra que repone una nave solo en parte no desaparece de «Por activi
 
   const sum = await expectReconciles();
   expect(sum.totals.expenses).toBeCloseTo(20_000_000, 2);
-  // La mitad es reposición (PvP) y la otra mitad sigue siendo trading
+  // Half is replacement (PvP) and the other half is still trading
   expect(sum.shipFlow.replacement).toBeCloseTo(10_000_000, 2);
   const pvp = sum.byActivity.find((x) => x.activity === 'pvp');
   const trading = sum.byActivity.find((x) => x.activity === 'trading');
   expect(pvp?.expenses).toBeCloseTo(10_000_000, 2);
   expect(trading?.expenses).toBeCloseTo(10_000_000, 2);
-  // Y el panel de pérdidas dice lo mismo
+  // And the losses panel says the same
   const losses = await shipLosses(7);
   expect(losses.totals.replacement).toBeCloseTo(10_000_000, 2);
 });
 
 test('el estado de una pérdida no depende del período que se mire', async () => {
   await db.insert(s.marketPrices).values({ typeId: RIFTER, averagePrice: 10_000_000, adjustedPrice: null, updatedAt: new Date() });
-  // El período de 7 días empieza hace 6 días a las 00:00: una pérdida 2 h antes y otra 2 h después
+  // The 7-day period starts 6 days ago at 00:00: one loss 2 h before and another 2 h after
   const start = today - 6 * DAY;
   const loss = (id: number, at: number) => ({
     killmailId: id, hash: 'h', characterId: A, time: new Date(at), solarSystemId: 30000142, victimCharacterId: A, shipTypeId: RIFTER, items: [], attackers: 1,
   });
   await db.insert(s.killmails).values([loss(990011, start - 2 * 3_600_000), loss(990012, start + 2 * 3_600_000)]);
-  // Un solo casco comprado después de las dos: repone la primera, que es la que se perdió antes
+  // A single hull bought after both: it replaces the first, which is the one lost earlier
   await journal([
     { id: 3, char: A, date: daysAgo(20), ref: 'bounty_prizes', amount: 50_000_000, balance: 50_000_000, first: NPC },
     { id: 72001, char: A, date: new Date(start + 3 * 3_600_000), ref: 'market_escrow', amount: -10_000_000, balance: 40_000_000 },
@@ -178,14 +178,14 @@ test('el estado de una pérdida no depende del período que se mire', async () =
   const fortnight = (await shipLosses(14)).losses.find((l) => l.killmailId === 990012)!;
   expect(week.state).toBe(fortnight.state);
   expect(week.replacement).toBe(fortnight.replacement);
-  // La compra fue para la primera pérdida: la segunda sigue sin reponer
+  // The purchase went to the first loss: the second is still unreplaced
   expect(week.replacement).toBe(0);
-  // Y en el período de 7 días solo está la segunda
+  // And only the second is in the 7-day period
   expect((await shipLosses(7)).totals.count).toBe(1);
 });
 
 test('el saldo es el del wallet de ESI y la conciliación sigue cuadrando con el del journal', async () => {
-  // El journal dice 1.000 (llega con retraso); el wallet de ESI ya va por 1.250
+  // The journal says 1.000 (it lags behind); the ESI wallet is already at 1.250
   await journal([
     { id: 701, char: A, date: daysAgo(10), ref: 'bounty_prizes', amount: 500, balance: 500, first: NPC },
     { id: 702, char: A, date: yesterday(10), ref: 'bounty_prizes', amount: 500, balance: 1000, first: NPC },
@@ -197,7 +197,7 @@ test('el saldo es el del wallet de ESI y la conciliación sigue cuadrando con el
   expect(a.journalBalance).toBe(1000);
   expect(sum.balance).toBe(1250);
   expect(a.openingBalance! + a.walletChange).toBeCloseTo(a.journalBalance!, 2);
-  // Sin wallet de ESI (antes del primer sync con esta versión), el saldo sigue siendo el del journal
+  // Without the ESI wallet (before the first sync with this version), the balance is still the journal's
   await db.update(s.characters).set({ walletBalance: null, walletAt: null }).where(inArray(s.characters.id, [A]));
   expect((await getSummary(7)).characters.find((c) => c.id === A)!.balance).toBe(1000);
 });

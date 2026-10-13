@@ -15,13 +15,13 @@ import { startScheduler } from './services/scheduler';
 import { syncRoutes } from './routes/sync';
 import { transactionRoutes } from './routes/transactions';
 
-// Una versión nueva trae migraciones: copia de lo que había antes de aplicarlas
+// A new version brings migrations: back up what was there before applying them
 backupBeforeMigrations();
 runMigrations();
 
 const allowed = allowedHosts();
 const app = new Elysia()
-  // Solo esta máquina: Host local y, en lo que no es GET, sin Origin ajeno (src/lib/local-only.ts)
+  // This machine only: local Host and, for non-GET requests, no foreign Origin (src/lib/local-only.ts)
   .onRequest(({ request }) => localOnly(request, allowed) ?? undefined)
   .onError(({ error, code }) => {
     console.error(`[${code}]`, error);
@@ -45,6 +45,6 @@ console.log(`Vincula un personaje: http://localhost:${app.server?.port}/auth/log
 
 await startScheduler();
 
-// La copia diaria: al arrancar y cada 6 h (tras cada ronda del sync automático también); como mucho una cada 20 h
+// The daily backup: at startup and every 6 h (also after each automatic sync round); at most one every 20 h
 maybeAutoBackup();
 setInterval(maybeAutoBackup, 6 * 3_600_000);

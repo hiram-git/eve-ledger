@@ -8,16 +8,16 @@ import { STATION_RANGE, SYSTEM_RANGE } from './names';
 type EsiStation = { system_id: number };
 type EsiSystem = { name: string; security_status: number; position: { x: number; y: number; z: number } };
 
-// Tope por sync: la geografía es estática, lo que falte se completa en el siguiente
+// Cap per sync: geography is static, anything missing is completed in the next one
 const MAX_LOOKUPS = 150;
 
 const inRange = (col: typeof assets.rootLocationId, [lo, hi]: readonly [number, number]) =>
   sql`${col} between ${lo} and ${hi}`;
 
-// Movimientos del journal cuyo contexto es un sistema (recompensas de ratting, p. ej.)
+// Journal entries whose context is a system (ratting bounties, e.g.)
 const systemContext = eq(walletJournal.contextIdType, 'system_id');
 
-// Pide a ESI las estaciones y sistemas que el mapa necesita y aún no están en caché
+// Asks ESI for the stations and systems the map needs that aren't cached yet
 export async function resolvePendingGeo(): Promise<{ stations: number; systems: number }> {
   let lookups = 0;
 
@@ -39,7 +39,7 @@ export async function resolvePendingGeo(): Promise<{ stations: number; systems: 
     }
   }
 
-  // Sistemas: los de las estaciones, los de ítems sueltos en el espacio, los de las pérdidas y los del journal
+  // Systems: those of the stations, of items loose in space, of the losses and of the journal
   const known = db.select({ id: systems.id }).from(systems);
   const wanted = new Set<number>();
   for (const r of await db
@@ -52,7 +52,7 @@ export async function resolvePendingGeo(): Promise<{ stations: number; systems: 
     .from(assets)
     .where(and(inRange(assets.rootLocationId, SYSTEM_RANGE), notInArray(assets.rootLocationId, known))))
     wanted.add(r.id);
-  // Los de las pérdidas: la fila de cada nave dice la seguridad del sistema
+  // Those of the losses: each ship's row shows the system's security
   for (const r of await db
     .selectDistinct({ id: killmails.solarSystemId })
     .from(killmails)
@@ -87,16 +87,16 @@ export type MapNode = {
   security: number;
   x: number;
   z: number;
-  inventory: number; // ISK en inventario en el sistema (estaciones + espacio)
-  earnedToday: number; // ISK ganado hoy (día EVE) con el sistema como contexto
+  inventory: number; // ISK in inventory in the system (stations + space)
+  earnedToday: number; // ISK earned today (EVE day) with the system as context
 };
 
-// Datos del mapa «tu New Eden»: dónde está el inventario y dónde se ganó ISK hoy
+// Data for the «tu New Eden» map: where the inventory is and where ISK was earned today
 export async function getMap(characterId?: number) {
   const now = new Date();
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-  // Valor por ubicación raíz; la estación se traduce a su sistema
+  // Value per root location; the station is mapped to its system
   const byRoot = await db
     .select({
       rootId: assets.rootLocationId,
@@ -115,7 +115,7 @@ export async function getMap(characterId?: number) {
     const inSpace = r.rootId >= SYSTEM_RANGE[0] && r.rootId <= SYSTEM_RANGE[1];
     const systemId = inSpace ? r.rootId : r.systemId;
     if (!systemId) {
-      // Estructuras de jugadores o estaciones aún sin resolver
+      // Player structures or stations not resolved yet
       unplaced.value += r.value;
       unplaced.locations++;
       continue;
@@ -149,7 +149,7 @@ export async function getMap(characterId?: number) {
     earnedToday: earned.get(s.id) ?? 0,
   }));
 
-  // Sistemas con datos pero sin coordenadas todavía (se resuelven en el próximo sync)
+  // Systems with data but no coordinates yet (resolved in the next sync)
   const pending = ids.length - nodes.length;
   for (const id of ids) {
     if (found.some((s) => s.id === id)) continue;

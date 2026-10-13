@@ -16,15 +16,15 @@ import { CONTRACTS_SCOPE, courierContracts } from './contracts';
 
 export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
 
-// GET /characters/{id}/killmails/recent: muertes y pérdidas de los últimos ~90 días (solo id + hash)
+// GET /characters/{id}/killmails/recent: kills and losses from the last ~90 days (id + hash only)
 type EsiKillmailRef = { killmail_id: number; killmail_hash: string };
-// GET /killmails/{id}/{hash}: público e inmutable
+// GET /killmails/{id}/{hash}: public and immutable
 type EsiItem = {
   item_type_id: number;
   flag: number;
   quantity_destroyed?: number;
   quantity_dropped?: number;
-  singleton: number; // 2 = copia de blueprint
+  singleton: number; // 2 = blueprint copy
   items?: EsiItem[];
 };
 type EsiKillmail = {
@@ -36,15 +36,15 @@ type EsiKillmail = {
 };
 
 const DAY_MS = 86_400_000;
-// Detalles nuevos por sync: el resto llega en el siguiente (no hace falta gastar el límite de ESI de golpe)
+// New details per sync: the rest arrive in the next one (no need to burn the ESI limit all at once)
 const MAX_NEW = 100;
 const CHUNK = 500;
-// El seguro paga al instante de perder la nave; se deja margen por si ESI lo fecha unos minutos después
+// Insurance pays out the moment the ship is lost; leave some slack in case ESI dates it a few minutes later
 const INSURANCE_WINDOW_MS = 60 * 60_000;
-// Compras del mismo casco y equipo en los días siguientes a la pérdida: lo que costó reponerla
+// Purchases of the same hull and fit in the days after the loss: what it cost to replace it
 export const REPLACEMENT_DAYS = 7;
 
-// Los contenedores de la bodega traen sus ítems anidados: se aplanan con el flag del contenedor
+// Cargo containers carry their items nested: they are flattened with the container's flag
 function flatten(items: EsiItem[] = [], out: KillmailItem[] = [], parentFlag?: number): KillmailItem[] {
   for (const i of items) {
     const flag = parentFlag ?? i.flag;
@@ -56,8 +56,8 @@ function flatten(items: EsiItem[] = [], out: KillmailItem[] = [], parentFlag?: n
   return out;
 }
 
-// Flags de lo que va montado en la nave: ranuras baja/media/alta (11–34), bahía de drones (87), rigs (92–99),
-// subsistemas (125–132) y cazas (158–163). Lo demás (bodega, bodegas especiales, hangares) es carga
+// Flags of what is fitted to the ship: low/mid/high slots (11–34), drone bay (87), rigs (92–99),
+// subsystems (125–132) and fighters (158–163). Everything else (cargo hold, special holds, hangars) is cargo
 const FITTED_FLAGS: [number, number][] = [
   [11, 34],
   [87, 87],
@@ -65,10 +65,10 @@ const FITTED_FLAGS: [number, number][] = [
   [125, 132],
   [158, 163],
 ];
-// Sin flag (killmail aún sin completar, o −1 si ESI no lo dio) cuenta como equipo, como antes
+// No flag (killmail not yet completed, or −1 if ESI didn't give it) counts as fit, as before
 export const isCargo = (i: KillmailItem) =>
   i.flag !== undefined && i.flag >= 0 && !FITTED_FLAGS.some(([lo, hi]) => i.flag! >= lo && i.flag! <= hi);
-// Killmails guardados antes de pedir el flag: se vuelven a pedir (son públicos e inmutables) como mucho estos por sync
+// Killmails stored before the flag was requested: re-fetched (they're public and immutable), at most this many per sync
 const MAX_BACKFILL = 50;
 
 export async function fetchLosses(characterId: number, r: { pages: number; fetched: number; inserted: number }) {
@@ -85,7 +85,7 @@ export async function fetchLosses(characterId: number, r: { pages: number; fetch
   }
   r.fetched = refs.length;
 
-  // Los killmails no cambian: solo se piden los que aún no están guardados
+  // Killmails don't change: only fetch the ones not stored yet
   const known = new Set<number>();
   const ids = refs.map((k) => k.killmail_id);
   for (let i = 0; i < ids.length; i += CHUNK) {
@@ -116,7 +116,7 @@ export async function fetchLosses(characterId: number, r: { pages: number; fetch
       .all().length;
   }
 
-  // Los guardados sin flag (antes de distinguir equipo y carga): se completan
+  // Those stored without a flag (before fit and cargo were told apart): fill them in
   const incomplete = (await db.select({ id: killmails.killmailId, hash: killmails.hash, items: killmails.items }).from(killmails))
     .filter((k) => k.items.some((i) => i.flag === undefined))
     .slice(0, MAX_BACKFILL);
@@ -125,7 +125,7 @@ export async function fetchLosses(characterId: number, r: { pages: number; fetch
       const { data } = await esiGet<EsiKillmail>(`/killmails/${k.id}/${k.hash}`);
       await db.update(killmails).set({ items: flatten(data.victim.items) }).where(eq(killmails.killmailId, k.id));
     } catch (err) {
-      // Un killmail que ESI ya no da no debe parar el sync ni volver a pedirse: flag −1 (cuenta como equipo)
+      // A killmail ESI no longer serves must not stop the sync or be requested again: flag −1 (counts as fit)
       if (!(err instanceof EsiError) || err.status >= 500) throw err;
       await db
         .update(killmails)
@@ -135,10 +135,10 @@ export async function fetchLosses(characterId: number, r: { pages: number; fetch
   }
 }
 
-// El reparto de compras, seguros y couriers entre TODAS las pérdidas guardadas: lo caro de shipLosses. No depende
-// del período ni de la vista, y el Resumen, «Naves perdidas» e Indicadores lo piden varias veces por página: se
-// guarda hasta que cambia la base (total_changes() de la conexión: todas las escrituras pasan por ella, también
-// restaurar una copia) o pasa un minuto (el estado «pendiente» depende de la hora)
+// Allocating purchases, insurance and couriers across ALL stored losses: the expensive part of shipLosses. It doesn't
+// depend on the period or the view, and the Summary, «Naves perdidas» and Indicadores ask for it several times per
+// page: it is cached until the database changes (the connection's total_changes(): every write goes through it,
+// including restoring a backup) or a minute passes (the «pendiente» state depends on the time)
 let cached: { key: string; value: Promise<Awaited<ReturnType<typeof computeLosses>>> } | null = null;
 
 function allLosses(now: Date) {
@@ -160,10 +160,10 @@ async function computeLosses(now: Date) {
   const linkedIds = [...linked];
   const nameOf = new Map(pilots.map((p) => [p.id, p.name]));
 
-  // Todas las pérdidas guardadas de tus pilotos (no solo las de la vista ni las del período): las compras y los
-  // couriers se reparten entre pérdidas en orden, así que el estado de una pérdida no puede depender del período
-  // que se mire (con «30 días» una compra iba a la pérdida de hace 29 días; con «37», a la de hace 31). La vista de
-  // un piloto, además, necesita saber qué pagó para las naves de los demás. El período se aplica al final
+  // All stored losses of your pilots (not just those in the view or the period): purchases and couriers are
+  // allocated across losses in order, so a loss's state can't depend on the period being viewed (with «30 días» a
+  // purchase went to the loss from 29 days ago; with «37», to the one from 31 days ago). A pilot's view also needs
+  // to know what they paid for the others' ships. The period is applied at the end
   const rows = pilots.length
     ? await db
         .select({
@@ -182,7 +182,7 @@ async function computeLosses(now: Date) {
         .orderBy(asc(killmails.time))
     : [];
 
-  // Sistemas: nombre y seguridad de la caché del mapa; si no está, el nombre de /universe/names
+  // Systems: name and security from the map cache; if missing, the name from /universe/names
   const systemIds = [...new Set(rows.map((r) => r.systemId))];
   const systemRows = systemIds.length
     ? await db.select({ id: systems.id, name: systems.name, security: systems.security }).from(systems).where(inArray(systems.id, systemIds))
@@ -193,7 +193,7 @@ async function computeLosses(now: Date) {
   const systemById = new Map(systemRows.map((s) => [s.id, s]));
   const systemName = new Map(systemNameRows.map((s) => [s.id, s.name]));
 
-  // Precios medios de ESI de casco y equipo
+  // ESI average prices for hull and fit
   const typeIds = [...new Set(rows.flatMap((r) => [r.shipTypeId, ...r.items.map((i) => i.typeId)]))];
   const priceRows = typeIds.length
     ? await db
@@ -210,8 +210,8 @@ async function computeLosses(now: Date) {
     return (p ?? 0) * qty;
   };
 
-  // Grupo de mercado de lo perdido: un módulo del mismo grupo (Republic Fleet en vez de Domination) también
-  // repone el equipo. Los tipos se resuelven en el sync (tabla types); sin grupo conocido, solo el mismo tipo
+  // Market group of what was lost: a module from the same group (Republic Fleet instead of Domination) also
+  // replaces the fit. Types are resolved during sync (types table); with no known group, only the same type
   const lostTypes = typeIds.length
     ? await db.select({ typeId: types.typeId, marketGroupId: types.marketGroupId }).from(types).where(inArray(types.typeId, typeIds))
     : [];
@@ -224,7 +224,7 @@ async function computeLosses(now: Date) {
   for (const t of substituteTypes) groupOf.set(t.typeId, t.marketGroupId!);
   const candidateTypes = [...new Set([...typeIds, ...substituteTypes.map((t) => t.typeId)])];
 
-  // Desde cuándo hay historial: una pérdida anterior no pudo emparejarse con ninguna compra
+  // Since when there is history: an earlier loss couldn't have been matched with any purchase
   const [firstEntry] = await db.select({ at: min(walletJournal.date) }).from(walletJournal);
   const historyFrom = firstEntry?.at ?? null;
 
@@ -232,7 +232,7 @@ async function computeLosses(now: Date) {
   const firstLoss = rows[0]?.time;
   const lastLoss = rows.at(-1)?.time;
 
-  // Pagos del seguro (ref_type insurance positivo) de los pilotos que perdieron naves: cada uno se usa una vez
+  // Insurance payouts (positive insurance ref_type) of the pilots who lost ships: each one is used once
   const payouts = victims.length
     ? await db
         .select({ id: walletJournal.journalId, characterId: walletJournal.characterId, date: walletJournal.date, amount: walletJournal.amount, contextId: walletJournal.contextId, contextIdType: walletJournal.contextIdType })
@@ -250,7 +250,7 @@ async function computeLosses(now: Date) {
     : [];
   const usedPayouts = new Set<number>();
 
-  // Compras de mercado de cualquiera de tus pilotos tras las pérdidas (sin las operaciones entre tus pilotos)
+  // Market purchases by any of your pilots after the losses (excluding trades between your pilots)
   const purchases = rows.length
     ? (
         await db
@@ -279,11 +279,11 @@ async function computeLosses(now: Date) {
           .orderBy(asc(walletTransactions.date))
       ).filter((t) => !t.clientId || !linked.has(t.clientId))
     : [];
-  // Cantidad aún sin usar de cada compra (por su posición en `purchases`, que va por fecha)
+  // Quantity still unused of each purchase (by its position in `purchases`, which is sorted by date)
   const qtyLeft = purchases.map((t) => t.quantity);
   const purchaseTimes = purchases.map((t) => t.date.getTime());
-  // Primera compra con fecha >= t (búsqueda binaria: con un año de compras, recorrerlas todas por cada pérdida
-  // costaba medio segundo por cada página)
+  // First purchase with date >= t (binary search: with a year of purchases, scanning them all for every loss
+  // cost half a second per page)
   const firstPurchaseFrom = (t: number) => {
     let lo = 0;
     let hi = purchaseTimes.length;
@@ -295,7 +295,7 @@ async function computeLosses(now: Date) {
     return lo;
   };
 
-  // Couriers de tus pilotos tras las pérdidas (los cancelados o borrados devuelven la recompensa) y sus comisiones
+  // Your pilots' couriers after the losses (cancelled or deleted ones refund the reward) and their fees
   const couriers = rows.length
     ? (await courierContracts(linkedIds, firstLoss!)).filter((c) => !['deleted', 'cancelled', 'reversed', 'rejected'].includes(c.status))
     : [];
@@ -316,7 +316,7 @@ async function computeLosses(now: Date) {
     : [];
   const feeOf = new Map(feeRows.map((f) => [f.contractId, f.fee]));
   const usedCouriers = new Set<number>();
-  // Compras de reposición por pagador y fecha: el resumen las cuenta como PvP («PvP con naves»)
+  // Replacement purchases by payer and date: the summary counts them as PvP («PvP con naves»)
   const spend: { transactionId: number; journalRefId: number | null; characterId: number; date: Date; amount: number }[] = [];
 
   const losses = rows.map((r) => {
@@ -325,14 +325,14 @@ async function computeLosses(now: Date) {
     const windowEndsAt = new Date(at + REPLACEMENT_DAYS * DAY_MS);
     const inWindow = (d: Date) => d.getTime() >= at && d.getTime() <= windowEndsAt.getTime();
     const shipValue = valueOf(r.shipTypeId, 1);
-    // Equipo (lo montado y los drones) y carga (bodegas y hangares), al precio medio
+    // Fit (fitted modules and drones) and cargo (holds and hangars), at the average price
     const fitItems = r.items.filter((i) => !i.copy && !isCargo(i));
     const cargoItems = r.items.filter((i) => !i.copy && isCargo(i));
     const fitValue = fitItems.reduce((v, i) => v + valueOf(i.typeId, i.destroyed + i.dropped), 0);
     const cargoValue = cargoItems.reduce((v, i) => v + valueOf(i.typeId, i.destroyed + i.dropped), 0);
     const value = shipValue + fitValue + cargoValue;
 
-    // El pago del seguro de esta nave: el primero del piloto tras la pérdida (si ESI dice de qué tipo es, ese tipo)
+    // This ship's insurance payout: the pilot's first one after the loss (if ESI says which type, that type)
     const payout = payouts.find(
       (j) =>
         !usedPayouts.has(j.id) &&
@@ -343,8 +343,8 @@ async function computeLosses(now: Date) {
     );
     if (payout) usedPayouts.add(payout.id);
 
-    // Reposición: casco, equipo y carga comprados por cualquiera de tus pilotos en la ventana, hasta las
-    // cantidades perdidas. Primero el mismo tipo; después, para el equipo, un módulo del mismo grupo de mercado
+    // Replacement: hull, fit and cargo bought by any of your pilots within the window, up to the quantities
+    // lost. Same type first; then, for the fit, a module from the same market group
     const needOf = (items: KillmailItem[]) => {
       const m = new Map<number, number>();
       for (const i of items) m.set(i.typeId, (m.get(i.typeId) ?? 0) + i.destroyed + i.dropped);
@@ -357,7 +357,7 @@ async function computeLosses(now: Date) {
     let replacement = 0;
     let substitutes = 0;
     let hull: (typeof purchases)[number] | undefined;
-    const buyers = new Map<number, number>(); // piloto → ISK gastado en reponer
+    const buyers = new Map<number, number>(); // pilot → ISK spent on replacement
     const take = (i: number, qty: number) => {
       const t = purchases[i];
       qtyLeft[i] -= qty;
@@ -365,7 +365,7 @@ async function computeLosses(now: Date) {
       buyers.set(t.characterId, (buyers.get(t.characterId) ?? 0) + qty * t.unitPrice);
       spend.push({ transactionId: t.id, journalRefId: t.journalRefId, characterId: t.characterId, date: t.date, amount: qty * t.unitPrice });
     };
-    // Las compras de la ventana: posiciones [start, end) de `purchases`
+    // Purchases within the window: positions [start, end) of `purchases`
     const start = firstPurchaseFrom(at);
     let end = start;
     while (end < purchases.length && purchaseTimes[end] <= windowEndsAt.getTime()) end++;
@@ -385,7 +385,7 @@ async function computeLosses(now: Date) {
         need.set(t.typeId, want - qty);
       }
     }
-    // Equipo que falta, por grupo de mercado: una compra solo mira los tipos de su grupo
+    // Missing fit, by market group: a purchase only looks at the types in its group
     const missingByGroup = new Map<number, number[]>();
     for (const [typeId, want] of fitNeed) {
       const group = groupOf.get(typeId);
@@ -406,10 +406,10 @@ async function computeLosses(now: Date) {
         substitutes += qty;
       }
     }
-    // Quién repuso: quien compró el casco; si solo se compró equipo, quien más gastó
+    // Who replaced it: whoever bought the hull; if only fit was bought, whoever spent the most
     const buyerId = hull?.characterId ?? [...buyers.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 
-    // Transporte: el primer courier de la ventana que lleva este casco (o, si no, parte del equipo perdido)
+    // Transport: the first courier in the window carrying this hull (or, failing that, part of the lost fit)
     const carries = (c: (typeof couriers)[number], types: (id: number) => boolean) => (c.items ?? []).some((i) => types(i.typeId));
     const courier =
       couriers.find((c) => !usedCouriers.has(c.contractId) && inWindow(c.dateIssued) && carries(c, (id) => id === r.shipTypeId)) ??
@@ -419,17 +419,17 @@ async function computeLosses(now: Date) {
 
     const system = systemById.get(r.systemId);
     const insurance = payout?.amount ?? 0;
-    // Lo que falta por reponer, al precio medio de ESI, por partes. Se da por repuesta si falta menos del 2 % de
-    // lo perdido (munición, drones sueltos…): «por reponer» no debe quedarse abierto por una carga de munición
+    // What is still to be replaced, at the ESI average price, by part. Counts as replaced if less than 2 % of what
+    // was lost is missing (ammo, loose drones…): «por reponer» must not stay open over a load of ammo
     const missingOf = (need: Map<number, number>) =>
       [...need.entries()].reduce((v, [typeId, qty]) => v + (qty > 0 ? (price.get(typeId) ?? 0) * qty : 0), 0);
     const missHull = hullNeed ? (price.get(r.shipTypeId) ?? 0) : 0;
     const missFit = missingOf(fitNeed);
     const missCargo = missingOf(cargoNeed);
     const significant = missHull + missFit + missCargo > 0.02 * value;
-    // Sin historial: la pérdida es anterior al primer movimiento guardado; lo que falte no se sabe si se repuso
+    // No history: the loss predates the first stored entry; whether anything missing was replaced is unknown
     const noHistory = !historyFrom || r.time < historyFrom;
-    // Una pérdida de menos de 1 M (cápsula, nave de iniciación) no espera reposición: no queda abierta
+    // A loss under 1 M (capsule, rookie ship) isn't expected to be replaced: it doesn't stay open
     const trivial = value < 1_000_000;
     const state: 'replaced' | 'pending' | 'unreplaced' | 'nohistory' = !significant
       ? 'replaced'
@@ -439,7 +439,7 @@ async function computeLosses(now: Date) {
           ? 'pending'
           : 'unreplaced';
     const toReplace = significant && state !== 'nohistory' ? missHull + missFit + missCargo : 0;
-    // Quién pagó qué: la víctima cobra el seguro; cada comprador paga su reposición; quien emite el courier, el transporte
+    // Who paid what: the victim receives the insurance; each buyer pays their replacement; the courier's issuer, the transport
     const replacementBy: Record<number, number> = Object.fromEntries(buyers);
     return {
       killmailId: r.killmailId,
@@ -459,27 +459,27 @@ async function computeLosses(now: Date) {
       insurance,
       replacement,
       transport,
-      // Seguro − reposición − transporte, lo pague el piloto que sea (lo que la nave movió en tus wallets)
+      // Insurance − replacement − transport, whichever pilot pays (what the ship moved in your wallets)
       walletEffect: insurance - replacement - transport,
-      // Lo que te costó perderla: lo del wallet y además lo que no volvió (o falta por reponer, al precio medio)
+      // What losing it cost you: the wallet part plus what didn't come back (or is still to be replaced, at the average price)
       cost: insurance - replacement - transport - toReplace,
       windowEndsAt,
-      // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (la cifra es «hasta ahora»);
-      // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio);
-      // nohistory: anterior al primer movimiento guardado (no cuenta lo que falte: no se sabe)
+      // replaced: replaced (or nearly); pending: something is missing and the window is still open (the figure is «hasta ahora»);
+      // unreplaced: the window closed without replacing everything (toReplace = what didn't come back, at the average price);
+      // nohistory: predates the first stored entry (what's missing doesn't count: it's unknown)
       state,
       open: state === 'pending',
       toReplace,
-      // De qué es lo que falta (al precio medio): casco, equipo (montado y drones) y carga
+      // What the missing part is (at the average price): hull, fit (fitted modules and drones) and cargo
       missing: significant ? { hull: missHull, fit: missFit, cargo: missCargo } : { hull: 0, fit: 0, cargo: 0 },
-      // Unidades de equipo repuestas con un módulo equivalente (mismo grupo de mercado)
+      // Fit units replaced with an equivalent module (same market group)
       substitutes,
       trivial,
       replacementBy,
       transportBy: courier?.issuerId ?? null,
       replacedBy: buyerId ? { id: buyerId, name: nameOf.get(buyerId) ?? null } : null,
       shipReplacedAt: hull?.date ?? null,
-      // «Jita» de «Jita IV - Moon 4 - Caldari Navy Assembly Plant»
+      // «Jita» from «Jita IV - Moon 4 - Caldari Navy Assembly Plant»
       replacedIn: hull?.location ? hull.location.split(' - ')[0].replace(/\s+[IVXLC]+$/, '') : null,
       courier: courier ? { contractId: courier.contractId, by: nameOf.get(courier.issuerId) ?? null, at: courier.dateIssued } : null,
     };
@@ -488,17 +488,17 @@ async function computeLosses(now: Date) {
   return { pilots, nameOf, rows, losses, unpriced, historyFrom, spend, usedCouriers };
 }
 
-// Naves perdidas en los últimos `days` días y cómo tocan el wallet. La nave se pagó al comprarla (un gasto de
-// trading); perderla no mueve el wallet. Lo que lo mueve, por pérdida:
-// - el seguro que la paga (+, en el wallet de quien la perdió);
-// - la reposición (−): casco y equipo perdidos comprados en el mercado por CUALQUIERA de tus pilotos en los
-//   días siguientes (p. ej. un alter de compras en Jita), sin las operaciones entre tus pilotos;
-// - el transporte (−): el courier que emite cualquiera de tus pilotos y lleva ese casco o ese equipo
-//   (recompensa + comisión; hace falta el permiso de contratos para saber qué lleva).
-// Las donaciones, contratos y trades entre tus pilotos para moverla no cuentan: suman cero.
-// Las primas de seguro del período van aparte: también pagan naves que sigues volando.
-// Todo ya está en el neto del resumen (seguro en PvP, compras en trading, courier en logística): esto lo explica.
-// Valor perdido: casco + equipo (destruido y soltado) al precio medio de ESI, como el inventario
+// Ships lost in the last `days` days and how they affect the wallet. The ship was paid for when bought (a trading
+// expense); losing it doesn't move the wallet. What does move it, per loss:
+// - the insurance that pays it out (+, in the wallet of whoever lost it);
+// - the replacement (−): lost hull and fit bought on the market by ANY of your pilots in the following
+//   days (e.g. a shopping alt in Jita), excluding trades between your pilots;
+// - the transport (−): the courier issued by any of your pilots carrying that hull or that fit
+//   (reward + fee; the contracts scope is needed to know what it carries).
+// Donations, contracts and trades between your pilots to move it don't count: they sum to zero.
+// Insurance premiums for the period are kept separate: they also pay for ships you're still flying.
+// All of this is already in the summary's net (insurance in PvP, purchases in trading, courier in logistics): this explains it.
+// Value lost: hull + fit (destroyed and dropped) at the ESI average price, like the inventory
 export async function shipLosses(days: number, characterId?: number) {
   const now = new Date();
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -507,13 +507,13 @@ export async function shipLosses(days: number, characterId?: number) {
   const { pilots, nameOf, rows, losses, unpriced, historyFrom, spend, usedCouriers } = await allLosses(now);
   const inView = pilots.filter((p) => !characterId || p.id === characterId);
   const lacks = (scope: string) => (p: (typeof pilots)[number]) => !p.scopes.split(' ').includes(scope);
-  // Pilotos de esta vista que no pueden leer sus killmails (vinculados antes de pedir el permiso)
+  // Pilots in this view who can't read their killmails (linked before the scope was requested)
   const missingScope = inView.filter(lacks(LOSSES_SCOPE)).map(({ id, name }) => ({ id, name }));
-  // Cualquiera de tus pilotos puede emitir el courier: sin el permiso de contratos, su transporte no se ve
+  // Any of your pilots can issue the courier: without the contracts scope, their transport isn't visible
   const missingContracts = pilots.filter(lacks(CONTRACTS_SCOPE)).map(({ id, name }) => ({ id, name }));
 
 
-  // Primas de seguro pagadas en el período: aparte, porque también aseguran naves que sigues volando
+  // Insurance premiums paid in the period: separate, because they also insure ships you're still flying
   const [prem] = await db
     .select({ total: sql<number>`coalesce(sum(-${walletJournal.amount}), 0)` })
     .from(walletJournal)
@@ -526,15 +526,15 @@ export async function shipLosses(days: number, characterId?: number) {
       ),
     );
 
-  // La vista: las pérdidas de sus pilotos. Las cifras cuentan la historia de SUS naves, la pague quien la pague:
-  // lo que te costaron = seguro − reposición − transporte − lo que no volvió − lo que falta por reponer (estimado).
-  // En la vista de un piloto, además, el flujo de SU wallet por pérdidas va aparte (ownWallet): el seguro de sus
-  // naves y lo que él pagó (también para las naves de sus otros pilotos); quién pagó por las suyas, en paidByOthers
+  // The view: its pilots' losses. The figures tell the story of THEIR ships, whoever pays:
+  // what they cost you = insurance − replacement − transport − what didn't come back − what's still to replace (estimated).
+  // In a pilot's view, HIS wallet flow from losses is also shown separately (ownWallet): his ships' insurance
+  // and what he paid (also for your other pilots' ships); who paid for his, in paidByOthers
   type Row = (typeof losses)[number];
   const inPeriod = losses.filter((l) => l.time >= from);
   const view = inPeriod.filter((l) => !characterId || l.characterId === characterId);
   const sum = (rows: Row[], f: (l: Row) => number) => rows.reduce((n, l) => n + f(l), 0);
-  // Lo que pagó un piloto por una pérdida (reposición + courier)
+  // What a pilot paid for a loss (replacement + courier)
   const paidBy = (l: Row, id: number) => (l.replacementBy[id] ?? 0) + (l.transportBy === id ? l.transport : 0);
   const forOthers = characterId
     ? inPeriod
@@ -563,7 +563,7 @@ export async function shipLosses(days: number, characterId?: number) {
   return {
     period: { days, from },
     replacementDays: REPLACEMENT_DAYS,
-    // Pilotos de la vista; quiénes no pueden leer sus pérdidas y quiénes no dejan ver sus couriers
+    // Pilots in the view; who can't read their losses and who don't expose their couriers
     pilots: inView.length,
     missingScope,
     missingContracts,
@@ -573,23 +573,23 @@ export async function shipLosses(days: number, characterId?: number) {
       shipValue: sum(view, (l) => l.shipValue),
       fitValue: sum(view, (l) => l.fitValue),
       cargoValue: sum(view, (l) => l.cargoValue),
-      // Pérdidas anteriores al historial: no cuentan lo que falte por reponer
+      // Losses predating the history: what's still to replace doesn't count
       noHistory: view.filter((l) => l.state === 'nohistory').length,
       insurance,
       replacement,
       transport,
-      // Lo que movieron en tus wallets (en el consolidado, la suma de la columna Wallet)
+      // What they moved in your wallets (in the consolidated view, the sum of the Wallet column)
       walletEffect: insurance - replacement - transport,
-      // Patrimonio que no volvió (ventana cerrada) y lo que falta por reponer (ventana abierta, estimado)
+      // Net worth that didn't come back (window closed) and what's still to replace (window open, estimated)
       unreplaced,
       toReplace,
       open: view.filter((l) => l.state === 'pending').length,
-      // Lo que te costaron: la suma de la columna Coste (incluye lo estimado por reponer)
+      // What they cost you: the sum of the Coste column (includes the estimated still-to-replace)
       cost: insurance - replacement - transport - unreplaced - toReplace,
-      // Lo firme: sin lo que falta por reponer (una estimación que aún puede cambiar)
+      // The firm part: without what's still to replace (an estimate that can still change)
       firmCost: insurance - replacement - transport - unreplaced,
       premiums: prem?.total ?? 0,
-      // Tipos sin precio de las pérdidas de la vista (el reparto mira todas, pero la nota habla de estas)
+      // Unpriced types among the view's losses (the allocation looks at all of them, but the note is about these)
       unpricedTypes: new Set(
         rows
           .filter((r) => r.time >= from && (!characterId || r.characterId === characterId))
@@ -597,15 +597,15 @@ export async function shipLosses(days: number, characterId?: number) {
           .filter((t) => unpriced.has(t)),
       ).size,
     },
-    // Vista de un piloto: el flujo de su wallet por pérdidas, lo que pagó por naves de otros y quién pagó por las suyas
+    // A pilot's view: his wallet flow from losses, what he paid for others' ships and who paid for his
     ownWallet,
     forOthers,
     paidByOthers: [...byOthers.entries()].map(([id, amount]) => ({ id, name: nameOf.get(id) ?? null, amount })),
     historyFrom,
-    // La más reciente primero
+    // Most recent first
     losses: view.reverse(),
-    // Para el resumen (no para la web): las compras de reposición de todas las pérdidas, por pagador y fecha,
-    // y los couriers que llevaron naves perdidas (sus movimientos del journal tienen el contrato como context_id)
+    // For the summary (not for the web): replacement purchases for all losses, by payer and date,
+    // and the couriers that carried lost ships (their journal entries have the contract as context_id)
     spend,
     shipCouriers: [...usedCouriers],
   };

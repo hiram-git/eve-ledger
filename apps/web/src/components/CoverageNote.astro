@@ -1,8 +1,8 @@
 ---
-// Cobertura de una cifra que suma a todos los pilotos (Patrimonio, saldo de Omega): cuánto de ella
-// viene de datos viejos, a quién deja fuera y qué inventario falta. Solo cuantifica: la causa y la
-// acción de cada piloto viven en un único sitio, la línea de salud bajo el filtro. No pinta nada si
-// todos los pilotos están al día.
+// Coverage of a figure that adds up all pilots (Patrimonio, Omega balance): how much of it
+// comes from stale data, who it leaves out and which inventory is missing. It only quantifies: each
+// pilot's cause and action live in a single place, the health line under the filter. Renders nothing if
+// all pilots are up to date.
 import Icon from './Icon.astro';
 import type { Pilot } from '../lib/api';
 import { ago, isk } from '../lib/format';
@@ -13,9 +13,9 @@ interface Props {
   pilots: Pilot[];
   staleAfterMs: number;
   syncRunning?: boolean;
-  // Lo que aporta cada piloto a la cifra (saldo + inventario en Patrimonio, solo saldo en Omega)
+  // What each pilot contributes to the figure (balance + inventory in Patrimonio, balance only in Omega)
   amounts: Record<number, number>;
-  // Solo saldo (Omega): el inventario que falta no le afecta
+  // Balance only (Omega): missing inventory doesn't affect it
   walletOnly?: boolean;
 }
 const { pilots, staleAfterMs, syncRunning, amounts, walletOnly } = Astro.props;
@@ -36,7 +36,7 @@ for (const p of pilots) {
   } else if (!walletOnly && p.missingScopes.includes(ASSETS_SCOPE)) noInventory.push(p.name);
 }
 const parts = [
-  // «hace 3 d» no se parte en dos líneas
+  // «hace 3 d» doesn't break across two lines
   oldValue !== 0 && oldest ? m.coverOld(isk(oldValue, { lang }), ago(oldest, lang).replace(/ /g, '\u00a0')) : null,
   excluded.length ? m.coverExcludes(excluded.join(', ')) : null,
   noInventory.length ? m.coverNoInventory(noInventory.join(', ')) : null,
@@ -53,7 +53,7 @@ const parts = [
 }
 
 <style>
-  /* Texto neutro con un icono ámbar pequeño: informa de cuánto, sin competir con la línea de salud */
+  /* Neutral text with a small amber icon: reports how much, without competing with the health line */
   .coverage-note {
     display: flex;
     align-items: baseline;

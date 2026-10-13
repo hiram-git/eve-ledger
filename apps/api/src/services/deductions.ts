@@ -3,25 +3,25 @@ import { db } from '../db/client';
 import { esiChecks, incursionSystems, names, systems, walletJournal } from '../db/schema';
 import { esiGet } from '../lib/esi';
 
-// Descuentos (decisión del usuario): lo que no llega al wallet de lo que ganas en PvE.
-// - Impuesto de corporación: exacto. ESI lo da en cada movimiento (`tax`, `tax_receiver_id`) y `amount` ya viene
-//   sin él, así que no cambia el neto: es lo que se quedó la corporación (si es tuya, sigue en su wallet).
-// - Penalización de incursión: estimada. En la constelación de una incursión las recompensas se pagan a la mitad,
-//   sin depender de la influencia (EVE University, «Incursions»); lo perdido = lo cobrado × p / (1 − p). ESI solo
-//   dice las incursiones activas: se apuntan en cada sync y solo cuenta lo cobrado mientras se veía la incursión
-//   (lo de antes del primer registro no se sabe: la cifra es «al menos»). El ESS no dice el sistema: no entra.
+// Deductions (user's decision): what you earn in PvE that never reaches the wallet.
+// - Corporation tax: exact. ESI gives it on every entry (`tax`, `tax_receiver_id`) and `amount` already comes
+//   without it, so it doesn't change the net: it's what the corporation kept (if it's yours, it's still in its wallet).
+// - Incursion penalty: estimated. In an incursion's constellation bounties are paid at half,
+//   regardless of influence (EVE University, «Incursions»); amount lost = amount received × p / (1 − p). ESI only
+//   reports active incursions: they are recorded on every sync and only what was received while the incursion was
+//   seen counts (anything before the first record is unknown: the figure is «al menos»). The ESS doesn't give the system: it's left out.
 
 export const INCURSION_BOUNTY_PENALTY = 0.5;
 const BOUNTY_REFS = ['bounty_prizes', 'bounty_prize'];
 const ESS_REF = 'ess_escrow_transfer';
-// Lo que paga impuesto a la corporación: con `tax` a null (guardado antes de leerlo) no se sabe cuánto
+// What pays corporation tax: with `tax` null (stored before it was read) the amount is unknown
 const TAXED_REFS = [...BOUNTY_REFS, ESS_REF, 'agent_mission_reward', 'agent_mission_time_bonus_reward'];
-// Corporaciones NPC (Aliastra, State Protectorate…): sus IDs están en este rango
+// NPC corporations (Aliastra, State Protectorate…): their IDs are in this range
 const NPC_CORPS = [1_000_000, 2_000_000] as const;
-// Una incursión dura días: si un sistema se vuelve a ver infestado antes de 24 h (la app cerrada una noche),
-// es el mismo tramo
+// An incursion lasts days: if a system is seen infested again within 24 h (the app closed overnight),
+// it's the same span
 const SAME_SPELL_MS = 24 * 3_600_000;
-// Un syncAll llama a syncCharacter por cada piloto: con esto se pregunta una sola vez por ronda
+// A syncAll calls syncCharacter for each pilot: with this it's only asked once per round
 const MIN_AGE_MS = 60_000;
 const DAY_MS = 86_400_000;
 
@@ -29,7 +29,7 @@ type EsiIncursion = { constellation_id: number; infested_solar_systems: number[]
 
 const fetchIncursions = async () => (await esiGet<EsiIncursion[]>('/incursions/')).data;
 
-// `fetch` y `now` se inyectan en las pruebas (test/deductions.test.ts)
+// `fetch` and `now` are injected in the tests (test/deductions.test.ts)
 export async function refreshIncursions(fetch = fetchIncursions, now = new Date()): Promise<number> {
   const [check] = await db.select().from(esiChecks).where(eq(esiChecks.name, 'incursions'));
   if (check && now.getTime() - check.checkedAt.getTime() < MIN_AGE_MS) return 0;
@@ -70,13 +70,13 @@ const periodFrom = (days: number) => {
   return new Date(today - (days - 1) * DAY_MS);
 };
 
-// Del ratting (rattingIndicator) basta con las horas y el ISK, para decir cuánto daría la hora sin descuentos
+// From ratting (rattingIndicator) the hours and ISK are enough to say what an hour would yield without deductions
 type Ratting = { hours: number; isk: number };
 
 export async function deductionsIndicator(ratting: Ratting, days = 30) {
   const from = periodFrom(days);
 
-  // Impuesto de corporación, por corporación y tipo de movimiento
+  // Corporation tax, by corporation and entry type
   const taxRows = await db
     .select({
       corpId: walletJournal.taxReceiverId,
@@ -110,14 +110,14 @@ export async function deductionsIndicator(ratting: Ratting, days = 30) {
     .map((c) => ({ ...c, rate: c.gross > 0 ? c.tax / c.gross : null, byType: c.byType.sort((a, b) => b.tax - a.tax) }))
     .sort((a, b) => b.tax - a.tax);
   const tax = byCorp.reduce((n, c) => n + c.tax, 0);
-  // Lo que se llevó la corporación de lo que cuenta el ratting (recompensas y ESS; las misiones no)
+  // What the corporation took from what ratting counts (bounties and ESS; not missions)
   const rattingTax = taxRows.filter((r) => [...BOUNTY_REFS, ESS_REF].includes(r.refType)).reduce((n, r) => n + r.tax, 0);
   const [unknown] = await db
     .select({ n: sql<number>`count(*)` })
     .from(walletJournal)
     .where(and(gte(walletJournal.date, from), isNull(walletJournal.tax), inArray(walletJournal.refType, TAXED_REFS)));
 
-  // Penalización de incursión: recompensas cobradas en un sistema mientras se le veía infestado
+  // Incursion penalty: bounties received in a system while it was seen infested
   const [check] = await db.select().from(esiChecks).where(eq(esiChecks.name, 'incursions'));
   const hit = await db
     .select({
@@ -158,7 +158,7 @@ export async function deductionsIndicator(ratting: Ratting, days = 30) {
     .sort((a, b) => b.lost - a.lost);
   const incursion = bySystem.reduce((n, s) => n + s.lost, 0);
 
-  // La hora de ratting sin descuentos: lo cobrado + el impuesto del ratting + la penalización
+  // The ratting hour without deductions: amount received + ratting tax + penalty
   const iskPerHour = ratting.hours ? ratting.isk / ratting.hours : null;
   const grossPerHour = ratting.hours ? (ratting.isk + rattingTax + incursion) / ratting.hours : null;
 
@@ -170,7 +170,7 @@ export async function deductionsIndicator(ratting: Ratting, days = 30) {
     incursion,
     penalty: INCURSION_BOUNTY_PENALTY,
     bySystem,
-    // Desde cuándo se apuntan las incursiones (null: aún no se ha mirado); antes de esa fecha no se sabe
+    // Since when incursions are recorded (null: not checked yet); before that date it's unknown
     incursionsSince: check?.firstAt.toISOString() ?? null,
     iskPerHour,
     grossPerHour,

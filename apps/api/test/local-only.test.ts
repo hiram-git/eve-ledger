@@ -1,4 +1,4 @@
-// Solo esta máquina: Host local y, en lo que no es GET, sin Origin ajeno (DNS rebinding y formularios de otras webs)
+// This machine only: local Host and, for non-GET requests, no foreign Origin (DNS rebinding and forms from other websites)
 import { expect, test } from 'bun:test';
 import { allowedHosts, localOnly } from '../src/lib/local-only';
 
@@ -25,7 +25,7 @@ test('rechaza un POST desde otra web y acepta el de la propia web o sin Origin',
   expect(status(req('127.0.0.1:47300', 'POST', 'null'))).toBe(403);
   expect(status(req('127.0.0.1:47300', 'POST', 'http://127.0.0.1:47321'))).toBe(200);
   expect(status(req('127.0.0.1:47300', 'POST'))).toBe(200);
-  // Un GET con Origin ajeno no cambia nada: el navegador no deja leer la respuesta sin CORS
+  // A GET with a foreign Origin changes nothing: the browser won't let it read the response without CORS
   expect(status(req('127.0.0.1:47300', 'GET', 'https://evil.example'))).toBe(200);
 });
 
@@ -34,6 +34,6 @@ test('ALLOWED_HOSTS y una interfaz concreta en HOST añaden nombres', () => {
   expect(localOnly(req('ledger.lan:47300'), lan)).toBeNull();
   expect(localOnly(req('192.168.1.10:47300'), lan)).toBeNull();
   expect(localOnly(req('evil.example'), lan)?.status).toBe(403);
-  // 0.0.0.0 no autoriza nada por sí mismo
+  // 0.0.0.0 authorizes nothing by itself
   expect(allowedHosts('', '0.0.0.0').has('0.0.0.0')).toBe(false);
 });

@@ -1,6 +1,6 @@
-// Renovación de tokens sin Client Secret (PKCE): EVE invalida cada refresh token en cuanto se usa.
-// Con el SSO simulado: el token nuevo se guarda aunque falle la validación, dos renovaciones a la vez usan
-// el refresh token una sola vez, y revincular durante una renovación no pisa los tokens nuevos
+// Token refresh without a Client Secret (PKCE): EVE invalidates each refresh token as soon as it's used.
+// With the mocked SSO: the new token is saved even if validation fails, two simultaneous refreshes use
+// the refresh token only once, and relinking during a refresh doesn't overwrite the new tokens
 import { expect, mock, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,7 @@ Bun.env.ENC_KEY = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toStri
 Bun.env.EVE_CLIENT_ID ||= 'test';
 Bun.env.EVE_CALLBACK_URL ||= 'http://127.0.0.1/auth/callback';
 
-// EVE simulado: cada refresh token vale una sola vez (como sin Client Secret) y devuelve uno nuevo
+// Mocked EVE: each refresh token is valid only once (as without a Client Secret) and returns a new one
 const valid = new Set<string>();
 let n = 0;
 let verifyFails = false;
@@ -58,7 +58,7 @@ test('si falla la validación, el refresh token nuevo no se pierde', async () =>
   await reset('rtA');
   verifyFails = true;
   await expect(getAccessToken(1)).rejects.toThrow('JWKS');
-  // El viejo ya no vale en EVE, pero el guardado sí: la siguiente renovación funciona
+  // The old one is no longer valid in EVE, but the stored one is: the next refresh works
   verifyFails = false;
   expect(await getAccessToken(1)).toMatch(/^at\d+$/);
   expect(calls.length).toBe(2);
@@ -75,7 +75,7 @@ test('revincular durante la renovación no pisa los tokens nuevos', async () => 
   await reset('rtC');
   const p = getAccessToken(1);
   await Bun.sleep(5);
-  // La callback del login guarda tokens nuevos mientras la renovación está en vuelo
+  // The login callback stores new tokens while the refresh is in flight
   valid.add('rtNEW');
   await db.update(characters).set({ refreshToken: await encrypt('rtNEW'), accessToken: await encrypt('atNEW'), tokenExpiresAt: new Date(Date.now() + 1_000_000) }).where(eq(characters.id, 1));
   expect(await p).toBe('atNEW');

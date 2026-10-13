@@ -1,6 +1,6 @@
 const { join } = require('node:path');
 const { chromium } = require(require.resolve('@playwright/test', { paths: [join(__dirname, '../../apps/web')] }));
-// Las tres piezas en los dos idiomas: eve-ledger-<pieza>-<idioma>.png (2000 × 1000)
+// The three pieces in both languages: eve-ledger-<pieza>-<idioma>.png (2000 × 1000)
 (async () => { const b = await chromium.launch();
   for (const slide of ['portada', 'doctrinas', 'indicadores']) for (const lang of ['es', 'en']) {
     const ctx = await b.newContext({ viewport: { width: 2000, height: 1000 }, deviceScaleFactor: 1 }); const p = await ctx.newPage();

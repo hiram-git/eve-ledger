@@ -1,6 +1,6 @@
-// Cuentas y flujos que ya se rompieron alguna vez: la suma de los pilotos es el total, el punto del neto no se sale
-// del gráfico, un permiso opcional no enciende avisos, un piloto sin sync no pinta ceros, el gráfico tiene una
-// sola parada de Tab y las copias de seguridad se hacen y se restauran
+// Calculations and flows that have broken before: the sum of the pilots is the total, the net dot doesn't leave
+// the chart, an optional scope doesn't light up warnings, a pilot without sync doesn't show zeros, the chart has a
+// single Tab stop and backups are created and restored
 import { expect, test } from '@playwright/test';
 import { API_URL, PILOTS, WEB_URL } from './fixtures';
 
@@ -13,13 +13,13 @@ test('la suma de los netos de los pilotos es el total del resumen', async ({ pag
   const nets = await page
     .locator('table.pilots tbody tr')
     .evaluateAll((rows) => rows.map((r) => (r as HTMLElement).dataset.net).filter((v) => v !== undefined && v !== '').map(Number));
-  expect(nets.length).toBe(2); // Nyx no tiene sync: «—»
+  expect(nets.length).toBe(2); // Nyx has no sync: «—»
   const summary = await (await request.get(`${API_URL}/summary?days=30`)).json();
   expect(nets.reduce((a, b) => a + b, 0)).toBeCloseTo(summary.totals.net, 0);
-  // Y las actividades suman el total
+  // And the activities add up to the total
   const byActivity = summary.byActivity.reduce((n: number, a: { net: number }) => n + a.net, 0);
   expect(byActivity).toBeCloseTo(summary.totals.net, 0);
-  // Saldo anterior + neto + lo movido entre tus pilotos = saldo, en cada piloto con datos
+  // Opening balance + net + transfers between your pilots = balance, for each pilot with data
   for (const c of summary.characters.filter((c: { journalBalance: number | null }) => c.journalBalance !== null)) {
     expect(c.openingBalance + c.walletChange).toBeCloseTo(c.journalBalance, 0);
   }
@@ -31,12 +31,12 @@ test('el neto de un piloto no incluye lo movido con sus otros pilotos', async ({
   expect(summary.totals.net).toBeCloseTo(kade.income - kade.expenses, 0);
   expect(kade.internalReceived).toBeGreaterThan(0);
   await page.goto(`/?days=30&pilot=${PILOTS.kade.id}`);
-  // La línea está dos veces (una por maquetación) y se ve una sola
+  // The line is there twice (one per layout) and only one is visible
   await expect(page.getByText('No incluye lo movido con tus otros pilotos').filter({ visible: true })).toHaveCount(1);
 });
 
 test('el punto del neto de cada día queda dentro del gráfico', async ({ page }) => {
-  // Kade recibió 500 M de Aria: antes, ese día el punto se salía del gráfico por encima de la tarjeta de Neto
+  // Kade received 500 M from Aria: before, on that day the dot went off the chart above the Neto card
   for (const path of ['/?days=30', `/?days=30&pilot=${PILOTS.kade.id}`, `/?days=30&pilot=${PILOTS.aria.id}`]) {
     await page.goto(path);
     const plot = await page.locator('.plot .cols').boundingBox();
@@ -71,7 +71,7 @@ test('el permiso opcional de citadelas no enciende avisos; un piloto sin sync s�
   await expect(kade.locator('.scopes li.optional')).toHaveCount(1);
   await expect(aria.locator('.scopes li.optional')).toHaveCount(0);
   await expect(kade.getByText('Todos los permisos')).toBeVisible();
-  // El punto de «Pilotos» cuenta solo a Nyx (sin primer sync)
+  // The «Pilotos» dot counts only Nyx (no first sync)
   await expect(page.locator('a[href="/pilotos"][aria-label*="1 necesita"], a[href="/pilotos"][aria-label*="1 necesitan"]').first()).toBeVisible();
 
   await page.goto('/?days=30');
@@ -109,7 +109,7 @@ test('copias de seguridad: hacer una, verla en la lista y restaurarla', async ({
   await rows.first().locator('form button[type="submit"]').click();
   await expect(page).toHaveURL(/ok=restored/);
   await expect(panel.locator('.action-notice')).toContainText('Copia restaurada');
-  // Lo de antes de restaurar queda como copia «Antes de restaurar»
+  // The pre-restore state is kept as a «Antes de restaurar» backup
   await panel.locator('.backup-list summary').click();
   await expect(panel.locator('.backup-list tbody')).toContainText('Antes de restaurar');
 });
@@ -139,7 +139,7 @@ test('Descuentos: impuesto de corporación exacto y penalización de incursión 
   const { deductions: d } = await (await request.get(`${API_URL}/indicators`)).json();
   expect(d.byCorp[0].name).toBe('School of Applied Knowledge');
   expect(d.byCorp[0].rate).toBeCloseTo(0.1, 2);
-  // Kade cobró 3 × 9 M en Kamela con la incursión: se perdió lo mismo
+  // Kade received 3 × 9 M in Kamela during the incursion: the same amount was lost
   expect(d.bySystem).toEqual([expect.objectContaining({ name: 'Kamela', ticks: 3, lost: 27_000_000 })]);
   expect(d.grossPerHour).toBeGreaterThan(d.iskPerHour);
   await page.goto('/indicadores');
@@ -148,7 +148,7 @@ test('Descuentos: impuesto de corporación exacto y penalización de incursión 
   await expect(card.getByRole('rowheader', { name: /School of Applied Knowledge/ })).toBeVisible();
   await expect(card.getByRole('rowheader', { name: /Kamela/ })).toBeVisible();
   await expect(card.getByText(/~\u2009?27,0\u00a0M/).first()).toBeVisible();
-  // Y «Ratting por sistema» marca el sistema con la incursión
+  // And «Ratting por sistema» flags the system with the incursion
   const systems = page.locator('section', { has: page.getByRole('heading', { name: 'Ratting por sistema' }) });
   await expect(systems.getByRole('rowheader', { name: /Kamela/ }).getByText('incursión')).toBeVisible();
 });
