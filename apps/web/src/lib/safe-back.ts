@@ -1,6 +1,6 @@
-// Vuelta a la página de origen tras una acción (?back= o campo del formulario): solo rutas del propio dashboard.
-// No basta con mirar que empiece por «/» y no por «//»: el navegador lee «/\evil.example» y «/<tab>/evil.example»
-// como otro sitio. Se normaliza con URL contra un origen ficticio y se queda la ruta solo si sigue en él
+// Return to the originating page after an action (?back= or form field): only routes of the dashboard itself.
+// Checking that it starts with «/» and not «//» isn't enough: the browser reads «/\evil.example» and «/<tab>/evil.example»
+// as another site. It's normalized with URL against a dummy origin and the path is kept only if it stays on it
 const BASE = 'http://local.invalid';
 
 export function safeBackUrl(raw: string | null | undefined): URL {

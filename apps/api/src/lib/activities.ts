@@ -1,10 +1,10 @@
 import { sql, type SQL } from 'drizzle-orm';
 
-// Actividad de cada ref_type del journal: responde «¿de dónde sale el ISK?» en términos de juego,
-// no de ESI. Lo que no está en ninguna lista cuenta como «otros» (skills, clones, donaciones, PI…).
-// Logística: lo que pagas (o cobras) por mover cosas con couriers.
-// Cuentas (decisión del usuario, decimosexta crítica): comprar o vender PLEX en el mercado es el coste de las
-// cuentas (Omega), no trading ni juego; va aparte del resultado y del ritmo del Omega
+// Activity of each journal ref_type: answers «where does the ISK come from?» in game terms,
+// not ESI terms. Anything not in any list counts as «otros» (other: skills, clones, donations, PI…).
+// Logistics: what you pay (or get paid) for moving things with couriers.
+// Accounts (user's decision, sixteenth critique): buying or selling PLEX on the market is the cost of the
+// accounts (Omega), neither trading nor gameplay; it is kept apart from the result and from the Omega rate
 export const ACTIVITIES = ['pve', 'pvp', 'trading', 'logistics', 'other', 'accounts'] as const;
 export type Activity = (typeof ACTIVITIES)[number];
 
@@ -30,7 +30,7 @@ const REF_TYPES: Record<Exclude<Activity, 'other' | 'accounts'>, string[]> = {
     'corporate_reward_payout',
   ],
   pvp: ['insurance', 'kill_right_fee', 'war_fee', 'war_fee_surrender', 'war_ally_contract'],
-  // Todo lo que forma el margen de comprar y vender: operaciones, escrow, comisiones e impuestos
+  // Everything that makes up the buy/sell margin: trades, escrow, fees and taxes
   trading: [
     'market_transaction',
     'market_escrow',
@@ -54,14 +54,14 @@ const list = (refs: string[]) => sql.join(refs.map((r) => sql`${r}`), sql`, `);
 
 type Column = SQL | { getSQL(): SQL };
 
-// La comisión de un contrato es logística si el contrato es un courier (los conocemos con el permiso de
-// contratos: context_id = contract_id); si no, es la de un contrato de compraventa (trading)
-// Lo que el rateo también da y el wallet no etiqueta como tal (decisión del usuario):
-// - escalación vendida: donación que te hace alguien que no es tu piloto, por un importe redondo (múltiplo de 50 M:
-//   150, 300, 450 M); las demás donaciones siguen en «otros»;
-// - loot vendido: lo que cobras de un contrato de intercambio que acepta una corporación (el buyback de la corp,
-//   `contract_price_payment_corp`). Las ventas de mercado no cuentan: mezclan exploración, gas…
-// Las dos son PvE y suman al ISK/h de ratting. Las recompensas de las escalaciones ya están en bounty_prizes
+// A contract's fee is logistics if the contract is a courier (we know them with the contracts
+// permission: context_id = contract_id); otherwise it belongs to a buy/sell contract (trading)
+// What ratting also yields that the wallet doesn't label as such (user's decision):
+// - sold escalation: a donation from someone who isn't your pilot, for a round amount (a multiple of 50 M:
+//   150, 300, 450 M); other donations stay in «otros»;
+// - sold loot: what you get from an item exchange contract accepted by a corporation (the corp buyback,
+//   `contract_price_payment_corp`). Market sales don't count: they mix exploration, gas…
+// Both are PvE and add to the ratting ISK/h. The escalations' bounties are already in bounty_prizes
 const ESCALATION_STEP = 50_000_000;
 export const refKindOf = (refType: Column, amount: Column, firstPartyId: Column) =>
   sql<string>`(case
@@ -72,8 +72,8 @@ export const refKindOf = (refType: Column, amount: Column, firstPartyId: Column)
     else ${refType} end)`;
 export const PVE_EXTRA_KINDS = ['escalation_sale', 'loot_buyback'];
 
-// Una compra o venta de mercado es de las cuentas si su transacción (context_id) es de PLEX.
-// refKind: refKindOf(...) del mismo movimiento (las escalaciones vendidas y el loot del buyback son PvE)
+// A market buy or sale belongs to accounts if its transaction (context_id) is for PLEX.
+// refKind: refKindOf(...) of the same entry (sold escalations and buyback loot are PvE)
 export const activityOf = (refType: Column, contextId: Column, refKind: Column) =>
   sql<Activity>`(case
     when ${refKind} in (${list(PVE_EXTRA_KINDS)}) then 'pve'

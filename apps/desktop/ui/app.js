@@ -1,5 +1,5 @@
-// Asistente y configuración de EVE Ledger de escritorio. Habla con Rust (src-tauri/src/lib.rs) con invoke().
-// Sin Tauri (abriendo la página en un navegador con ?preview) usa datos de ejemplo, para revisar el diseño.
+// EVE Ledger desktop wizard and settings. Talks to Rust (src-tauri/src/lib.rs) with invoke().
+// Without Tauri (opening the page in a browser with ?preview) it uses sample data, to review the design.
 
 const T = {
   es: {
@@ -176,7 +176,7 @@ const lang = (() => {
 const t = T[lang];
 document.documentElement.lang = lang;
 
-// Tauri o, con ?preview, un sustituto para ver la página en un navegador
+// Tauri or, with ?preview, a stand-in to view the page in a browser
 const preview = !window.__TAURI__;
 const tauri = preview
   ? {
@@ -233,8 +233,8 @@ function fill(cfg) {
   originalKey = cfg.encKey;
 }
 
-// La app de EVE (solo el Client ID: sin Secret Key, PKCE) y el puerto de la API no se editan aquí: vienen de la
-// configuración guardada (la app incluida en el instalador, o la propia de quien la configuró en versiones anteriores)
+// The EVE app (Client ID only: no Secret Key, PKCE) and the API port aren't edited here: they come from the
+// saved configuration (the app bundled in the installer, or the one set up by whoever configured it in earlier versions)
 function readForm() {
   const f = form.elements;
   const num = (name) => Math.max(0, Math.floor(Number(f[name].value) || 0));

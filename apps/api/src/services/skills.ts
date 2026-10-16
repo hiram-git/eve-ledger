@@ -4,7 +4,7 @@ import { characterAttributes, characters, characterSkills } from '../db/schema';
 import { esiGet } from '../lib/esi';
 import type { StepResult } from './sync';
 
-// Skills y atributos de cada piloto: para saber qué fits puede volar y cuánto le falta de un plan
+// Skills and attributes of each pilot: to know which fits they can fly and how much of a plan they still lack
 export const SKILLS_SCOPE = 'esi-skills.read_skills.v1';
 
 // GET /characters/{id}/skills
@@ -14,7 +14,7 @@ type EsiSkills = {
   unallocated_sp?: number;
 };
 
-// GET /characters/{id}/attributes (con los implantes ya sumados)
+// GET /characters/{id}/attributes (with implants already added in)
 type EsiAttributes = { charisma: number; intelligence: number; memory: number; perception: number; willpower: number };
 
 const CHUNK = 500;
@@ -31,7 +31,7 @@ export async function fetchSkills(characterId: number, r: StepResult) {
     activeLevel: s.active_skill_level,
     sp: s.skillpoints_in_skill,
   }));
-  // Una foto: se reemplaza entera (una skill no se «desentrena», pero así no queda nada viejo)
+  // A snapshot: replaced entirely (a skill is never «untrained», but this way nothing stale remains)
   db.transaction((tx) => {
     tx.delete(characterSkills).where(eq(characterSkills.characterId, characterId)).run();
     for (let i = 0; i < rows.length; i += CHUNK) tx.insert(characterSkills).values(rows.slice(i, i + CHUNK)).run();

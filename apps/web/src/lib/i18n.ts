@@ -1,6 +1,6 @@
-// Traducciones de la interfaz: español (predeterminado), inglés y alemán.
-// Los nombres de ítems, sistemas y pilotos vienen de ESI y no se traducen;
-// la notación k / M / B de ISK es la del juego y se mantiene en los tres idiomas
+// UI translations: Spanish (default), English and German.
+// Names of items, systems and pilots come from ESI and aren't translated;
+// the k / M / B ISK notation is the game's and is kept in all three languages
 import type { AstroGlobal } from 'astro';
 import type { Activity } from './api';
 
@@ -12,13 +12,13 @@ export const LANG_NAMES: Record<Lang, string> = { es: 'Español', en: 'English',
 
 export const isLang = (v: unknown): v is Lang => typeof v === 'string' && (LANGS as readonly string[]).includes(v);
 
-// Idioma de la petición: cookie del selector o el predeterminado
+// Request language: the selector's cookie or the default
 export function getLang(astro: Pick<AstroGlobal, 'cookies'>): Lang {
   const v = astro.cookies.get(LANG_COOKIE)?.value;
   return isLang(v) ? v : DEFAULT_LANG;
 }
 
-// Idioma para una página que se abre en el navegador del sistema (sin la cookie del dashboard): el del navegador
+// Language for a page opened in the system browser (without the dashboard cookie): the browser's
 export function getRequestLang(astro: Pick<AstroGlobal, 'cookies' | 'request'>): Lang {
   const v = astro.cookies.get(LANG_COOKIE)?.value;
   if (isLang(v)) return v;
@@ -29,7 +29,7 @@ export function getRequestLang(astro: Pick<AstroGlobal, 'cookies' | 'request'>):
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 const es = {
-  // Marco
+  // Frame
   sections: 'Secciones',
   heroTagline: 'Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI',
   skipToContent: 'Saltar al contenido',
@@ -45,10 +45,22 @@ const es = {
   cronLast: (ago: string, rows: number) => `Último sync automático ${ago}: ${rows} movimientos nuevos`,
   cronLastErrors: (n: number) => `, ${n} ${plural(n, 'piloto con error', 'pilotos con error')}`,
   footer: 'Datos vía ESI. EVE Online y todo lo relacionado son marcas de CCP hf.',
+  legalLink: 'Aviso legal',
+  legalTitle: 'Aviso legal',
+  legalIntro:
+    'EVE Ledger es una herramienta de terceros, gratuita y de código abierto (licencia MIT). No está afiliada a CCP hf. ni cuenta con su respaldo.',
+  legalData:
+    'Usa ESI y el login de EVE (SSO) bajo el acuerdo de licencia para desarrolladores de CCP, con permisos de solo lectura. Tus datos y tus tokens se quedan en este equipo: EVE Ledger no tiene servidor ni recoge nada.',
+  legalDataTitle: 'Datos y ESI',
+  legalCcpTitle: 'Aviso de CCP',
+  legalCcpNote: 'Texto original de CCP, en inglés.',
+  legalLicenseTitle: 'Licencia',
+  legalLicense: 'MIT © 2026 Sirrohan Yassavi. Se distribuye tal cual, sin garantías.',
+  legalSource: 'Código fuente y releases',
   // Indicadores
   indicators: 'Indicadores',
   balances: 'Balances',
-  // Doctrinas: fits EFT, plan de skills (.emp) y quién vuela qué
+  // Doctrinas: EFT fits, skill plan (.emp) and who flies what
   doctrines: 'Doctrinas',
   doctrinesLead: 'Pega los fits de una doctrina en formato EFT y el plan de skills de la comunidad (.emp de EVEMon): ves qué pilotos pueden volar cada fit y cuánto le falta a cada uno.',
   doctrineNew: 'Nueva doctrina',
@@ -60,6 +72,20 @@ const es = {
   doctrinesEmpty: 'Aún no hay doctrinas. Crea una con su nombre y pega sus fits.',
   doctrineWho: 'Quién la vuela',
   doctrineFlies: (ok: number, total: number) => `${ok} de ${total} ${plural(total, 'fit', 'fits')}`,
+  doctrineMeta: (pilotsOk: number, pilots: number, fitsOk: number, fits: number) =>
+    `${pilotsOk} de ${pilots} ${plural(pilots, 'piloto', 'pilotos')} · ${fitsOk} de ${fits} ${plural(fits, 'nave', 'naves')}`,
+  doctrineMetaFull: (pilotsOk: number, pilots: number, fitsOk: number, fits: number) =>
+    `${pilotsOk} de ${pilots} pilotos con skills vuelan al menos una nave de esta doctrina; ${fitsOk} de ${fits} naves tienen quien las vuele.`,
+  doctrineFitCount: (n: number) => `${n} ${plural(n, 'nave', 'naves')}`,
+  doctrineNoFits: 'Sin fits',
+  doctrineRename: 'Renombrar',
+  doctrineRenameLabel: (name: string) => `Nuevo nombre de «${name}»`,
+  doctrineRenameSave: 'Guardar',
+  renamedOk: (name: string) => `Doctrina renombrada: «${name}».`,
+  fitFliers: (ok: number, total: number) => `${ok} de ${total} ${plural(total, 'piloto', 'pilotos')}`,
+  fitFliersFull: (ok: number, total: number) => `${ok} de ${total} pilotos con skills pueden volarlo.`,
+  viewCompact: 'Vista compacta',
+  viewCompactHint: 'Cada fit en una línea: púlsalo para desplegarlo. Se recuerda en este navegador.',
   fitAdd: 'Añadir fit',
   fitPaste: 'Fit en formato EFT',
   fitPasteHint: 'Cópialo de eveworkbench, de un foro o de EVE (Fitting → Copy to clipboard). Empieza por [Nave, Nombre].',
@@ -112,7 +138,7 @@ const es = {
   fitIgnored: (names: string) => `ESI no reconoce estas líneas y se ignoran: ${names}.`,
   planOk: (name: string, n: number) => `Plan «${name}» importado: ${n} skills.`,
   deletedOk: 'Borrado.',
-  // Doctrinas: iconos de «Para volarlo ya», avisos y carga
+  // Doctrinas: «Para volarlo ya» icons, notices and loading
   statusOmegaBlocked: 'Pide skills que un Alfa no puede entrenar ni usar.',
   chipSkillsOk: 'Listo',
   chipSkillsOkFull: 'Skills: tiene todas las que pide el fit',
@@ -152,7 +178,7 @@ const es = {
   pendingPlan: 'Importando el plan: pidiendo a ESI las skills que falten.',
   pendingPrices: 'Actualizando los precios de Jita…',
   pendingWorking: 'Un momento…',
-  // Doctrinas, entrega 2: precios de Jita, inyectores y presupuesto
+  // Doctrinas, part 2: Jita prices, injectors and budget
   fundsTitle: 'Con qué se paga',
   fundsWallet: 'Saldo de los wallets',
   fundsOmega: 'Omega del próximo mes por pagar',
@@ -207,7 +233,7 @@ const es = {
       esi: 'ESI no respondió: vuelve a intentarlo en un momento.',
     } as Record<string, string>)[code] ?? 'No se pudo guardar.',
   indicatorsLead: 'Metas y ritmos: el Omega frente a tu saldo, lo que rinde tu ratting, lo que cuestan tus pérdidas y lo que se lleva el mercado.',
-  // Indicadores: ratting, fondo de reposición, comisiones
+  // Indicadores: ratting, replacement fund, fees
   rattingTitle: 'ISK por hora de ratting',
   periodDays: (days: number) => `últimos ${days} días`,
   perHour: 'ISK/h',
@@ -265,6 +291,27 @@ const es = {
   replNoLosses: (days: number) => `Sin naves perdidas en los últimos ${days} días.`,
   replNoScope: 'Sin el permiso de killmails en ningún piloto: no hay pérdidas que medir.',
   replNoRate: 'Sin horas de ratting en el período: el coste no se puede pasar a horas.',
+  dedTitle: 'Descuentos',
+  dedLead: (days: number) => `impuesto de corporación e incursiones · últimos ${days} días`,
+  dedTaxLabel: 'Se quedaron las corporaciones',
+  dedIncursionLabel: 'Se llevó la penalización de incursiones',
+  dedIncursionSub: (v: string) => `y ~\u2009${v} ISK que se llevó la penalización de incursiones (estimado)`,
+  dedRate: (gross: string, net: string, pct: string) => `Sin descuentos, tu ratting daría ${gross} ISK/h en lugar de ${net} (+${pct}).`,
+  dedConcept: 'Concepto',
+  dedRateCol: 'Tasa',
+  dedTaxGroup: 'Impuesto de corporación',
+  dedNpc: 'NPC',
+  dedUnknownCorp: 'Corporación sin nombre',
+  dedIncursionGroup: 'Penalización de incursión (estimado)',
+  dedTicks: (n: string) => `${n} pagos`,
+  dedNote:
+    'El impuesto sale del journal de ESI y ya viene descontado de lo que cobras: no cambia el neto. Si la corporación es tuya, ese ISK sigue en su wallet. La penalización es una estimación: en la constelación de una incursión las recompensas se pagan a la mitad, así que perdiste lo mismo que cobraste. El ESS no dice el sistema y no entra.',
+  dedSince: (date: string) => `ESI solo dice las incursiones activas: se apuntan en cada sync desde el ${date}; lo de antes no cuenta.`,
+  dedNotYet: 'ESI solo dice las incursiones activas: se empiezan a apuntar en el próximo sync.',
+  dedTaxUnknown: (n: string) => `${n} cobros sin dato de impuesto (guardados antes de leerlo y que ESI ya no da).`,
+  dedNone: (days: number) => `Sin impuesto de corporación ni recompensas en sistemas con incursión en los últimos ${days} días.`,
+  systemsIncursion: 'incursión',
+  systemsIncursionTitle: 'Recompensas a la mitad por una incursión: ver Descuentos',
   feesTitle: 'Comisiones e impuestos',
   feesLead: (days: number) => `mercado · últimos ${days} días`,
   feesAnswerLabel: 'Se llevó el mercado',
@@ -303,7 +350,7 @@ const es = {
   now: 'ahora',
   never: 'nunca',
 
-  // Navegación del resumen
+  // Summary navigation
   period: 'Período',
   days: (n: number) => `${n} días`,
   eveTime: 'hora EVE',
@@ -313,7 +360,7 @@ const es = {
   updated: 'Actualizado',
   summaryH1: (days: number) => `Resumen de los últimos ${days} días`,
 
-  // Avisos
+  // Notices
   syncDone: (rows: string) => `Sincronización completa: ${rows} movimientos nuevos`,
   syncErrors: (n: number) => `${n} ${plural(n, 'piloto con error', 'pilotos con error')}: revisa el`,
   syncLog: 'registro de sync',
@@ -346,7 +393,7 @@ const es = {
   waitingAuto: 'Esta página se actualiza sola mientras dura el primer sync.',
   waitingHint: 'Si ya terminó y sigue vacío, pulsa «Sincronizar» o revisa el estado en Pilotos.',
 
-  // Resumen
+  // Summary
   netPeriod: (days: number) => `Neto · últimos ${days} días`,
   gain: '(ganancia)',
   loss: '(pérdida)',
@@ -362,7 +409,7 @@ const es = {
   refreshNow: 'Actualizar',
   pilotsStale: (n: number, total: number, list: string) => `${n} de ${total} ${n === 1 ? 'piloto' : 'pilotos'} sin sync reciente: ${list}`,
   reviewPilots: 'Revisar en Pilotos',
-  // Línea de salud bajo el filtro: causa corta y acción por piloto
+  // Health line under the filter: short cause and action per pilot
   healthToken: 'token caducado',
   healthFailed: (kind: string) => `falló el sync de ${kind}`,
   healthPending: 'primer sync en curso',
@@ -431,13 +478,13 @@ const es = {
   allPilotsTitle: (v: string, days: number) => `Todos tus pilotos: neto ${v} en ${days} días`,
   netPeriodPilot: (name: string, days: number) => `Neto de ${name} · últimos ${days} días`,
   summaryH1Pilot: (name: string, days: number) => `Resumen de ${name}: últimos ${days} días`,
-  // Resultado: el neto del wallet menos el patrimonio de las naves perdidas que no volvió o falta por reponer
+  // Result: the wallet net minus the net worth of lost ships that didn't come back or are still to replace
   result: 'Resultado',
   resultAccounts: (op: string, v: string) => `${op}\u00a0${v} de PLEX (cuentas, aparte)`,
   resultPeriod: (days: number) => `Resultado · últimos ${days} días`,
   resultPeriodPilot: (name: string, days: number) => `Resultado de ${name} · últimos ${days} días`,
   resultWallet: 'Neto del wallet',
-  // Vista de un piloto: su neto no es lo que cambió su wallet (lo movido con tus otros pilotos va aparte)
+  // Pilot view: their net isn't what changed their wallet (what was moved with your other pilots goes separately)
   resultWalletPilot: 'Neto en juego',
   resultNotBack: (v: string) => `−\u00a0${v} de naves que no volvieron`,
   resultToReplace: (v: string) => `−\u00a0~${v} por reponer (estimado)`,
@@ -496,7 +543,7 @@ const es = {
   sortBy: 'Ordenar por',
   sortByCol: (col: string) => `Ordenar por ${col}`,
   sortOriginal: 'Orden original',
-  // Naves perdidas
+  // Lost ships
   lossesPeriod: (days: number) => `Naves perdidas · últimos ${days} días`,
   lossesWallet: 'Efecto en el wallet',
   lossesCost: 'Te costaron',
@@ -594,6 +641,7 @@ const es = {
   reconcileNote: 'Saldo anterior + Neto + Entre tus pilotos = Saldo.',
   reconcileGap: (items: string) => ` No cuadra en ${items}: movimientos que ESI ya no daba al primer sync.`,
   reconcileItem: (name: string, v: string) => `${name} (${v})`,
+  reconcilePending: (items: string) => ` El saldo es el real de ESI y va por delante del journal en ${items}: movimientos que el journal aún no da (llega con hasta 1 h de retraso).`,
   invToggle: 'Qué cuenta en el patrimonio',
   invWallets: 'Wallets',
   invPlus: '+ inventario',
@@ -606,10 +654,10 @@ const es = {
   noteBpc: '; las copias de blueprint cuentan como 0',
   noteUnpriced: (n: number) => ` y hay ${n} ${plural(n, 'tipo de ítem', 'tipos de ítem')} sin precio`,
 
-  // Componentes
+  // Components
   others: (n: number) => `Otros (${n})`,
 
-  // Contabilidad: balance general y estado de resultados
+  // Accounting: balance sheet and income statement
   acctLead: 'Las mismas cifras del resumen, presentadas como un libro: qué tienes (balance general) y qué ganaste o perdiste en el período (estado de resultados).',
   acctAt: (when: string) => `al último sync (${when})`,
   acctPilot: (name: string) => `Solo ${name}`,
@@ -660,6 +708,8 @@ const es = {
   recBalance: 'Saldo actual',
   recGap: 'Movimientos anteriores al historial',
   recGapMeta: 'lo que ESI ya no daba al primer sync',
+  recPending: 'Movimientos aún no en el journal',
+  recPendingMeta: 'el saldo real de ESI va por delante: el journal llega con hasta 1 h de retraso',
   recNote: 'Saldo anterior + resultado del wallet (+ lo movido con tus otros pilotos, en la vista de un piloto) = saldo actual, al céntimo; si no cuadra, la diferencia son movimientos de antes del primer sync.',
   acctNoPilots: 'Sin pilotos vinculados: no hay nada que contar todavía.',
   acctNoData: 'Sin movimientos sincronizados todavía.',
@@ -697,7 +747,7 @@ const es = {
   mapUnplaced: (v: string, n: number) => `${v} sin ubicar (${n} ${plural(n, 'estructura', 'estructuras')})`,
   mapUnplacedTitle: 'Estructuras de jugadores: ubicarlas requiere el permiso esi-universe.read_structures.v1',
 
-  // Pilotos
+  // Pilots
   pilotsLinked: (n: number, slots: number) => `${n} de ${slots} vinculados`,
   pilotsLinkedOnly: (n: number) => `${n} vinculados`,
   pilotsHurry: ' · ESI solo guarda ~30 días de wallet: vincula los que faltan cuanto antes',
@@ -710,7 +760,7 @@ const es = {
   loginState: 'El enlace de inicio de sesión caducó (dura 10 minutos) o ya se había usado.',
   loginSso: 'EVE no aceptó el inicio de sesión.',
   loginGeneric: 'El inicio de sesión con EVE falló.',
-  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Piloto vinculado",
   doneLinked: (name: string) => `${name} ya está en EVE Ledger.`,
   doneClose: "Puedes cerrar esta página.",
@@ -744,7 +794,7 @@ const es = {
   pilotBetween: (v: string) => `${v} entre tus pilotos`,
   pilotNetBreakdown: (net: string, between: string, wallet: string) =>
     `Ganado en juego: ${net}. Entre tus pilotos: ${between} (no es neto). Su wallet cambió ${wallet}`,
-  // Copias de seguridad (panel de Pilotos)
+  // Backups (Pilotos panel)
   backupsTitle: 'Copias de seguridad',
   backupsLead:
     'Tu historial vive solo en este equipo: ESI borra el wallet a los ~30 días. La app guarda una copia al día y otra antes de cada actualización.',
@@ -831,6 +881,18 @@ const en: Messages = {
   cronLast: (ago, rows) => `Last auto-sync ${ago}: ${rows} new entries`,
   cronLastErrors: (n) => `, ${n} ${plural(n, 'pilot with errors', 'pilots with errors')}`,
   footer: 'Data via ESI. EVE Online and all related marks are trademarks of CCP hf.',
+  legalLink: 'Legal notice',
+  legalTitle: 'Legal notice',
+  legalIntro:
+    'EVE Ledger is a free, open-source third-party tool (MIT license). It is not affiliated with or endorsed by CCP hf.',
+  legalData:
+    "It uses ESI and EVE login (SSO) under CCP's Developer License Agreement, with read-only scopes. Your data and tokens stay on this computer: EVE Ledger has no server and collects nothing.",
+  legalDataTitle: 'Data and ESI',
+  legalCcpTitle: 'CCP notice',
+  legalCcpNote: "CCP's original text.",
+  legalLicenseTitle: 'License',
+  legalLicense: 'MIT © 2026 Sirrohan Yassavi. Provided as is, without warranty.',
+  legalSource: 'Source code and releases',
   // Indicators
   indicators: 'Indicators',
   balances: 'Balances',
@@ -846,6 +908,20 @@ const en: Messages = {
   doctrinesEmpty: 'No doctrines yet. Create one by name and paste its fits.',
   doctrineWho: 'Who flies it',
   doctrineFlies: (ok, total) => `${ok} of ${total} ${plural(total, 'fit', 'fits')}`,
+  doctrineMeta: (pilotsOk, pilots, fitsOk, fits) =>
+    `${pilotsOk} of ${pilots} ${plural(pilots, 'pilot', 'pilots')} · ${fitsOk} of ${fits} ${plural(fits, 'ship', 'ships')}`,
+  doctrineMetaFull: (pilotsOk, pilots, fitsOk, fits) =>
+    `${pilotsOk} of ${pilots} pilots with skills can fly at least one ship in this doctrine; ${fitsOk} of ${fits} ships have someone who can fly them.`,
+  doctrineFitCount: (n) => `${n} ${plural(n, 'ship', 'ships')}`,
+  doctrineNoFits: 'No fits',
+  doctrineRename: 'Rename',
+  doctrineRenameLabel: (name) => `New name for “${name}”`,
+  doctrineRenameSave: 'Save',
+  renamedOk: (name) => `Doctrine renamed to “${name}”.`,
+  fitFliers: (ok, total) => `${ok} of ${total} ${plural(total, 'pilot', 'pilots')}`,
+  fitFliersFull: (ok, total) => `${ok} of ${total} pilots with skills can fly it.`,
+  viewCompact: 'Compact view',
+  viewCompactHint: 'One line per fit: click it to expand. Remembered in this browser.',
   fitAdd: 'Add fit',
   fitPaste: 'Fit in EFT format',
   fitPasteHint: 'Copy it from eveworkbench, a forum or EVE (Fitting → Copy to clipboard). It starts with [Ship, Name].',
@@ -1048,6 +1124,27 @@ const en: Messages = {
   replNoLosses: (days) => `No ships lost in the last ${days} days.`,
   replNoScope: 'No pilot has the killmail permission: there are no losses to measure.',
   replNoRate: 'No ratting hours in the period: the cost can’t be turned into hours.',
+  dedTitle: 'Deductions',
+  dedLead: (days) => `corporation tax and incursions · last ${days} days`,
+  dedTaxLabel: 'Corporations kept',
+  dedIncursionLabel: 'The incursion penalty took',
+  dedIncursionSub: (v) => `and ~\u2009${v} ISK taken by the incursion penalty (estimate)`,
+  dedRate: (gross, net, pct) => `Without deductions, your ratting would make ${gross} ISK/h instead of ${net} (+${pct}).`,
+  dedConcept: 'Item',
+  dedRateCol: 'Rate',
+  dedTaxGroup: 'Corporation tax',
+  dedNpc: 'NPC',
+  dedUnknownCorp: 'Unnamed corporation',
+  dedIncursionGroup: 'Incursion penalty (estimate)',
+  dedTicks: (n) => `${n} payouts`,
+  dedNote:
+    "The tax comes from the ESI journal and is already taken out of what you're paid: it doesn't change the net. If the corporation is yours, that ISK is still in its wallet. The penalty is an estimate: in an incursion's constellation bounties pay half, so you lost as much as you were paid. The ESS doesn't say the system and isn't included.",
+  dedSince: (date) => `ESI only lists active incursions: they're recorded on every sync since ${date}; anything earlier doesn't count.`,
+  dedNotYet: 'ESI only lists active incursions: recording starts with the next sync.',
+  dedTaxUnknown: (n) => `${n} payouts without tax data (stored before it was read, and ESI no longer has them).`,
+  dedNone: (days) => `No corporation tax or bounties in incursion systems in the last ${days} days.`,
+  systemsIncursion: 'incursion',
+  systemsIncursionTitle: 'Bounties halved by an incursion: see Deductions',
   feesTitle: 'Fees and taxes',
   feesLead: (days) => `market · last ${days} days`,
   feesAnswerLabel: 'The market took',
@@ -1362,6 +1459,7 @@ const en: Messages = {
   openingPartialTitle: (date) => `Their history starts on ${date}: balance just before their first stored entry`,
   reconcileNote: 'Opening balance + Net + Between your pilots = Balance.',
   reconcileGap: (items) => ` Off for ${items}: entries ESI no longer served at the first sync.`,
+  reconcilePending: (items) => ` The balance is the real one from ESI and is ahead of the journal for ${items}: entries the journal doesn't have yet (it arrives up to 1 h late).`,
   reconcileItem: (name, v) => `${name} (${v})`,
   invToggle: 'What counts towards net worth',
   invWallets: 'Wallets',
@@ -1427,6 +1525,8 @@ const en: Messages = {
   recBalance: 'Current balance',
   recGap: 'Entries before the history',
   recGapMeta: 'what ESI no longer returned at the first sync',
+  recPending: 'Entries not in the journal yet',
+  recPendingMeta: 'the real ESI balance is ahead: the journal arrives up to 1 h late',
   recNote: 'Opening balance + wallet result (+ what moved with your other pilots, in a single pilot’s view) = current balance, to the cent; if it doesn’t add up, the difference is entries from before the first sync.',
   acctNoPilots: 'No pilots linked: nothing to account for yet.',
   acctNoData: 'No synced entries yet.',
@@ -1475,7 +1575,7 @@ const en: Messages = {
   loginState: 'The login link expired (it lasts 10 minutes) or had already been used.',
   loginSso: 'EVE did not accept the login.',
   loginGeneric: 'The EVE login failed.',
-  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Pilot linked",
   doneLinked: (name) => `${name} is now in EVE Ledger.`,
   doneClose: "You can close this page.",
@@ -1592,6 +1692,18 @@ const de: Messages = {
   cronLast: (ago, rows) => `Letzter Auto-Sync ${ago}: ${rows} neue Buchungen`,
   cronLastErrors: (n) => `, ${n} ${plural(n, 'Pilot mit Fehler', 'Piloten mit Fehlern')}`,
   footer: 'Daten über ESI. EVE Online und alle zugehörigen Marken sind Marken von CCP hf.',
+  legalLink: 'Rechtliche Hinweise',
+  legalTitle: 'Rechtliche Hinweise',
+  legalIntro:
+    'EVE Ledger ist ein kostenloses Open-Source-Werkzeug eines Drittanbieters (MIT-Lizenz). Es ist weder mit CCP hf. verbunden noch von CCP unterstützt.',
+  legalData:
+    'Es nutzt ESI und den EVE-Login (SSO) gemäß der Entwickler-Lizenzvereinbarung von CCP, nur mit Leserechten. Deine Daten und Tokens bleiben auf diesem Computer: EVE Ledger hat keinen Server und sammelt nichts.',
+  legalDataTitle: 'Daten und ESI',
+  legalCcpTitle: 'Hinweis von CCP',
+  legalCcpNote: 'Originaltext von CCP, auf Englisch.',
+  legalLicenseTitle: 'Lizenz',
+  legalLicense: 'MIT © 2026 Sirrohan Yassavi. Bereitgestellt wie besehen, ohne Gewährleistung.',
+  legalSource: 'Quellcode und Releases',
   // Kennzahlen
   indicators: 'Kennzahlen',
   balances: 'Bilanzen',
@@ -1607,6 +1719,20 @@ const de: Messages = {
   doctrinesEmpty: 'Noch keine Doktrinen. Lege eine mit Namen an und füge ihre Fits ein.',
   doctrineWho: 'Wer sie fliegt',
   doctrineFlies: (ok, total) => `${ok} von ${total} ${plural(total, 'Fit', 'Fits')}`,
+  doctrineMeta: (pilotsOk, pilots, fitsOk, fits) =>
+    `${pilotsOk} von ${pilots} ${plural(pilots, 'Pilot', 'Piloten')} · ${fitsOk} von ${fits} ${plural(fits, 'Schiff', 'Schiffe')}`,
+  doctrineMetaFull: (pilotsOk, pilots, fitsOk, fits) =>
+    `${pilotsOk} von ${pilots} Piloten mit Skills fliegen mindestens ein Schiff dieser Doktrin; ${fitsOk} von ${fits} Schiffe haben jemanden, der sie fliegt.`,
+  doctrineFitCount: (n) => `${n} ${plural(n, 'Schiff', 'Schiffe')}`,
+  doctrineNoFits: 'Keine Fits',
+  doctrineRename: 'Umbenennen',
+  doctrineRenameLabel: (name) => `Neuer Name für „${name}“`,
+  doctrineRenameSave: 'Speichern',
+  renamedOk: (name) => `Doktrin umbenannt in „${name}“.`,
+  fitFliers: (ok, total) => `${ok} von ${total} ${plural(total, 'Pilot', 'Piloten')}`,
+  fitFliersFull: (ok, total) => `${ok} von ${total} Piloten mit Skills können es fliegen.`,
+  viewCompact: 'Kompakte Ansicht',
+  viewCompactHint: 'Eine Zeile pro Fit: zum Aufklappen anklicken. Wird in diesem Browser gemerkt.',
   fitAdd: 'Fit hinzufügen',
   fitPaste: 'Fit im EFT-Format',
   fitPasteHint: 'Kopiere ihn von eveworkbench, aus einem Forum oder aus EVE (Fitting → Copy to clipboard). Er beginnt mit [Schiff, Name].',
@@ -1811,6 +1937,27 @@ const de: Messages = {
   replNoLosses: (days) => `Keine Schiffe verloren in den letzten ${days} Tagen.`,
   replNoScope: 'Kein Pilot hat die Killmail-Berechtigung: keine Verluste zu messen.',
   replNoRate: 'Keine Ratting-Stunden im Zeitraum: die Kosten lassen sich nicht in Stunden umrechnen.',
+  dedTitle: 'Abzüge',
+  dedLead: (days) => `Corp-Steuer und Incursions · letzte ${days} Tage`,
+  dedTaxLabel: 'Die Corporations behielten',
+  dedIncursionLabel: 'Die Incursion-Strafe nahm',
+  dedIncursionSub: (v) => `und ~\u2009${v} ISK durch die Incursion-Strafe (geschätzt)`,
+  dedRate: (gross, net, pct) => `Ohne Abzüge brächte dein Ratting ${gross} ISK/h statt ${net} (+${pct}).`,
+  dedConcept: 'Posten',
+  dedRateCol: 'Satz',
+  dedTaxGroup: 'Corp-Steuer',
+  dedNpc: 'NPC',
+  dedUnknownCorp: 'Corporation ohne Namen',
+  dedIncursionGroup: 'Incursion-Strafe (geschätzt)',
+  dedTicks: (n) => `${n} Auszahlungen`,
+  dedNote:
+    'Die Steuer stammt aus dem ESI-Journal und ist von deinen Einnahmen schon abgezogen: Sie ändert das Netto nicht. Gehört dir die Corporation, liegt das ISK weiter in ihrem Wallet. Die Strafe ist eine Schätzung: In der Konstellation einer Incursion zahlen Kopfgelder nur die Hälfte, also hast du so viel verloren, wie du bekommen hast. Die ESS nennt kein System und zählt nicht.',
+  dedSince: (date) => `ESI nennt nur aktive Incursions: Sie werden seit dem ${date} bei jedem Sync erfasst; davor zählt nichts.`,
+  dedNotYet: 'ESI nennt nur aktive Incursions: Die Erfassung beginnt mit dem nächsten Sync.',
+  dedTaxUnknown: (n) => `${n} Auszahlungen ohne Steuerdaten (gespeichert, bevor sie gelesen wurden; ESI liefert sie nicht mehr).`,
+  dedNone: (days) => `Keine Corp-Steuer und keine Kopfgelder in Incursion-Systemen in den letzten ${days} Tagen.`,
+  systemsIncursion: 'Incursion',
+  systemsIncursionTitle: 'Kopfgelder durch eine Incursion halbiert: siehe Abzüge',
   feesTitle: 'Gebühren und Steuern',
   feesLead: (days) => `Markt · letzte ${days} Tage`,
   feesAnswerLabel: 'Der Markt hat genommen',
@@ -2129,6 +2276,7 @@ const de: Messages = {
   openingPartialTitle: (date) => `Der Verlauf beginnt am ${date}: Guthaben direkt vor der ersten gespeicherten Buchung`,
   reconcileNote: 'Anfangssaldo + Netto + Zwischen deinen Piloten = Guthaben.',
   reconcileGap: (items) => ` Stimmt bei ${items} nicht: Buchungen, die ESI beim ersten Sync nicht mehr lieferte.`,
+  reconcilePending: (items) => ` Der Kontostand ist der echte von ESI und dem Journal voraus bei ${items}: Buchungen, die das Journal noch nicht hat (es kommt bis zu 1 h später).`,
   reconcileItem: (name, v) => `${name} (${v})`,
   invToggle: 'Was zum Vermögen zählt',
   invWallets: 'Wallets',
@@ -2194,6 +2342,8 @@ const de: Messages = {
   recBalance: 'Aktueller Kontostand',
   recGap: 'Einträge vor der Historie',
   recGapMeta: 'was ESI beim ersten Sync nicht mehr lieferte',
+  recPending: 'Buchungen noch nicht im Journal',
+  recPendingMeta: 'der echte Kontostand von ESI ist voraus: das Journal kommt bis zu 1 h später',
   recNote: 'Anfangsbestand + Wallet-Ergebnis (+ mit deinen anderen Piloten Bewegtes, in der Ansicht eines Piloten) = aktueller Kontostand, auf den Cent; wenn es nicht aufgeht, sind die Differenz Einträge von vor dem ersten Sync.',
   acctNoPilots: 'Keine Piloten verknüpft: noch nichts zu verbuchen.',
   acctNoData: 'Noch keine synchronisierten Einträge.',
@@ -2242,7 +2392,7 @@ const de: Messages = {
   loginState: 'Der Login-Link ist abgelaufen (gültig 10 Minuten) oder wurde bereits verwendet.',
   loginSso: 'EVE hat den Login nicht akzeptiert.',
   loginGeneric: 'Der EVE-Login ist fehlgeschlagen.',
-  // Vuelta del login de EVE en el navegador del sistema (app de escritorio: /vinculado)
+  // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Pilot verknüpft",
   doneLinked: (name) => `${name} ist jetzt in EVE Ledger.`,
   doneClose: "Du kannst diese Seite schließen.",

@@ -5,8 +5,8 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import * as schema from './schema';
 
-// Rutas relativas a donde arranca la API (apps/api) salvo que se indiquen: la app de escritorio (apps/desktop)
-// guarda la base en la carpeta de datos del usuario y trae las migraciones como recurso del instalador
+// Paths relative to where the API starts (apps/api) unless given: the desktop app (apps/desktop)
+// keeps the database in the user's data folder and ships the migrations as an installer resource
 export const DB_PATH = Bun.env.DB_PATH || 'data/ledger.db';
 export const MIGRATIONS_DIR = Bun.env.MIGRATIONS_DIR || './drizzle';
 
@@ -17,14 +17,14 @@ sqlite.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 export const db = drizzle(sqlite, { schema });
 
-// La conexión de bun:sqlite, para lo que Drizzle no hace (VACUUM INTO de las copias de seguridad)
+// The bun:sqlite connection, for what Drizzle doesn't do (VACUUM INTO for backups)
 export const rawDb = () => sqlite;
 
 export function runMigrations() {
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 }
 
-// Migraciones que conoce esta versión (las del journal de drizzle-kit) y las aplicadas en una base
+// Migrations this version knows (those in the drizzle-kit journal) and those applied in a database
 export function knownMigrations(): number {
   const journal = join(MIGRATIONS_DIR, 'meta', '_journal.json');
   if (!existsSync(journal)) return 0;
@@ -35,7 +35,7 @@ export function appliedMigrations(handle: Database = sqlite): number {
   try {
     return (handle.query('select count(*) as n from __drizzle_migrations').get() as { n: number }).n;
   } catch {
-    // Base nueva: todavía sin la tabla de migraciones
+    // New database: no migrations table yet
     return 0;
   }
 }
@@ -44,10 +44,10 @@ const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const columns = (schemaName: 'main' | 'src', table: string) =>
   (sqlite.query(`PRAGMA ${schemaName}.table_info(${quote(table)})`).all() as { name: string }[]).map((c) => c.name);
 
-// Sustituye el contenido de la base por el del archivo `file` (ya comprobado), sin cerrarla: la API sigue en marcha
-// y en Windows no se puede renombrar encima de una base abierta. Una copia del archivo se pone al día con las
-// migraciones de esta versión (una copia antigua tiene menos tablas o columnas) y sus tablas se copian a la base
-// abierta en una sola transacción: si algo falla, no cambia nada
+// Replaces the database contents with those of `file` (already checked), without closing it: the API keeps running
+// and on Windows you can't rename over an open database. A copy of the file is brought up to date with this
+// version's migrations (an old backup has fewer tables or columns) and its tables are copied into the open
+// database in a single transaction: if anything fails, nothing changes
 export function replaceDatabase(file: string) {
   const staged = `${DB_PATH}.restoring`;
   rmSync(staged, { force: true });
@@ -58,7 +58,7 @@ export function replaceDatabase(file: string) {
   } finally {
     copy.close();
   }
-  // Las claves ajenas, fuera mientras se vacían y se llenan las tablas (el orden entre ellas no importa)
+  // Foreign keys off while the tables are emptied and filled (the order between them doesn't matter)
   sqlite.exec('PRAGMA foreign_keys = OFF');
   sqlite.query('ATTACH DATABASE ? AS src').run(staged);
   try {
@@ -81,7 +81,7 @@ export function replaceDatabase(file: string) {
     try {
       rmSync(staged, { force: true });
     } catch {
-      // Windows puede tenerla aún abierta: se borra en la siguiente restauración
+      // Windows may still have it open: it is deleted on the next restore
     }
   }
 }

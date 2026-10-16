@@ -4,7 +4,7 @@ import { getMap } from '../services/geo';
 import { getInventory, listAssets } from '../services/inventory';
 
 export const inventoryRoutes = new Elysia()
-  // Valor del inventario consolidado: por personaje, por ubicación e ítems más valiosos
+  // Consolidated inventory value: by character, by location and most valuable items
   .get(
     '/inventory',
     async ({ query, status }) =>
@@ -13,14 +13,14 @@ export const inventoryRoutes = new Elysia()
         : status(404, notLinked(query.characterId)),
     { query: t.Object(pilotQuery) },
   )
-  // Mapa «tu New Eden»: inventario por sistema y dónde se ganó ISK hoy
+  // «tu New Eden» map: inventory by system and where ISK was earned today
   .get(
     '/map',
     async ({ query, status }) =>
       (await isLinkedPilot(query.characterId)) ? getMap(query.characterId) : status(404, notLinked(query.characterId)),
     { query: t.Object(pilotQuery) },
   )
-  // Detalle de assets con nombre y valor, ordenados por valor
+  // Asset detail with name and value, sorted by value
   .get(
     '/assets',
     ({ query }) =>

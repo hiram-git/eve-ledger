@@ -1,5 +1,5 @@
-# Pruebas en cada PR y en main: las de la API (bun test) y las de extremo a extremo de la web (Playwright con la
-# API y una base de demostración, apps/web/e2e). Sin red hacia ESI: los datos son inventados
+# Tests on every PR and on main: the API's (bun test) and the web's end-to-end ones (Playwright with the
+# API and a demo database, apps/web/e2e). No network to ESI: the data is made up
 name: Pruebas
 
 on:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -42,7 +42,7 @@ jobs:
 
       - name: Informe de Playwright
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: |

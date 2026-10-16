@@ -1,6 +1,6 @@
 ---
-// Pilotos vinculados pero sin ningún movimiento de wallet guardado todavía: en vez de un
-// dashboard lleno de ceros, el estado de cada piloto y qué hacer si no llega nada.
+// Pilots linked but with no wallet movement stored yet: instead of a
+// dashboard full of zeros, each pilot's status and what to do if nothing arrives.
 import Icon from './Icon.astro';
 import { loginUrl, type Summary } from '../lib/api';
 import { getLang, t } from '../lib/i18n';
@@ -51,7 +51,7 @@ const pending = pilots.some((p) => !p.lastSyncAt);
 </section>
 
 <script>
-  // Mientras algún piloto hace su primer sync, recargar cada 15 s (como mucho 2 min)
+  // While some pilot is doing its first sync, reload every 15 s (at most 2 min)
   if (document.querySelector('.first-sync[data-pending]')) {
     const tries = Number(sessionStorage.getItem('first-sync-reload') ?? 0);
     if (tries < 8) {

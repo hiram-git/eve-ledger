@@ -1,6 +1,6 @@
-// Doctrinas: fits pegados en formato EFT y, por fit, el plan de skills de la comunidad (.emp de EVEMon).
-// Para cada piloto: si puede volar el fit (casco, módulos, munición y drones; la carga no cuenta) y cuánto le
-// falta del plan (SP y tiempo de entrenamiento con sus atributos; un Alfa, a la mitad)
+// Doctrines: fits pasted in EFT format and, per fit, the community skill plan (EVEMon .emp).
+// For each pilot: whether they can fly the fit (hull, modules, ammo and drones; cargo doesn't count) and how much
+// of the plan is missing (SP and training time with their attributes; an Alpha at half speed)
 import { asc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characterAttributes, characters, characterSkills, doctrines, fitPlans, fits, typeDogma, type FitItem, type FitSection } from '../db/schema';
@@ -31,6 +31,15 @@ export async function createDoctrine(name: string) {
   return row;
 }
 
+// Renames a doctrine (the user asked for it after mistyping a name and having to delete the whole doctrine)
+export async function renameDoctrine(id: number, name: string) {
+  const clean = name.trim().slice(0, 80);
+  if (!clean) throw new DoctrineError('name');
+  const [row] = await db.update(doctrines).set({ name: clean }).where(eq(doctrines.id, id)).returning({ id: doctrines.id, name: doctrines.name });
+  if (!row) throw new DoctrineError('doctrine');
+  return row;
+}
+
 export async function deleteDoctrine(id: number) {
   await db.delete(doctrines).where(eq(doctrines.id, id));
 }
@@ -48,7 +57,7 @@ export async function setClone(characterId: number, clone: 'omega' | 'alpha') {
   return r.length > 0;
 }
 
-// Pega un fit EFT en una doctrina. Los nombres se resuelven con ESI; los que no reconoce se ignoran y se devuelven
+// Pastes an EFT fit into a doctrine. Names are resolved via ESI; those it doesn't recognize are ignored and returned
 export async function addFit(doctrineId: number, eft: string) {
   const doctrine = await db.query.doctrines.findFirst({ where: eq(doctrines.id, doctrineId) });
   if (!doctrine) throw new DoctrineError('doctrine');
@@ -66,7 +75,7 @@ export async function addFit(doctrineId: number, eft: string) {
   const dogma = await ensureDogma([...new Set([shipId, ...ids.values()])]);
   if (dogma.get(shipId)?.categoryId !== CATEGORY.ship) throw new DoctrineError('not_a_ship', parsed.ship);
 
-  // Ranuras por el orden de los bloques sin cantidades (también los vacíos); bodega o carga por la categoría del tipo
+  // Slots by the order of the blocks without quantities (empty ones too); bay or cargo by the type's category
   const acc = new Map<string, FitItem>();
   for (const l of parsed.lines) {
     const typeId = ids.get(l.name.toLowerCase());
@@ -89,15 +98,15 @@ export async function addFit(doctrineId: number, eft: string) {
     .insert(fits)
     .values({ doctrineId, name: parsed.name.slice(0, 120), shipTypeId: shipId, eft: eft.slice(0, 50_000), items: [...acc.values()] })
     .returning({ id: fits.id });
-  // Precios de Jita del fit nuevo (y de los inyectores) ya, sin esperar al sync; si ESI falla, el fit queda igual
+  // Jita prices for the new fit (and the injectors) right away, without waiting for the sync; if ESI fails, the fit is still saved
   await refreshJitaPrices([shipId, ...[...acc.values()].map((i) => i.typeId), INJECTOR.large, INJECTOR.small]).catch((err) =>
     console.warn('[jita] falló:', err instanceof Error ? err.message : err),
   );
   return { id: row.id, ignored };
 }
 
-// Importa el plan de skills de un fit (un .emp de EVEMon, comprimido o no). Pide a ESI el rango y los atributos
-// de cada skill del plan (y de sus prerrequisitos) para poder contar SP y tiempo
+// Imports a fit's skill plan (an EVEMon .emp, compressed or not). Asks ESI for the rank and attributes
+// of each skill in the plan (and its prerequisites) so SP and time can be computed
 export async function setPlan(fitId: number, bytes: Uint8Array, filename = '') {
   const fit = await db.query.fits.findFirst({ where: eq(fits.id, fitId) });
   if (!fit) throw new DoctrineError('fit');
@@ -115,8 +124,8 @@ export async function setPlan(fitId: number, bytes: Uint8Array, filename = '') {
   return { name, skills: plan.skills.length };
 }
 
-// Coste del fit a la venta más baja de Jita, por partes. unpriced = tipos sin orden de venta en Jita (o aún sin
-// precio): no suman, y la web lo dice
+// Fit cost at Jita's lowest sell order, by part. unpriced = types with no sell order in Jita (or no price
+// yet): they don't add up, and the web says so
 export function fitCost(shipTypeId: number, items: FitItem[], prices: Map<number, Pick<JitaPrice, 'sellMin' | 'updatedAt'>>) {
   const unpriced = new Set<number>();
   const value = (typeId: number, quantity: number) => {
@@ -140,14 +149,15 @@ export function fitCost(shipTypeId: number, items: FitItem[], prices: Map<number
     drones,
     cargo,
     unpriced: unpriced.size,
-    // El precio más viejo de los que suman
+    // The oldest of the prices that are added
     pricedAt: dates.length ? new Date(Math.min(...dates.map((d) => d.getTime()))) : null,
   };
 }
 
-// Lo que falta del wallet para pagar algo, en los dos escenarios que pidió el usuario: con todo el saldo de los
-// wallets («sin cubrir el Omega») o reservando antes lo que falta para el Omega del próximo mes («con el Omega
-// cubierto»). Lo que falta, en horas de ratting (ISK/h de 30 días) y en días al ritmo de los últimos 7
+// What the wallet is short of to pay for something, in the two scenarios the user asked for: with the whole balance
+// of the wallets («sin cubrir el Omega», Omega not covered) or first setting aside what is missing for next month's
+// Omega («con el Omega cubierto», Omega covered). The shortfall, in ratting hours (30-day ISK/h) and in days at the
+// pace of the last 7
 export type Funds = { wallet: number; omegaReserve: number | null; iskPerHour: number | null; dailyNet: number | null };
 export function budget(need: number, f: Funds) {
   const farm = (short: number) => ({
@@ -165,12 +175,12 @@ export function budget(need: number, f: Funds) {
 type MissingView = Evaluation['missing'][number] & { name: string | null };
 export type EvaluationView = Omit<Evaluation, 'missing'> & { missing: MissingView[]; required: number };
 export type PilotStatus = 'ok' | 'missing' | 'omega' | 'noScope' | 'noData';
-// Qué clon pide el fit: omega (alguna skill es solo Omega, o un Alfa la tiene entrenada y no puede usarla), alpha
-// (un piloto Alfa ya lo vuela, o ninguna skill es solo Omega y no pide nivel V), alphaUnsure (ninguna es solo Omega
-// pero pide nivel V: los topes de Alfa por nivel no están en ESI) o unknown (skills aún sin el dato)
+// Which clone the fit needs: omega (some skill is Omega-only, or an Alpha has it trained and can't use it), alpha
+// (an Alpha pilot already flies it, or no skill is Omega-only and none needs level V), alphaUnsure (none is Omega-only
+// but it needs level V: Alpha caps per level aren't in ESI) or unknown (skills without the data yet)
 export type CloneNeed = 'omega' | 'alpha' | 'alphaUnsure' | 'unknown';
 
-// Tipos de las doctrinas y sus skills: el sync los repasa para que las skills guardadas antes sepan si son solo Omega
+// Doctrine types and their skills: the sync goes over them so skills stored earlier learn whether they are Omega-only
 export async function refreshDoctrineDogma() {
   const rows = await db.select({ ship: fits.shipTypeId, items: fits.items }).from(fits);
   const plans = await db.select({ skills: fitPlans.skills }).from(fitPlans);
@@ -200,7 +210,7 @@ export async function listDoctrines() {
   const priceIds = [INJECTOR.large, INJECTOR.small, ...fitRows.flatMap((f) => [f.shipTypeId, ...f.items.map((i) => i.typeId)])];
   const prices = await loadJitaPrices(priceIds);
   const injectorPrice = { large: prices.get(INJECTOR.large)?.sellMin ?? null, small: prices.get(INJECTOR.small)?.sellMin ?? null };
-  // Con qué se paga: el saldo de todos los wallets (el ISK se mueve entre tus pilotos), menos el Omega si se reserva
+  // What pays for it: the balance of all wallets (ISK moves between your pilots), minus Omega if set aside
   const omega = await omegaIndicator();
   const ratting = await rattingIndicator(30);
   const funds: Funds = {
@@ -248,7 +258,7 @@ export async function listDoctrines() {
       fits: fitRows
         .filter((f) => f.doctrineId === d.id)
         .map((f) => {
-          // Lo que hay que poder usar para volarlo: casco, módulos, munición cargada y drones (la carga no)
+          // What must be usable to fly it: hull, modules, loaded ammo and drones (not cargo)
           const flown = f.items.filter((i) => i.section !== 'cargo').map((i) => i.typeId);
           const fly = withPrerequisites([f.shipTypeId, ...flown].flatMap((id) => dogma.get(id)?.required ?? []), info);
           const plan = planOf.get(f.id);
@@ -263,15 +273,15 @@ export async function listDoctrines() {
             const flyView = view(fly, ps);
             const planView = planReq ? view(planReq, ps) : null;
             const status: PilotStatus = !flyView.missing.length ? 'ok' : flyView.alphaBlocked ? 'omega' : 'missing';
-            // Inyectores para volarlo ya y para completar el plan (si se conocen los SP que faltan)
+            // Injectors to fly it now and to complete the plan (if the missing SP are known)
             const inject = (e: EvaluationView | null): InjectorPlan | null =>
               e && e.missingSp !== null && e.missingSp > 0 ? injectorsFor(e.missingSp, p.totalSp ?? 0, p.unallocatedSp ?? 0, injectorPrice) : null;
             const injectors = { fly: inject(flyView), plan: inject(planView) };
-            // Volarlo ya: el fit más los inyectores que le faltan (un Alfa que solo necesita Omega: el fit)
+            // Fly it now: the fit plus the injectors needed (an Alpha that only needs Omega: just the fit)
             const need = injectors.fly && injectors.fly.cost === null ? null : cost.total + (injectors.fly?.cost ?? 0);
             return { characterId: p.id, status, fly: flyView, plan: planView, injectors, budget: need === null ? null : budget(need, funds) };
           });
-          // Qué clon pide: lo que dice EVE de cada skill (solo Omega) y lo que demuestran tus pilotos Alfa
+          // Which clone it needs: what EVE says about each skill (Omega-only) and what your Alpha pilots show
           const flySkills = [...fly.entries()];
           const omegaSkills = flySkills.filter(([id]) => dogma.get(id)?.omegaOnly === true).map(([id]) => nameOf(id) ?? String(id));
           const alphas = pilotRows.filter((r) => pilots.find((p) => p.id === r.characterId)?.clone === 'alpha');
@@ -296,7 +306,7 @@ export async function listDoctrines() {
             required: fly.size,
             plan: plan ? { name: plan.name, skills: planReq!.size } : null,
             cost,
-            // Sin skills que mirar, el presupuesto es solo el fit
+            // With no skills to check, the budget is just the fit
             budget: budget(cost.total, funds),
             clone,
             omegaSkills,

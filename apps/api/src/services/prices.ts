@@ -5,7 +5,7 @@ import { esiGet } from '../lib/esi';
 
 type EsiPrice = { type_id: number; average_price?: number; adjusted_price?: number };
 
-// ESI cachea /markets/prices ~1 h: refrescar más a menudo no trae nada nuevo
+// ESI caches /markets/prices for ~1 h: refreshing more often brings nothing new
 const MAX_AGE_MS = 60 * 60_000;
 const CHUNK = 1000;
 
@@ -14,7 +14,7 @@ export async function pricesUpdatedAt(): Promise<Date | null> {
   return row?.at ?? null;
 }
 
-// Descarga todos los precios (~15k tipos, una sola llamada pública) si los guardados son viejos
+// Downloads all prices (~15k types, a single public call) if the stored ones are stale
 export async function refreshPricesIfStale(): Promise<number> {
   const at = await pricesUpdatedAt();
   if (at && Date.now() - at.getTime() < MAX_AGE_MS) return 0;

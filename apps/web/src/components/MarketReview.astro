@@ -1,13 +1,13 @@
 ---
-// Revisión de mercado (plegada): una tabla por ítem con lo vendido, lo comprado y su neto.
-// Es material de revisión, no de vistazo: el margen ya está en «Por actividad».
+// Market review (collapsed): one table per item with what was sold, what was bought and its net.
+// It's review material, not glance material: the margin is already in «Por actividad».
 import type { Summary } from '../lib/api';
 import { isk, iskFull } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 interface Props {
   market: Summary['market'];
-  // Lo que dice el wallet en el mismo período (ventas: market_transaction; compras: market_escrow y reposición): concilia la tabla
+  // What the wallet says for the same period (sales: market_transaction; purchases: market_escrow and replacement): reconciles the table
   wallet?: { sold: number; bought: number };
 }
 const { market, wallet } = Astro.props;

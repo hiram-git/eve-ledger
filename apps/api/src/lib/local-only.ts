@@ -1,8 +1,8 @@
-// Solo esta máquina. La API escucha en 127.0.0.1, pero eso no frena al navegador del propio usuario: una web que
-// visita puede apuntar su dominio a 127.0.0.1 (DNS rebinding) y leer el wallet con el puerto fijo de la app de
-// escritorio (47300), o mandar un POST con un formulario. Se rechaza cualquier Host que no sea local y cualquier
-// petición que no sea GET con un Origin ajeno. ALLOWED_HOSTS (separados por comas) añade nombres a mano, por
-// ejemplo si alguien expone la API en su red con HOST=0.0.0.0
+// This machine only. The API listens on 127.0.0.1, but that does not stop the user's own browser: a site it
+// visits can point its domain at 127.0.0.1 (DNS rebinding) and read the wallet through the desktop app's fixed
+// port (47300), or send a POST with a form. Any Host that is not local is rejected, as is any non-GET request
+// with a foreign Origin. ALLOWED_HOSTS (comma-separated) adds names by hand, for
+// example if someone exposes the API on their network with HOST=0.0.0.0
 const LOCAL = ['localhost', '127.0.0.1', '[::1]'];
 
 const hostname = (value: string) => {
@@ -15,12 +15,12 @@ const hostname = (value: string) => {
 
 export function allowedHosts(extra = Bun.env.ALLOWED_HOSTS ?? '', bind = Bun.env.HOST ?? ''): Set<string> {
   const names = [...LOCAL, ...extra.split(',')];
-  // La interfaz en la que escucha, si es una concreta (no 0.0.0.0 ni ::)
+  // The interface it listens on, if it is a specific one (not 0.0.0.0 or ::)
   if (bind && !['0.0.0.0', '::', '[::]'].includes(bind)) names.push(bind.includes(':') && !bind.startsWith('[') ? `[${bind}]` : bind);
   return new Set(names.map((n) => hostname(n.trim())).filter((n): n is string => !!n));
 }
 
-// null si la petición puede seguir; si no, la respuesta 403
+// null if the request may proceed; otherwise, the 403 response
 export function localOnly(request: Request, allowed = allowedHosts()): Response | null {
   const host = request.headers.get('host');
   const name = host ? hostname(host) : null;

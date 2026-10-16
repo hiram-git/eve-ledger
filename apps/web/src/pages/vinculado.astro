@@ -1,7 +1,7 @@
 ---
-// Vuelta del login de EVE cuando se abrió en el navegador del sistema (app de escritorio, AUTH_DONE_PAGE en la API):
-// no carga el dashboard, que ya se ve en la ventana de la app. Intenta cerrar la pestaña; el navegador solo lo
-// permite si la abrió un script, así que si sigue abierta dice que se puede cerrar
+// Return from the EVE login when it was opened in the system browser (desktop app, AUTH_DONE_PAGE in the API):
+// it does not load the dashboard, which is already shown in the app window. It tries to close the tab; the browser only
+// allows it if a script opened it, so if it stays open it says it can be closed
 import '@fontsource-variable/inter';
 import '../styles/theme.css';
 import Icon from '../components/Icon.astro';

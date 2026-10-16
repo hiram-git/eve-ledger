@@ -1,14 +1,14 @@
-# Instaladores de EVE Ledger de escritorio (apps/desktop) para Windows, macOS y Linux.
-# Tauri no compila de forma cruzada: cada instalador se compila en su sistema.
-# - Solo: al subir la versión en apps/desktop/src-tauri/tauri.conf.json y llegar a main (merge), se compilan los tres y
-#   queda un borrador de release «EVE Ledger x.y.z» con la etiqueta desktop-vx.y.z (si esa release ya existe, no hace nada).
-# - A mano: Actions → «Instaladores de escritorio» → Run workflow (los instaladores quedan como artefactos; con la casilla
-#   «release» marcada, también el borrador de la versión actual).
-# - Con una etiqueta desktop-v* (p. ej. desktop-v0.1.0): igual que al subir la versión (la etiqueta debe coincidir con ella).
-# Los instaladores no van firmados: Windows (SmartScreen) y macOS (Gatekeeper) avisan la primera vez (ver INSTALAR.md).
-# Actualizaciones automáticas: si el repositorio tiene el secreto TAURI_SIGNING_PRIVATE_KEY (y su contraseña) y la
-# variable (o secreto) EVE_LEDGER_UPDATER_PUBKEY, cada versión se firma y la release lleva latest.json; al publicar el borrador,
-# las apps instaladas desde estas releases se actualizan solas (ver apps/desktop/README.md).
+# EVE Ledger desktop installers (apps/desktop) for Windows, macOS and Linux.
+# Tauri does not cross-compile: each installer is built on its own system.
+# - Automatic: when the version in apps/desktop/src-tauri/tauri.conf.json is bumped and reaches main (merge), all three are built and
+#   a draft release «EVE Ledger x.y.z» is left with the tag desktop-vx.y.z (if that release already exists, it does nothing).
+# - Manual: Actions → «Instaladores de escritorio» → Run workflow (the installers are left as artifacts; with the
+#   «release» box checked, also the draft for the current version).
+# - With a desktop-v* tag (e.g. desktop-v0.1.0): same as bumping the version (the tag must match it).
+# The installers are not signed: Windows (SmartScreen) and macOS (Gatekeeper) warn the first time (see INSTALAR.md).
+# Automatic updates: if the repository has the TAURI_SIGNING_PRIVATE_KEY secret (and its password) and the
+# EVE_LEDGER_UPDATER_PUBKEY variable (or secret), each version is signed and the release carries latest.json; when the draft is published,
+# apps installed from these releases update themselves (see apps/desktop/README.md).
 name: Instaladores de escritorio
 
 on:
@@ -26,21 +26,21 @@ on:
 permissions:
   contents: write
 
-# Una compilación a la vez por referencia: dos merges seguidos en main no crean dos borradores de la misma versión
+# One build at a time per ref: two merges in a row on main do not create two drafts of the same version
 concurrency:
   group: desktop-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  # Decide si hay que compilar y con qué etiqueta; crea el borrador de la release antes de los tres sistemas
-  # (así los tres suben sus instaladores al mismo borrador, sin carreras entre ellos)
+  # Decides whether to build and with which tag; creates the draft release before the three systems
+  # (so all three upload their installers to the same draft, without races between them)
   version:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.decide.outputs.build }}
       tag: ${{ steps.decide.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Versión y release
         id: decide
@@ -72,8 +72,15 @@ jobs:
               ;;
           esac
           if [ "$build" = true ] && [ -n "$tag" ] && ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "EVE Ledger $version" \
-              --notes "Instaladores de EVE Ledger de escritorio. Guía de instalación: apps/desktop/INSTALAR.md"
+            # The notes: this version's section in CHANGELOG.md (from «## x.y.z» to the next «## »)
+            awk -v v="$version" 'index($0, "## " v " ") == 1 || $0 == "## " v { f = 1; next } f && /^## / { exit } f' CHANGELOG.md >/tmp/notes.md
+            [ -s /tmp/notes.md ] || echo "Desktop installers for EVE Ledger $version." >/tmp/notes.md
+            printf '\nInstall guide: %s/%s/blob/main/apps/desktop/INSTALAR.md · Changelog: %s/%s/blob/main/CHANGELOG.md\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" >>/tmp/notes.md
+            # No code signing: how to check that an installer came from this repository
+            printf '\n**Verify a download.** The installers are built by GitHub Actions from this repository and are not code-signed. Compare the file with `SHA256SUMS-<system>.txt` below, or, with the GitHub CLI: `gh attestation verify <file> --repo %s`\n' \
+              "$GITHUB_REPOSITORY" >>/tmp/notes.md
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "EVE Ledger $version" --notes-file /tmp/notes.md
             echo "::notice::Borrador de la release $tag creado: publícalo cuando estén los tres instaladores"
           fi
           echo "build=$build" >>"$GITHUB_OUTPUT"
@@ -93,14 +100,20 @@ jobs:
           - os: ubuntu-22.04
             name: linux
     runs-on: ${{ matrix.os }}
+    # Provenance attestation for the installers (open project, no code signing: this way one can check that an
+    # installer came from this repository and this workflow)
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
-      # La clave pública no es secreta (va dentro de la app), pero se acepta también como secreto del repositorio
+      # The public key is not secret (it ships inside the app), but it is also accepted as a repository secret
       UPDATER: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && (vars.EVE_LEDGER_UPDATER_PUBKEY != '' || secrets.EVE_LEDGER_UPDATER_PUBKEY != '') }}
     steps:
-      # La app de EVE va incluida (el asistente ya no deja crear una propia): sin su Client ID, el instalador no
-      # podría vincular pilotos. Se crea en developers.eveonline.com (ver apps/desktop/README.md)
-      # Las actualizaciones automáticas necesitan las dos claves: con solo una, la release saldría sin latest.json y las
-      # apps instaladas desde ella no buscarían nunca versiones nuevas, así que a medias es un error (sin ninguna, un aviso)
+      # The EVE app is bundled (the wizard no longer allows creating your own): without its Client ID, the installer
+      # could not link pilots. It is created at developers.eveonline.com (see apps/desktop/README.md)
+      # Automatic updates need both keys: with only one, the release would ship without latest.json and the
+      # apps installed from it would never look for new versions, so half-configured is an error (with neither, a warning)
       - name: Client ID de la app de EVE incluida y claves del actualizador
         env:
           CLIENT_ID: ${{ vars.EVE_LEDGER_CLIENT_ID }}
@@ -122,7 +135,7 @@ jobs:
             echo "::notice::Sin claves del actualizador: estos instaladores no buscarán versiones nuevas (ver apps/desktop/README.md)."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Dependencias de Tauri (Linux)
         if: matrix.name == 'linux'
@@ -153,14 +166,17 @@ jobs:
           PUBKEY: ${{ vars.EVE_LEDGER_UPDATER_PUBKEY || secrets.EVE_LEDGER_UPDATER_PUBKEY }}
         run: >
           bun -e "await Bun.write('src-tauri/tauri.updater.conf.json', JSON.stringify({
-          bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.PUBKEY.trim() } } }))"
+          bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.PUBKEY.trim(),
+          endpoints: ['https://github.com/' + process.env.GITHUB_REPOSITORY + '/releases/latest/download/latest.json'] } } }))"
 
       - name: Compilar los instaladores
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Opcional: Client ID de una app de EVE para toda la corp (variable del repositorio; ver apps/desktop/README.md)
+          # Optional: Client ID of an EVE app for the whole corp (repository variable; see apps/desktop/README.md)
           EVE_LEDGER_CLIENT_ID: ${{ vars.EVE_LEDGER_CLIENT_ID }}
+          # The building repository: goes into ESI's User-Agent and the app's legal notice
+          EVE_LEDGER_REPO: ${{ github.repository }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
@@ -170,11 +186,46 @@ jobs:
           tagName: ${{ needs.version.outputs.tag }}
           releaseName: 'EVE Ledger __VERSION__'
           releaseBody: 'Instaladores de EVE Ledger de escritorio. Guía de instalación: apps/desktop/INSTALAR.md'
-          # Borrador (ya creado en «version»): las apps instaladas se actualizan cuando lo publicas
+          # Draft (already created in «version»): installed apps update when you publish it
           releaseDraft: true
 
+      # No code signing (user's decision: open project), two ways to check an installer: GitHub's
+      # provenance attestation (free on public repositories; not available on a private one) and the
+      # SHA-256 sums, which are uploaded to the release next to the installers
+      - name: Atestación de origen
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+
+      - name: Sumas SHA-256
+        working-directory: apps/desktop/src-tauri/target/release/bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+        shell: bash
+        run: |
+          bun -e "
+            const { createHash } = await import('node:crypto');
+            const { basename } = await import('node:path');
+            const lines = [];
+            for (const ext of ['exe', 'msi', 'dmg', 'deb', 'AppImage'])
+              for await (const f of new Bun.Glob('**/*.' + ext).scan('.')) {
+                const hash = createHash('sha256').update(new Uint8Array(await Bun.file(f).arrayBuffer())).digest('hex');
+                lines.push(hash + '  ' + basename(f));
+              }
+            await Bun.write('SHA256SUMS-${{ matrix.name }}.txt', lines.join('\n') + '\n');
+            console.log(lines.join('\n'));
+          "
+          if [ -n "$TAG" ]; then gh release upload "$TAG" "SHA256SUMS-${{ matrix.name }}.txt" --clobber; fi
+
       - name: Guardar los instaladores
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: eve-ledger-${{ matrix.name }}
           path: |
@@ -183,4 +234,5 @@ jobs:
             apps/desktop/src-tauri/target/release/bundle/**/*.dmg
             apps/desktop/src-tauri/target/release/bundle/**/*.deb
             apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/release/bundle/SHA256SUMS-*.txt
           if-no-files-found: warn

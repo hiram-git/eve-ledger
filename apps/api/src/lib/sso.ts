@@ -5,19 +5,19 @@ const AUTHORIZE_URL = 'https://login.eveonline.com/v2/oauth/authorize';
 const TOKEN_URL = 'https://login.eveonline.com/v2/oauth/token';
 const JWKS = createRemoteJWKSet(new URL('https://login.eveonline.com/oauth/jwks'));
 
-// Todos deben estar también en la app de developers.eveonline.com, o el login de EVE rechaza la petición
+// All of them must also be in the app on developers.eveonline.com, or the EVE login rejects the request
 export const SCOPES = [
   'esi-wallet.read_character_wallet.v1',
   'esi-assets.read_assets.v1',
   'esi-killmails.read_killmails.v1',
   'esi-contracts.read_character_contracts.v1',
-  // Doctrinas: qué fits puede volar cada piloto y cuánto le falta de un plan (skills y atributos)
+  // Doctrinas: which fits each pilot can fly and how much of a plan it is missing (skills and attributes)
   'esi-skills.read_skills.v1',
-  // Opcional: nombres y sistema de las citadelas donde guardas cosas o comercias (GET /universe/structures/{id})
+  // Optional: names and system of the citadels where you store things or trade (GET /universe/structures/{id})
   'esi-universe.read_structures.v1',
 ];
-// Los que no faltan «de verdad»: sin ellos todo funciona (las citadelas salen como «Estructura #id»). No encienden
-// la línea de salud ni el aviso de Pilotos; /characters los da aparte (missingOptionalScopes)
+// The ones that are not "really" missing: everything works without them (citadels show as «Estructura #id»). They do not
+// light up the health line or the Pilotos notice; /characters reports them separately (missingOptionalScopes)
 export const OPTIONAL_SCOPES = ['esi-universe.read_structures.v1'];
 
 export type TokenResponse = {
@@ -34,10 +34,10 @@ export type EveIdentity = {
   scopes: string[];
 };
 
-// Solo el Client ID, nunca un Client Secret (decisión del usuario: nadie tiene que crear una app en
-// developers.eveonline.com ni guardar un secreto): PKCE, el login lleva el reto de un verificador aleatorio que solo
-// conoce la API, y canje y renovación van con el Client ID. `characters.auth_method` = 'secret' queda para los
-// pilotos vinculados con secreto en versiones anteriores: ya no se pueden renovar y hay que revincularlos
+// Only the Client ID, never a Client Secret (user's decision: nobody has to create an app on
+// developers.eveonline.com or keep a secret): PKCE, the login carries the challenge of a random verifier that only
+// the API knows, and exchange and refresh go with the Client ID. `characters.auth_method` = 'secret' remains for
+// pilots linked with a secret in earlier versions: they can no longer be refreshed and have to be relinked
 export type AuthMethod = 'secret' | 'pkce';
 
 const base64url = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64url');
@@ -71,9 +71,9 @@ async function tokenRequest(body: Record<string, string>): Promise<TokenResponse
 export const exchangeCode = (code: string, codeVerifier: string) =>
   tokenRequest({ grant_type: 'authorization_code', code, code_verifier: codeVerifier });
 
-// EVE rota el refresh token: siempre guardar el que venga en la respuesta. Un piloto vinculado con Client Secret
-// (versiones anteriores) no se puede renovar sin él; el texto «refresh token» hace que el dashboard lo muestre como
-// «Token caducado» con «Revincular»
+// EVE rotates the refresh token: always store the one in the response. A pilot linked with a Client Secret
+// (earlier versions) cannot be refreshed without it; the text «refresh token» makes the dashboard show it as
+// «Token caducado» with «Revincular»
 export async function refreshAccessToken(refreshToken: string, method: AuthMethod) {
   if (method === 'secret') throw new Error('Este piloto se vinculó con Client Secret, que ya no se usa: el refresh token no se puede renovar, revincúlalo');
   return tokenRequest({ grant_type: 'refresh_token', refresh_token: refreshToken });

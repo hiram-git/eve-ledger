@@ -63,8 +63,9 @@ Cada versión va firmada; la app solo acepta lo firmado con tu clave. Solo se ac
 
 **Cada versión:**
 1. Sube la versión en `src-tauri/tauri.conf.json` y `src-tauri/Cargo.toml` (la app solo se actualiza a una versión mayor).
-2. Commit y merge a `main` (o etiqueta y push: `git tag desktop-v0.1.6 && git push origin desktop-v0.1.6`).
-3. Cuando terminen los tres sistemas en Actions, revisa el borrador de la release y pulsa **Publish release**. Desde ese momento, las apps instaladas la reciben al arrancar o en menos de 6 horas.
+2. En [`CHANGELOG.md`](../../CHANGELOG.md), cambia «## Unreleased» por «## x.y.z — fecha» (la misma versión): esa sección son las notas del borrador de la release. Sin ella, el borrador sale con una línea genérica.
+3. Commit y merge a `main` (o etiqueta y push: `git tag desktop-v0.1.6 && git push origin desktop-v0.1.6`).
+4. Cuando terminen los tres sistemas en Actions, revisa el borrador de la release y pulsa **Publish release**. Desde ese momento, las apps instaladas la reciben al arrancar o en menos de 6 horas.
 
 ## Notas
 

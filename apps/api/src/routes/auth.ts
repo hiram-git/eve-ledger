@@ -6,15 +6,15 @@ import { env } from '../lib/env';
 import { buildAuthorizeUrl, exchangeCode, newPkce, verifyAccessToken } from '../lib/sso';
 import { syncCharacter } from '../services/sync';
 
-// Estados pendientes en memoria (app local, un solo usuario), con el verificador de PKCE si el login lo usa
+// Pending states in memory (local app, single user), with the PKCE verifier if the login uses it
 const pendingStates = new Map<string, { exp: number; verifier: string }>();
 const STATE_TTL_MS = 10 * 60_000;
 
-// El resultado se muestra en el dashboard (apps/web/src/pages/pilotos.astro), con el tema del proyecto.
-// La app de escritorio abre el login en el navegador del sistema y lee esta línea de la salida de la API
-// para llevar su ventana al mismo resultado (apps/desktop/src-tauri/src/services.rs)
-// Solo se avisa a la app (la línea [auth] result:, que trae su ventana al frente) si la vuelta corresponde a un
-// login que empezó aquí: cualquier web podría pedir /auth/callback sin code una y otra vez
+// The result is shown in the dashboard (apps/web/src/pages/pilotos.astro), with the project's theme.
+// The desktop app opens the login in the system browser and reads this line from the API output
+// to bring its window to the same result (apps/desktop/src-tauri/src/services.rs)
+// The app is only notified (the [auth] result: line, which brings its window to the front) if the callback belongs
+// to a login that started here: any site could request /auth/callback without a code over and over
 const toPilots = (params: Record<string, string>, notify = true) => {
   const query = new URLSearchParams(params).toString();
   if (notify) console.log(`[auth] result:${query}`);
@@ -27,7 +27,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
     for (const [s, { exp }] of pendingStates) if (exp < now) pendingStates.delete(s);
 
     const state = crypto.randomUUID();
-    // Siempre PKCE: solo el Client ID, sin secreto
+    // Always PKCE: only the Client ID, no secret
     const pkce = await newPkce();
     pendingStates.set(state, { exp: now + STATE_TTL_MS, verifier: pkce.verifier });
     return redirect(buildAuthorizeUrl(state, pkce.challenge));
@@ -38,7 +38,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       const pending = query.state ? pendingStates.get(query.state) : undefined;
       if (query.state) pendingStates.delete(query.state);
       const known = !!pending && pending.exp >= Date.now();
-      // El usuario canceló en la pantalla de EVE (o EVE devolvió un error)
+      // The user cancelled on the EVE screen (or EVE returned an error)
       if (!query.code) return redirect(toPilots({ error: 'denied' }, known));
       if (!known) return redirect(toPilots({ error: 'state' }, false));
 
@@ -64,8 +64,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           .values({ id: id.characterId, ...values })
           .onConflictDoUpdate({ target: characters.id, set: values });
 
-        // Primer sync en segundo plano: el journal solo guarda ~30 días, cuanto antes mejor. Al revincular, si ya
-        // había un sync de ese piloto en marcha (con el token viejo), se repite en cuanto acabe
+        // First sync in the background: the journal only keeps ~30 days, the sooner the better. When relinking, if
+        // a sync of that pilot was already running (with the old token), it is repeated as soon as it finishes
         syncCharacter(id.characterId, { queue: true }).then(
           (r) => console.log(`[auth] sync inicial de ${id.name}: ${r.error ?? `${r.inserted} movimientos`}`),
           (err) => console.error(`[auth] sync inicial de ${id.name} falló:`, err),

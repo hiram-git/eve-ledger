@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <!-- Asistente del primer arranque, configuración y arranque de los servicios: una sola página, tres vistas.
-         Los textos los pone app.js según el idioma del sistema (ES, EN o DE) -->
+    <!-- First-run wizard, settings and service startup: a single page, three views.
+         The texts are set by app.js according to the system language (ES, EN or DE) -->
     <header class="brand">
       <img src="logo.svg" alt="" width="28" height="28" />
       <span class="wordmark">EVE LEDGER<span class="cursor">_</span></span>
@@ -16,7 +16,7 @@
     </header>
 
     <main>
-      <!-- Configuración (primer arranque y «Configuración…») -->
+      <!-- Settings (first run and «Configuración…») -->
       <form id="setup" class="view" hidden novalidate>
         <h1 data-t="setupTitle"></h1>
         <p class="lead" data-t="setupLead"></p>
@@ -52,7 +52,7 @@
           </div>
         </section>
 
-        <!-- Segundo plano: ESI solo da ~30 días de wallet; si la app no está abierta, esos días se pierden -->
+        <!-- Background: ESI only provides ~30 days of wallet; if the app isn't open, those days are lost -->
         <section class="panel">
           <h2 data-t="backgroundTitle"></h2>
           <p class="hint" data-t="backgroundLead"></p>
@@ -76,7 +76,7 @@
 
         <details class="panel advanced">
           <summary data-t="advancedTitle"></summary>
-          <!-- El puerto de la API es fijo (47300): la app de EVE incluida solo conoce esa Callback URL -->
+          <!-- The API port is fixed (47300): the bundled EVE app only knows that Callback URL -->
           <div class="grid">
             <label>
               <span data-t="webPort"></span>
@@ -104,7 +104,7 @@
         </div>
       </form>
 
-      <!-- Arrancando los servicios / error al arrancar -->
+      <!-- Starting the services / startup error -->
       <section id="starting" class="view" hidden aria-live="polite">
         <h1 data-starting-title></h1>
         <p class="lead" data-starting-text></p>

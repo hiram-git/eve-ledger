@@ -1,4 +1,4 @@
-// Mientras se restaura una copia de seguridad la base se cierra y se vuelve a abrir: ningún sync debe empezar
+// While a backup is being restored the database is closed and reopened: no sync must start
 let active = false;
 
 export const maintenance = {

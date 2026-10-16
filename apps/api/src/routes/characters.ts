@@ -6,7 +6,7 @@ import { env } from '../lib/env';
 import { esiGet } from '../lib/esi';
 import { OPTIONAL_SCOPES, SCOPES } from '../lib/sso';
 
-// Personajes vinculados con su estado: permisos que faltan y último error de sync (si es posterior al último éxito)
+// Linked characters with their status: missing permissions and the last sync error (if after the last success)
 async function listCharacters() {
   const rows = await db
     .select({
@@ -25,7 +25,7 @@ async function listCharacters() {
   return rows.map((c) => {
     const granted = c.scopes.split(' ').filter(Boolean);
     const last = logs.find((l) => l.characterId === c.id && l.finishedAt);
-    // Último vínculo: el primero o, si se revinculó, el más reciente (los errores de antes ya no cuentan)
+    // Last link: the first one or, if relinked, the most recent (earlier errors no longer count)
     const linkedAt = c.linkedAt ?? c.createdAt;
     const lastError =
       last?.error && (!c.lastSyncAt || last.startedAt >= c.lastSyncAt) && last.startedAt >= linkedAt
@@ -43,13 +43,13 @@ async function listCharacters() {
 }
 
 export const characterRoutes = new Elysia({ prefix: '/characters' })
-  // En el navegador se ve la página de pilotos del dashboard; los scripts reciben JSON
+  // Browsers get the dashboard's pilots page; scripts get JSON
   .get('/', ({ request, redirect }) => {
     const accept = request.headers.get('accept') ?? '';
     if (accept.includes('text/html')) return redirect(`${env.webUrl}/pilotos`);
     return listCharacters();
   })
-  // Prueba de punta a punta: refresh de token + llamada autenticada a ESI
+  // End-to-end check: token refresh + authenticated ESI call
   .get(
     '/:id/wallet',
     async ({ params }) => {

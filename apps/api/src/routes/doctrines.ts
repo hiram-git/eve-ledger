@@ -1,16 +1,16 @@
 import { Elysia, t } from 'elysia';
 import { refreshDoctrinePrices } from '../services/jita';
-import { addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, DoctrineError, listDoctrines, setClone, setPlan } from '../services/doctrines';
+import { addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, DoctrineError, listDoctrines, renameDoctrine, setClone, setPlan } from '../services/doctrines';
 
 const id = t.Object({ id: t.Numeric({ minimum: 1 }) });
 
-// Errores de lo que pega o sube el usuario: 400 con un código que la web traduce
+// Errors in what the user pastes or uploads: 400 with a code the web translates
 const fail = (err: unknown, status: (code: 400, body: unknown) => unknown) => {
   if (err instanceof DoctrineError) return status(400, { error: err.code, detail: err.detail ?? null });
   throw err;
 };
 
-// Doctrinas: fits EFT, planes de skills (.emp) y qué piloto vuela qué. Alfa u Omega de cada piloto
+// Doctrines: EFT fits, skill plans (.emp) and which pilot flies what. Alpha or Omega for each pilot
 export const doctrineRoutes = new Elysia()
   .get('/doctrines', () => listDoctrines())
   .post(
@@ -24,7 +24,7 @@ export const doctrineRoutes = new Elysia()
     },
     { body: t.Object({ name: t.String({ maxLength: 200 }) }) },
   )
-  // Precios de Jita ahora mismo (el sync los refresca cada hora; con el sync apagado, a mano)
+  // Jita prices right now (the sync refreshes them hourly; with the sync off, by hand)
   .post('/doctrines/prices', async ({ status }) => {
     try {
       return { updated: await refreshDoctrinePrices({ force: true }) };
@@ -33,6 +33,17 @@ export const doctrineRoutes = new Elysia()
       return status(502, { error: 'esi' });
     }
   })
+  .put(
+    '/doctrines/:id',
+    async ({ params, body, status }) => {
+      try {
+        return await renameDoctrine(params.id, body.name);
+      } catch (err) {
+        return fail(err, status);
+      }
+    },
+    { params: id, body: t.Object({ name: t.String({ maxLength: 200 }) }) },
+  )
   .delete('/doctrines/:id', async ({ params }) => {
     await deleteDoctrine(params.id);
     return { ok: true };
@@ -52,7 +63,7 @@ export const doctrineRoutes = new Elysia()
     await deleteFit(params.id);
     return { ok: true };
   }, { params: id })
-  // El .emp llega en base64 (la web lo recibe en un formulario y lo reenvía)
+  // The .emp arrives in base64 (the web receives it in a form and forwards it)
   .put(
     '/fits/:id/plan',
     async ({ params, body, status }) => {

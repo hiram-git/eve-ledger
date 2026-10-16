@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 import { API_PORT, API_URL, WEB_PORT, WEB_URL } from './e2e/fixtures';
 
-// Pruebas de extremo a extremo: la API con una base de demostración nueva (e2e/serve-api.ts) y la web compilada
-// (`bun run build` antes; `bun run test:e2e` lo hace), las dos con Bun como en la app de escritorio.
-// Un solo worker: comparten la base y la prueba de copias de seguridad la cambia
+// End-to-end tests: the API with a new demo database (e2e/serve-api.ts) and the built web
+// (`bun run build` first; `bun run test:e2e` does it), both with Bun as in the desktop app.
+// A single worker: they share the database and the backup test changes it
 export default defineConfig({
   testDir: './e2e',
   workers: 1,

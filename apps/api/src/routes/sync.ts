@@ -22,9 +22,9 @@ export const syncRoutes = new Elysia({ prefix: '/sync' })
     },
     { params: t.Object({ characterId: t.Numeric() }) },
   )
-  // Estado del cron: próximo sync automático y resultado del último
+  // Cron status: next automatic sync and result of the last one
   .get('/status', () => schedulerStatus())
-  // Últimas ejecuciones, para revisar errores
+  // Latest runs, to check for errors
   .get(
     '/log',
     ({ query }) =>

@@ -1,4 +1,4 @@
-/* EVE Ledger de escritorio: el mismo tema HUD oscuro que el dashboard (apps/web/src/styles/theme.css) */
+/* EVE Ledger desktop: the same dark HUD theme as the dashboard (apps/web/src/styles/theme.css) */
 @font-face {
   font-family: 'Inter Variable';
   font-weight: 100 900;
@@ -129,7 +129,7 @@ label {
   align-content: start;
 }
 
-/* Casillas: la casilla a la izquierda y el texto con su pista al lado; toda la fila es el objetivo táctil */
+/* Checkboxes: the box on the left and the text with its hint beside it; the whole row is the touch target */
 .checks {
   display: grid;
   gap: 14px;

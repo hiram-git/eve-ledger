@@ -2,13 +2,13 @@ import { API_URL } from 'astro:env/server';
 
 export type Flow = { income: number; expenses: number; net: number };
 
-// accounts: PLEX comprado o vendido en el mercado (coste de las cuentas, aparte del resultado de juego)
+// accounts: PLEX bought or sold on the market (the cost of the accounts, kept apart from the game result)
 export type Activity = 'pve' | 'pvp' | 'trading' | 'logistics' | 'other' | 'accounts';
-// Orden fijo de las actividades (el de la API, apps/api/src/lib/activities.ts): fila y color de cada una no
-// cambian con el período ni con el piloto, aunque la API omita las que no tienen movimientos
+// Fixed order of the activities (the API's, apps/api/src/lib/activities.ts): each one's row and colour do not
+// change with the period or the pilot, even when the API omits those without movements
 export const ACTIVITIES: readonly Activity[] = ['pve', 'pvp', 'trading', 'logistics', 'other', 'accounts'];
 
-// Revisión de mercado: por ítem, vendido y comprado en el período
+// Market review: per item, sold and bought in the period
 export type MarketItem = {
   typeId: number;
   name: string | null;
@@ -23,37 +23,40 @@ export type MarketItem = {
 export type Summary = {
   period: { days: number; from: string; to: string };
   totals: Flow;
-  // Piloto filtrado (null = todos); characters siempre trae la lista completa
+  // Filtered pilot (null = all); characters always carries the full list
   characterId: number | null;
   balance: number;
   internalTransfers: number;
-  // Movido con tus otros pilotos: recibido y enviado (en la vista de un piloto pueden diferir)
+  // Moved with your other pilots: received and sent (in a single pilot's view they can differ)
   internalReceived: number;
   internalSent: number;
-  // PLEX comprado y vendido en el mercado en el período (unidades)
+  // PLEX bought and sold on the market in the period (units)
   accounts: { plexBought: number; plexSold: number };
   characters: (Flow & {
     id: number;
     name: string;
     lastSyncAt: string | null;
+    // Balance: the wallet balance ESI returns on each sync (or, if there is none yet, the last journal entry's)
     balance: number | null;
     balanceAt: string | null;
-    // Saldo con el que entró en el período (partial: su historial empieza dentro del período, en openingAt)
+    // The last journal entry's balance: the reconciliation balances against it (the wallet can be ahead)
+    journalBalance: number | null;
+    // Balance it entered the period with (partial: its history starts inside the period, at openingAt)
     openingBalance: number | null;
     openingAt: string | null;
     openingPartial: boolean;
-    // Recibido de tus otros pilotos y enviado a ellos en el período. net = income − expenses (lo ganado en juego);
-    // walletChange = net + recibido − enviado, lo que cambió su wallet (openingBalance + walletChange = balance)
+    // Received from your other pilots and sent to them in the period. net = income − expenses (earned in game);
+    // walletChange = net + received − sent, how much its wallet changed (openingBalance + walletChange = balance)
     internalReceived: number;
     internalSent: number;
     walletChange: number;
   })[];
-  // Brutos por actividad (totals también es bruto); el neto del trading es su margen
+  // Gross per activity (totals is gross too); the trading net is its margin
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
-  // «PvP con naves»: compras de reposición y couriers de naves perdidas movidos a PvP (ship_replacement, ship_transport)
+  // «PvP con naves»: replacement purchases and couriers of lost ships moved to PvP (ship_replacement, ship_transport)
   shipFlow: { replacement: number; transport: number };
-  // accounts: PLEX comprado (−) o vendido (+) ese día, ya incluido en ingresos/gastos
-  // internal: en la vista de un piloto, lo movido con tus otros pilotos ese día (no está en net ni en income/expenses)
+  // accounts: PLEX bought (−) or sold (+) that day, already included in income/expenses
+  // internal: in a single pilot's view, what was moved with your other pilots that day (not in net nor in income/expenses)
   daily: (Flow & { date: string; accounts: number; internal: number })[];
   today: Flow;
   previous: Flow & { complete: boolean };
@@ -115,14 +118,14 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// characterId opcional: el ledger de un solo piloto (la API responde 404 si no está vinculado)
+// Optional characterId: the ledger of a single pilot (the API returns 404 if it is not linked)
 const pilotQuery = (characterId?: number) => (characterId ? `characterId=${characterId}` : '');
 export const getSummary = (days: number, characterId?: number) =>
   call<Summary>(`/summary?days=${days}&${pilotQuery(characterId)}`);
 export const getInventory = (characterId?: number) => call<Inventory>(`/inventory?${pilotQuery(characterId)}`);
 
-// Naves perdidas del período (killmails) y lo que movieron en el wallet: seguro (+), primas (−) y reposición (−).
-// Valor perdido = casco + equipo al precio medio de ESI (ya pagado al comprarlo: no es un movimiento del wallet)
+// Ships lost in the period (killmails) and what they moved in the wallet: insurance (+), premiums (−) and replacement (−).
+// Value lost = hull + fitting at ESI's average price (already paid when bought: not a wallet movement)
 export type Loss = {
   killmailId: number;
   time: string;
@@ -142,20 +145,20 @@ export type Loss = {
   replacement: number;
   transport: number;
   walletEffect: number;
-  // Lo que te costó: walletEffect − lo que no volvió o falta por reponer (precio medio)
+  // What it cost you: walletEffect − what did not come back or is still to replace (average price)
   cost: number;
   windowEndsAt: string;
-  // replaced: repuesta (o casi); pending: falta algo y la ventana sigue abierta (cifra «hasta ahora»);
-  // unreplaced: la ventana se cerró sin reponerlo todo (toReplace = lo que no volvió, al precio medio)
-  // nohistory: anterior al primer movimiento guardado (lo que falte no cuenta: no se sabe si se repuso)
+  // replaced: replaced (or nearly); pending: something is missing and the window is still open (figure "so far");
+  // unreplaced: the window closed without replacing everything (toReplace = what did not come back, at average price)
+  // nohistory: before the first stored movement (whatever is missing does not count: unknown whether it was replaced)
   state: 'replaced' | 'pending' | 'unreplaced' | 'nohistory';
   open: boolean;
   toReplace: number;
-  // Lo que falta, por partes (precio medio): casco, equipo (montado y drones) y carga
+  // What is missing, by part (average price): hull, fitting (fitted and drones) and cargo
   missing: { hull: number; fit: number; cargo: number };
-  // Unidades de equipo repuestas con un módulo equivalente (mismo grupo de mercado)
+  // Fitting units replaced with an equivalent module (same market group)
   substitutes: number;
-  // Menos de 1 M (cápsula, nave de iniciación): se pliega en la tabla
+  // Under 1 M (capsule, rookie ship): folded in the table
   trivial: boolean;
   replacementBy: Record<string, number>;
   transportBy: number | null;
@@ -181,22 +184,22 @@ export type Losses = {
     premiums: number;
     replacement: number;
     transport: number;
-    // Lo que movieron en tus wallets (suma de la columna Wallet)
+    // What they moved in your wallets (sum of the Wallet column)
     walletEffect: number;
     unreplaced: number;
     toReplace: number;
     open: number;
-    // Lo que te costaron: suma de la columna Coste. Las primas van aparte
+    // What they cost you: sum of the Coste column. Premiums go separately
     cost: number;
-    // Lo firme: Coste sin lo que falta por reponer (estimado al precio medio, aún puede cambiar)
+    // The firm part: Coste without what is still to replace (estimated at average price, can still change)
     firmCost: number;
     unpricedTypes: number;
   };
-  // Vista de un piloto: el flujo de su wallet por pérdidas (seguro de sus naves y lo que él pagó)
+  // Single pilot's view: its wallet flow from losses (insurance on its ships and what it paid)
   ownWallet: { insurance: number; replacement: number; transport: number; forOthers: number; total: number } | null;
   forOthers: { killmailId: number; ship: string | null; pilot: string | null; amount: number }[];
   paidByOthers: { id: number; name: string | null; amount: number }[];
-  // Primer movimiento guardado: las pérdidas anteriores son «sin historial»
+  // First stored movement: earlier losses are "no history"
   historyFrom: string | null;
   losses: Loss[];
 };
@@ -206,7 +209,7 @@ export const getMap = (characterId?: number) => call<GeoMap>(`/map?${pilotQuery(
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
 
-// Un solo piloto: la API responde 502 con el resultado si el sync falló, no es un error de transporte
+// A single pilot: the API returns 502 with the result if the sync failed; it is not a transport error
 export async function syncOne(characterId: number): Promise<SyncAllResult> {
   const res = await fetch(`${API_URL}/sync/${characterId}`, { method: 'POST' });
   const body = (await res.json().catch(() => ({}))) as { inserted?: number; error?: string };
@@ -219,40 +222,40 @@ export type Pilot = {
   name: string;
   scopes: string[];
   missingScopes: string[];
-  // Permisos opcionales que no concedió (los nombres de las citadelas): no son un problema, solo una mejora
+  // Optional scopes not granted (citadel names): not a problem, just an improvement
   missingOptionalScopes: string[];
   lastSyncAt: string | null;
   createdAt: string;
-  // Último vínculo (el primero o el de la última revinculación)
+  // Last link (the first one or the latest relink)
   linkedAt: string;
-  // Alfa entrena a la mitad y no puede usar todas las skills (lo marca el usuario en Pilotos)
+  // Alpha trains at half speed and cannot use every skill (the user marks it in Pilotos)
   clone: 'omega' | 'alpha';
   lastError: { at: string | null; kind: string; message: string } | null;
 };
 
-// Accept JSON explícito: en el navegador /characters redirige a la página de pilotos
+// Explicit JSON Accept: in the browser /characters redirects to the pilots page
 export const getPilots = () => call<Pilot[]>('/characters', { headers: { Accept: 'application/json' } });
 export const loginUrl = `${API_URL}/auth/login`;
 export const syncLogUrl = `${API_URL}/sync/log`;
 
-// Omega de todas las cuentas: cuánto cuesta renovarlas (1 mes) frente al saldo de los wallets.
-// Los campos que dependen del precio del PLEX son null mientras no haya precio guardado.
+// Omega for all accounts: how much renewing them costs (1 month) versus the wallet balance.
+// Fields that depend on the PLEX price are null while no price is stored.
 export type Indicators = {
   omega: {
     accounts: number;
     plexPerMonth: number;
     months: number;
     plexNeeded: number;
-    // PLEX que ya tienes en inventario: se descuentan de los necesarios
+    // PLEX you already have in inventory: subtracted from the ones needed
     plexOwned: number;
     plexMissing: number;
     plexPrice: number | null;
     plexAveragePrice: number | null;
-    // market = venta más baja de las órdenes (se refresca en cada sync); average = media global de ESI
+    // market = lowest sell order (refreshed on each sync); average = ESI's global average
     plexPriceSource: 'market' | 'average' | null;
     plexPriceUpdatedAt: string | null;
     cost: number | null;
-    // Coste de los PLEX que faltan (lo que queda por pagar)
+    // Cost of the missing PLEX (what is left to pay)
     costMissing: number | null;
     available: number;
     missing: number | null;
@@ -260,12 +263,12 @@ export type Indicators = {
     progress: number | null;
     avgDailyNet: number;
     paceDays: number;
-    // Coste de un mes de Omega repartido en 30 días, y qué parte de él paga tu ritmo diario
+    // Cost of one month of Omega spread over 30 days, and what share of it your daily pace pays
     costPerDay: number | null;
     paceShare: number | null;
     balances: { characterId: number; balance: number | null }[];
   };
-  // ISK por hora de ratting: pagos de recompensas (uno cada 20 min) como reloj
+  // ISK per hour of ratting: bounty payments (one every 20 min) as a clock
   ratting: {
     days: number;
     tickMinutes: number;
@@ -273,16 +276,16 @@ export type Indicators = {
     hours: number;
     isk: number;
     iskPerHour: number | null;
-    // De dónde sale el ISK: recompensas, ESS, escalaciones vendidas y loot vendido al buyback
+    // Where the ISK comes from: bounties, ESS, sold escalations and loot sold to the buyback
     parts: { bounties: number; ess: number; escalations: number; loot: number };
     recent: { days: number; hours: number; iskPerHour: number | null };
     byPilot: { characterId: number; name: string; ticks: number; hours: number; isk: number; iskPerHour: number | null }[];
     bySystem: { systemId: number; name: string | null; security: number | null; ticks: number; hours: number; isk: number; iskPerHour: number }[];
-    // Los sistemas que no están entre los 6 primeros, agrupados, y las recompensas cuyo sistema el journal no dice
+    // Systems outside the top 6, grouped, and bounties whose system the journal does not say
     bySystemRest: { systems: number; ticks: number; hours: number; isk: number };
     bySystemUnknown: { ticks: number; hours: number; isk: number };
   };
-  // Tus días: neto de juego por día (sin PLEX ni lo movido entre tus pilotos), consolidado
+  // Your days: game net per day (without PLEX or what was moved between your pilots), consolidated
   days: {
     days: number;
     withData: number;
@@ -294,7 +297,7 @@ export type Indicators = {
     avg: number | null;
     firstAt: string | null;
   };
-  // Fondo de reposición: cuántas veces repones cada nave perdida con el saldo, y lo que te costaron en horas
+  // Replacement fund: how many times you can replace each lost ship with the balance, and what they cost you in hours
   replacement: {
     available: number;
     iskPerHour: number | null;
@@ -305,23 +308,36 @@ export type Indicators = {
     costHours: number | null;
     noScope: boolean;
   };
-  // Comisiones e impuestos del mercado frente a lo vendido
+  // Market fees and taxes versus what was sold
   fees: { days: number; total: number; sales: number; share: number | null; byType: { refType: string; total: number }[] };
+  // Deductions: corporation tax (exact) and incursion penalty (estimated)
+  deductions: {
+    days: number;
+    tax: number;
+    byCorp: { corpId: number | null; name: string | null; npc: boolean; tax: number; gross: number; rate: number | null; byType: { refType: string; tax: number }[] }[];
+    taxUnknown: number;
+    incursion: number;
+    penalty: number;
+    bySystem: { systemId: number; name: string | null; security: number | null; ticks: number; paid: number; lost: number }[];
+    incursionsSince: string | null;
+    iskPerHour: number | null;
+    grossPerHour: number | null;
+  };
 };
 export const getIndicators = () => call<Indicators>('/indicators');
 
-// Doctrinas: fits EFT con su plan de skills (.emp de EVEMon) y qué piloto vuela qué
+// Doctrines: EFT fits with their skill plan (EVEMon .emp) and which pilot flies what
 export type MissingSkill = {
   skillId: number;
   name: string | null;
-  // Nivel que pide, el que puede usar (activo) y el entrenado (un Alfa no usa todo lo entrenado)
+  // Level required, the one it can use (active) and the trained one (an Alpha does not use everything trained)
   need: number;
   active: number;
   trained: number;
-  // SP y minutos que faltan; null si no se conoce el rango o los atributos
+  // SP and minutes missing; null if the rank or the attributes are unknown
   sp: number | null;
   minutes: number | null;
-  // Entrenada pero sin poder usarla como Alfa / skill que un Alfa no puede entrenar
+  // Trained but unusable as Alpha / skill an Alpha cannot train
   omegaOnly: boolean;
   omegaSkill: boolean;
 };
@@ -335,16 +351,16 @@ export type SkillEvaluation = {
   required: number;
   alphaBlocked: boolean;
 };
-// Qué clon pide un fit: omega (seguro), alpha (lo vuela un Alfa, o nada es solo Omega ni pide nivel V),
-// alphaUnsure (nada es solo Omega pero pide nivel V) o unknown (skills aún sin el dato)
+// Which clone a fit needs: omega (certain), alpha (an Alpha flies it, or nothing is Omega-only nor needs level V),
+// alphaUnsure (nothing is Omega-only but it needs level V) or unknown (skills still without the data)
 export type CloneNeed = 'omega' | 'alpha' | 'alphaUnsure' | 'unknown';
-// ok: puede volarlo; missing: le faltan skills; omega: las tiene pero un Alfa no puede usarlas;
-// noScope: falta el permiso de skills; noData: aún sin sync de skills
+// ok: can fly it; missing: lacks skills; omega: has them but an Alpha cannot use them;
+// noScope: missing the skills scope; noData: no skills sync yet
 export type FitPilotStatus = 'ok' | 'missing' | 'omega' | 'noScope' | 'noData';
-// Inyectores para unos SP (los sin asignar se gastan antes); cost null si falta el precio de alguno
+// Injectors for some SP (unallocated ones are spent first); cost null if a price is missing
 export type InjectorPlan = { sp: number; large: number; small: number; cost: number | null };
-// Lo que falta del wallet: con todo el saldo, o reservando antes el Omega del próximo mes (null sin precio del PLEX).
-// En horas de ratting (null sin ISK/h) y en días al ritmo de 7 días (null sin ritmo positivo)
+// What the wallet is short of: with the whole balance, or reserving next month's Omega first (null without a PLEX price).
+// In ratting hours (null without ISK/h) and in days at the 7-day pace (null without a positive pace)
 export type Shortfall = { short: number; hours: number | null; days: number | null };
 export type Budget = { need: number; wallet: Shortfall; withOmega: Shortfall | null };
 export type DoctrineFit = {
@@ -357,10 +373,10 @@ export type DoctrineFit = {
   cargo: number;
   required: number;
   clone: CloneNeed;
-  // Skills del fit que solo puede entrenar un Omega
+  // Fit skills that only an Omega can train
   omegaSkills: string[];
   plan: { name: string; skills: number } | null;
-  // A la venta más baja de Jita; unpriced = tipos sin precio (no suman)
+  // At Jita's lowest sell price; unpriced = types without a price (not added)
   cost: { total: number; hull: number; fitted: number; drones: number; cargo: number; unpriced: number; pricedAt: string | null };
   budget: Budget;
   pilots: {
@@ -369,7 +385,7 @@ export type DoctrineFit = {
     fly: SkillEvaluation | null;
     plan: SkillEvaluation | null;
     injectors: { fly: InjectorPlan | null; plan: InjectorPlan | null } | null;
-    // Volarlo ya: el fit más los inyectores que le faltan (null si falta el precio de los inyectores)
+    // Fly it now: the fit plus the injectors it is missing (null if the injector price is missing)
     budget: Budget | null;
   }[];
 };
@@ -395,7 +411,7 @@ export type DoctrinesView = {
 };
 export const getDoctrines = () => call<DoctrinesView>('/doctrines');
 
-// Escrituras de Doctrinas: la API responde 400 con un código (que la web traduce) si lo pegado no vale
+// Doctrinas writes: the API returns 400 with a code (that the web translates) if what was pasted is invalid
 export class ActionError extends Error {
   constructor(
     readonly code: string,
@@ -411,13 +427,14 @@ async function write<T>(method: string, path: string, body?: unknown): Promise<T
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as { error?: string; detail?: unknown };
-  // 409: hay que esperar (restaurar una copia con un sync en marcha)
+  // 409: you have to wait (restoring a backup while a sync is running)
   if (res.status === 400 || res.status === 404 || res.status === 409)
     throw new ActionError(data.error ?? 'request', data.detail == null ? null : String(data.detail));
   if (!res.ok) throw new ApiError(res.status, `API ${res.status} en ${path}`);
   return data as T;
 }
 export const createDoctrine = (name: string) => write<{ id: number }>('POST', '/doctrines', { name });
+export const renameDoctrine = (id: number, name: string) => write<{ id: number; name: string }>('PUT', `/doctrines/${id}`, { name });
 export const deleteDoctrine = (id: number) => write('DELETE', `/doctrines/${id}`);
 export const addFit = (doctrineId: number, eft: string) =>
   write<{ id: number; ignored: string[] }>('POST', `/doctrines/${doctrineId}/fits`, { eft });
@@ -429,18 +446,18 @@ export const deletePlan = (fitId: number) => write('DELETE', `/fits/${fitId}/pla
 export const setClone = (characterId: number, clone: 'omega' | 'alpha') =>
   write('PUT', `/characters/${characterId}/clone`, { clone });
 
-// Copias de seguridad de la base (apps/api/src/services/backups.ts)
+// Database backups (apps/api/src/services/backups.ts)
 export type BackupKind = 'auto' | 'manual' | 'restore' | 'update';
 export type Backup = { name: string; kind: BackupKind; createdAt: string; size: number };
 export type BackupsView = { dir: string; keep: Record<BackupKind, number>; backups: Backup[]; busy: boolean };
 export type BackupInfo = { pilots: number; entries: number; firstEntryAt: string | null; lastEntryAt: string | null };
 export type Restored = { info: BackupInfo; safety: Backup | null };
-// Solo nombres con el formato de las copias: lo mismo que acepta la API
+// Only names in the backup format: the same the API accepts
 export const BACKUP_NAME = /^ledger-\d{8}-\d{6}-(auto|manual|restore|update)\.db$/;
 export const getBackups = () => call<BackupsView>('/backups');
 export const createBackup = () => write<Backup>('POST', '/backups');
 export const restoreBackup = (name: string) => write<Restored>('POST', `/backups/${encodeURIComponent(name)}/restore`);
-// La copia en crudo, para descargarla desde la web
+// The raw backup, to download it from the web
 export const fetchBackup = (name: string) => fetch(`${API_URL}/backups/${encodeURIComponent(name)}`);
 export async function restoreUpload(bytes: ArrayBuffer): Promise<Restored> {
   const res = await fetch(`${API_URL}/backups/upload`, {

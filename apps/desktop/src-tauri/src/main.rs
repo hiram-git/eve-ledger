@@ -1,4 +1,4 @@
-// Sin consola en Windows (en release)
+// No console on Windows (in release)
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {

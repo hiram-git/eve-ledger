@@ -1,5 +1,5 @@
-// Doctrinas: leer fits EFT y planes de EVEMon, contar SP y tiempo, y decir quién vuela qué.
-// ESI va simulado (desde aquí no hay red): /universe/ids, /universe/types y /universe/groups con unos pocos tipos
+// Doctrines: read EFT fits and EVEMon plans, count SP and time, and say who flies what.
+// ESI is mocked (there's no network from here): /universe/ids, /universe/types and /universe/groups with a few types
 import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,7 +12,7 @@ Bun.env.ENC_KEY ||= Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toSt
 Bun.env.EVE_CLIENT_ID ||= 'test';
 Bun.env.EVE_CALLBACK_URL ||= 'http://127.0.0.1/auth/callback';
 
-// Tipos de prueba: [nombre, grupo, categoría, rango, primario, secundario, [skill, nivel]…]
+// Test types: [name, group, category, rank, primary, secondary, [skill, level]…]
 type Fake = [string, number, number, number | null, number | null, number | null, [number, number][], boolean?];
 const TYPES: Record<number, Fake> = {
   587: ['Rifter', 25, 6, null, null, null, [[3329, 1]]],
@@ -26,11 +26,11 @@ const TYPES: Record<number, Fake> = {
   24241: ['Light Drone Operation', 273, 16, 1, 166, 167, [[3436, 1]]],
   3436: ['Drones', 273, 16, 1, 166, 167, []],
   3423: ['Capacitor Emission Systems', 255, 16, 2, 165, 166, []],
-  // Solo Omega (atributo 1047) y una nave que la pide
+  // Omega only (attribute 1047) and a ship that requires it
   16591: ['Heavy Assault Cruisers', 257, 16, 6, 167, 168, [[3329, 1]], true],
   12015: ['Muninn', 358, 6, null, null, null, [[16591, 1]]],
 };
-// Venta más baja en Jita (el neutralizador no tiene órdenes: queda sin precio); 40520/45635 = inyectores
+// Lowest sell in Jita (the neutralizer has no orders: it stays without a price); 40520/45635 = injectors
 const JITA: Record<number, number> = { 587: 500_000, 2048: 1_200_000, 2488: 300_000, 40520: 800_000_000, 45635: 180_000_000 };
 const GROUP_CATEGORY = Object.fromEntries(Object.values(TYPES).map((t) => [t[1], t[2]]));
 const REQ_ATTRS = [
@@ -63,7 +63,7 @@ mock.module(`${API}/lib/esi.ts`, () => ({
     }
     const group = path.match(/^\/universe\/groups\/(\d+)$/);
     if (group) return { data: { group_id: Number(group[1]), category_id: GROUP_CATEGORY[Number(group[1])] }, headers: new Headers() };
-    // Órdenes de venta de The Forge: solo cuentan las del sistema de Jita (30000142)
+    // The Forge sell orders: only those in the Jita system count (30000142)
     const orders = path.match(/^\/markets\/10000002\/orders\/\?order_type=sell&type_id=(\d+)&page=1$/);
     if (orders) {
       const price = JITA[Number(orders[1])];
@@ -85,7 +85,7 @@ const s = await import(`${API}/db/schema.ts`);
 const { parseEft } = await import(`${API}/lib/eft.ts`);
 const { parseEmp } = await import(`${API}/lib/emp.ts`);
 const { spForLevel, withPrerequisites, evaluate } = await import(`${API}/lib/skill-math.ts`);
-const { addFit, budget, createDoctrine, listDoctrines, refreshDoctrineDogma, setPlan, DoctrineError } = await import(`${API}/services/doctrines.ts`);
+const { addFit, budget, createDoctrine, listDoctrines, refreshDoctrineDogma, setPlan, DoctrineError, renameDoctrine, deleteDoctrine } = await import(`${API}/services/doctrines.ts`);
 const { injectorsFor, largeYield } = await import(`${API}/lib/injectors.ts`);
 const { inArray } = await import('drizzle-orm');
 runMigrations();
@@ -144,7 +144,7 @@ Target Painter II`);
     ['Target Painter II', 1],
   ]);
   expect(() => parseEft('Damage Control II')).toThrow('no_header');
-  // Un bloque de medias con solo ranuras vacías sigue contando: las altas no pasan a ser medias
+  // A mid block with only empty slots still counts: the highs don't become mids
   const empty = parseEft('[Rifter, Tackle]\nDamage Control II\n\n[Empty Med slot]\n\nHeavy Energy Neutralizer II\n\nWarrior II x2');
   expect(empty.slotBlocks).toEqual([0, 1, 2]);
   expect(empty.lines.find((l) => l.name === 'Heavy Energy Neutralizer II')?.block).toBe(2);
@@ -172,7 +172,7 @@ test('SP por nivel, prerrequisitos en cadena y tiempo de entrenamiento', () => {
     const t = TYPES[id];
     return t ? { rank: t[3], primaryAttr: t[4], secondaryAttr: t[5], required: t[6].map(([skillId, level]) => ({ skillId, level })) } : undefined;
   };
-  // Hull Upgrades III pide Mechanics II
+  // Hull Upgrades III requires Mechanics II
   expect([...withPrerequisites([{ skillId: 3394, level: 3 }], info)]).toEqual([
     [3394, 3],
     [3392, 2],
@@ -180,7 +180,7 @@ test('SP por nivel, prerrequisitos en cadena y tiempo de entrenamiento', () => {
   const attributes = { charisma: 20, intelligence: 20, memory: 20, perception: 20, willpower: 20 };
   const req = new Map([[3394, 3], [3392, 2]]);
   const omega = evaluate(req, { clone: 'omega', attributes, skills: new Map([[3392, { trained: 1, active: 1, sp: 250 }]]) }, info);
-  // 16.000 SP de Hull Upgrades III (rango 2) + 1.165 de Mechanics II, a 20 + 20/2 = 30 SP por minuto
+  // 16,000 SP of Hull Upgrades III (rank 2) + 1,165 of Mechanics II, at 20 + 20/2 = 30 SP per minute
   expect(omega.missingSp).toBe(16000 + 1165);
   expect(omega.minutes).toBeCloseTo((16000 + 1165) / 30, 6);
   const alpha = evaluate(req, { clone: 'alpha', attributes, skills: new Map([[3392, { trained: 1, active: 1, sp: 250 }]]) }, info);
@@ -190,11 +190,11 @@ test('SP por nivel, prerrequisitos en cadena y tiempo de entrenamiento', () => {
 test('inyectores: tramos por SP totales, SP sin asignar primero y pequeños si salen más baratos', () => {
   expect([4_999_999, 5_000_000, 50_000_000, 80_000_000].map(largeYield)).toEqual([500_000, 400_000, 300_000, 150_000]);
   const price = { large: 800_000_000, small: 180_000_000 };
-  // 600.000 SP con 4,9 M: un grande da 500.000 (aún por debajo de 5 M); faltan 100.000 a 80.000 por pequeño = 2
+  // 600,000 SP with 4.9 M: a large gives 500,000 (still below 5 M); 100,000 left at 80,000 per small = 2
   expect(injectorsFor(600_000, 4_900_000, 0, price)).toEqual({ sp: 600_000, large: 1, small: 2, cost: 800_000_000 + 2 * 180_000_000 });
-  // Los SP sin asignar se gastan antes
+  // Unallocated SP are spent first
   expect(injectorsFor(600_000, 4_900_000, 650_000, price)).toEqual({ sp: 0, large: 0, small: 0, cost: 0 });
-  // Sin precios: 5 pequeños o más → un grande; el coste no se sabe
+  // No prices: 5 or more small → one large; the cost is unknown
   expect(injectorsFor(350_000, 10_000_000, 0, { large: null, small: null })).toEqual({ sp: 350_000, large: 1, small: 0, cost: null });
 });
 
@@ -206,7 +206,7 @@ test('presupuesto: con todo el wallet o reservando el Omega, en horas de ratting
     withOmega: { short: 900, hours: 9, days: 18 },
   });
   expect(budget(100, funds).wallet).toEqual({ short: 0, hours: 0, days: 0 });
-  // Sin precio del PLEX no hay escenario con Omega; sin ritmo positivo, no hay días
+  // Without a PLEX price there's no Omega scenario; without a positive rate, no days
   expect(budget(1000, { ...funds, omegaReserve: null, dailyNet: -5 })).toEqual({ need: 1000, wallet: { short: 400, hours: 4, days: null }, withOmega: null });
 });
 
@@ -243,9 +243,9 @@ test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   const skill = (characterId: number, [skillId, level, sp]: [number, number, number], active = level) => ({ characterId, skillId, trainedLevel: level, activeLevel: active, sp });
   await db.insert(s.characterSkills).values([
     ...all.map((x) => skill(9101, x)),
-    // El Alfa tiene Light Drone Operation II entrenada, pero solo puede usarla a nivel I
+    // The Alpha has Light Drone Operation II trained, but can only use it at level I
     ...all.map((x) => skill(9102, x, x[0] === 24241 ? 1 : x[1])),
-    // El novato no tiene Hull Upgrades y le falta Mechanics II
+    // The newbie doesn't have Hull Upgrades and is missing Mechanics II
     ...all.filter(([id]) => id !== 3394 && id !== 3392).map((x) => skill(9103, x)),
     skill(9103, [3392, 1, 250]),
   ]);
@@ -256,7 +256,7 @@ test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   expect(f.slots.low).toBe(1);
   expect(f.drones).toBe(5);
   expect(f.cargo).toBe(1);
-  // La carga (el neutralizador) no cuenta: casco, Damage Control II y Warrior II con sus prerrequisitos = 6 skills
+  // The cargo (the neutralizer) doesn't count: hull, Damage Control II and Warrior II with their prerequisites = 6 skills
   expect(f.required).toBe(6);
   const by = new Map(f.pilots.map((p) => [p.characterId, p]));
   expect(by.get(9101)!.status).toBe('ok');
@@ -266,37 +266,46 @@ test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   expect(by.get(9103)!.fly!.minutes).toBeCloseTo((16000 + 1165) / 30, 6);
   expect(by.get(9104)!.status).toBe('noScope');
   expect(by.get(9105)!.status).toBe('noData');
-  // Plan: Spaceship Command IV (45.255 SP, tiene 8.000) y Minmatar Frigate IV (90.510 SP, tiene 500)
+  // Plan: Spaceship Command IV (45,255 SP, has 8,000) and Minmatar Frigate IV (90,510 SP, has 500)
   const p = by.get(9101)!.plan!;
   expect(p.targetSp).toBe(45255 + 90510);
   expect(p.haveSp).toBe(8000 + 500);
   expect(p.missing.length).toBe(2);
-  // Coste en Jita (solo órdenes del sistema de Jita): casco 0,5 M + Damage Control II 1,2 M + 5 Warrior II 1,5 M;
-  // el neutralizador de la carga no tiene órdenes
+  // Cost in Jita (only orders in the Jita system): hull 0.5 M + Damage Control II 1.2 M + 5 Warrior II 1.5 M;
+  // the neutralizer in the cargo has no orders
   expect(f.cost).toMatchObject({ hull: 500_000, fitted: 1_200_000, drones: 1_500_000, cargo: 0, unpriced: 1, total: 3_200_000 });
-  // Al novato le faltan 17.165 SP: con 0 SP totales, un pequeño da 100.000 y sale más barato que un grande
+  // The newbie is missing 17,165 SP: with 0 total SP, a small gives 100,000 and is cheaper than a large
   expect(by.get(9103)!.injectors!.fly).toEqual({ sp: 17165, large: 0, small: 1, cost: 180_000_000 });
   expect(by.get(9103)!.budget!.need).toBe(3_200_000 + 180_000_000);
-  // Quien ya puede volarlo solo necesita el fit; un Alfa que solo necesita Omega, también
+  // Whoever can already fly it only needs the fit; so does an Alpha who only needs Omega
   expect(by.get(9101)!.injectors!.fly).toBeNull();
   expect(by.get(9101)!.budget!.need).toBe(3_200_000);
   expect(by.get(9102)!.budget!.need).toBe(3_200_000);
   expect(by.get(9104)!.budget).toBeNull();
-  // El Alfa tiene Light Drone Operation II entrenada pero solo usa el nivel I: el fit pide Omega
+  // The Alpha has Light Drone Operation II trained but only uses level I: the fit requires Omega
   expect(f.clone).toBe('omega');
   expect(f.omegaSkills).toEqual([]);
 
-  // Una nave que pide una skill solo Omega: Omega aunque nadie la haya entrenado, y el Alfa sale como «omega»
+  // A ship that requires an Omega-only skill: Omega even if nobody has trained it, and the Alpha comes out as «omega»
   const muninn = await addFit(id, '[Muninn, Prueba]\nDamage Control II');
   const m = (await listDoctrines()).doctrines.find((d) => d.id === id)!.fits.find((x) => x.id === muninn.id)!;
   expect(m.clone).toBe('omega');
   expect(m.omegaSkills).toEqual(['Heavy Assault Cruisers']);
   expect(m.pilots.find((x) => x.characterId === 9102)!.status).toBe('omega');
   expect(m.pilots.find((x) => x.characterId === 9101)!.status).toBe('missing');
-  // Cada tipo se pide a ESI una sola vez: la segunda importación ya no llama a /universe/types
+  // Each type is requested from ESI only once: the second import no longer calls /universe/types
   const before = esiCalls.filter((c) => c.startsWith('/universe/types')).length;
   await addFit(id, EFT);
   expect(esiCalls.filter((c) => c.startsWith('/universe/types')).length).toBe(before);
+});
+
+test('renombra una doctrina: recorta el nombre, rechaza el vacío y la que no existe', async () => {
+  const { id } = await createDoctrine('Temporal');
+  expect(await renameDoctrine(id, '  Beehive  ')).toEqual({ id, name: 'Beehive' });
+  await expect(renameDoctrine(id, '   ')).rejects.toMatchObject({ code: 'name' });
+  await expect(renameDoctrine(999_999, 'X')).rejects.toMatchObject({ code: 'doctrine' });
+  expect((await listDoctrines()).doctrines.find((d) => d.id === id)?.name).toBe('Beehive');
+  await deleteDoctrine(id);
 });
 
 test('las skills guardadas sin saber si son solo Omega se vuelven a pedir una vez', async () => {
@@ -307,7 +316,7 @@ test('las skills guardadas sin saber si son solo Omega se vuelven a pedir una ve
   const [row] = await db.select().from(s.typeDogma).where(eq(s.typeDogma.typeId, 16591));
   expect(row.omegaOnly).toBe(true);
   expect(esiCalls.filter((c) => c === '/universe/types/16591').length).toBe(before + 1);
-  // Ya con el dato, no se vuelve a pedir
+  // Once the data is there, it isn't requested again
   await refreshDoctrineDogma();
   expect(esiCalls.filter((c) => c === '/universe/types/16591').length).toBe(before + 1);
 });

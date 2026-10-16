@@ -1,15 +1,15 @@
-// Fits en formato EFT, el de «Copiar al portapapeles» del juego, eveworkbench y los foros:
+// Fits in EFT format, the one used by the game's «Copy to clipboard», eveworkbench and the forums:
 //   [Rorqual, Beehive - SIR - DPS V26.1]
-//   Damage Control II                      ← bloques sin «xN»: ranuras bajas, medias, altas, rigs, subsistemas
-//   Heavy Energy Neutralizer II, Nanite Repair Paste   ← módulo con su munición cargada
+//   Damage Control II                      ← blocks without «xN»: low, mid, high slots, rigs, subsystems
+//   Heavy Energy Neutralizer II, Nanite Repair Paste   ← module with its loaded ammo
 //
-//   Hornet II x100                         ← bloques con «xN»: bodega de drones (o cazas) y carga
-// Los bloques se separan con líneas en blanco. Las ranuras vacías («[Empty High slot]») y «/OFFLINE» se ignoran.
-// Si un bloque con cantidades es de drones o de carga lo decide la categoría del tipo, no el orden
+//   Hornet II x100                         ← blocks with «xN»: drone (or fighter) bay and cargo
+// Blocks are separated by blank lines. Empty slots («[Empty High slot]») and «/OFFLINE» are ignored.
+// Whether a block with quantities is drones or cargo is decided by the type's category, not the order
 
 export type EftLine = { name: string; quantity: number; kind: 'fitted' | 'charge' | 'bay'; block: number };
-// slotBlocks: los bloques de ranuras en orden (bajas, medias, altas, rigs, subsistemas), también los que solo tienen
-// ranuras vacías: si no, un bloque de medias vacío haría que las altas se contasen como medias
+// slotBlocks: the slot blocks in order (low, mid, high, rigs, subsystems), including those with only
+// empty slots: otherwise an empty mid block would make the highs count as mids
 export type EftFit = { ship: string; name: string; lines: EftLine[]; slotBlocks: number[] };
 
 const MAX_LENGTH = 50_000;
@@ -29,7 +29,7 @@ export function parseEft(text: string): EftFit {
   const slotBlocks: number[] = [];
   let block = -1;
   let inBlock = false;
-  // A partir del primer bloque con cantidades, todo lo que sigue es bodega o carga (una línea sin «xN» es 1)
+  // From the first block with quantities on, everything is bay or cargo (a line without «xN» is 1)
   let bays = false;
   for (const raw of rows.slice(start + 1)) {
     if (raw === '') {
@@ -53,7 +53,7 @@ export function parseEft(text: string): EftFit {
       lines.push({ name: line, quantity: 1, kind: 'bay', block });
       continue;
     }
-    // «Módulo, Munición»: la munición cargada también puede pedir skills
+    // «Module, Ammo»: the loaded ammo can also require skills
     const [module, charge] = line.split(/,\s*/, 2);
     lines.push({ name: module.trim(), quantity: 1, kind: 'fitted', block });
     if (charge?.trim()) lines.push({ name: charge.trim(), quantity: 1, kind: 'charge', block });

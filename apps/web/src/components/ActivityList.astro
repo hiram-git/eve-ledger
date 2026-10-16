@@ -1,6 +1,6 @@
 ---
-// Detalle por actividad (PvE, PvP, trading como margen, otros). El vistazo con el neto de cada una vive en la
-// tarjeta de Neto: aquí solo lo que hay detrás, por tipo de movimiento de ESI, sin repetir barras ni netos.
+// Breakdown by activity (PvE, PvP, trading as margin, other). The at-a-glance view with each one's net lives in
+// the Neto card: here only what lies behind it, by ESI entry type, without repeating bars or nets.
 import { ACTIVITIES, type Activity, type Summary } from '../lib/api';
 import Donut from './Donut.astro';
 import { isk, iskFull, refTypeLabel } from '../lib/format';
@@ -17,18 +17,18 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const out = (v: number) => (v ? -v : 0);
 
-// Orden fijo (PvE, PvP, Trading, Logística, Otros, PLEX: el de la API): que la fila no cambie de sitio con el
-// período, y que cada actividad lleve siempre el mismo color (la porción i de las tortas y la muestra de su fila)
+// Fixed order (PvE, PvP, Trading, Logística, Otros, PLEX: the API's): so a row doesn't move around with the
+// period, and each activity always has the same color (slice i of the donuts and its row's swatch)
 const rows = activities;
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
-// El color va por la posición de la actividad en el orden fijo, no en la lista que llega (la API omite las
-// actividades sin movimientos: sin esto, Trading tomaba el color de PvP en un piloto que no hizo PvP)
+// The color follows the activity's position in the fixed order, not in the incoming list (the API omits
+// activities with no entries: without this, Trading took PvP's color for a pilot who did no PvP)
 const color = (a: Activity) => `var(--cat-${ACTIVITIES.indexOf(a) + 1})`;
-// Tortas: de dónde vienen los ingresos y a dónde van los gastos (brutos), por actividad
+// Donuts: where income comes from and where expenses go (gross), by activity
 const totalIncome = rows.reduce((n, a) => n + a.income, 0);
 const totalExpenses = rows.reduce((n, a) => n + a.expenses, 0);
-// Las seis porciones siempre, en orden fijo (con 0 las que no tienen movimientos): la torta pinta la porción i con
-// el color i, el mismo que la muestra de la fila
+// Always the six slices, in fixed order (0 for those with no entries): the donut paints slice i with
+// color i, the same as the row's swatch
 const byKey = new Map(rows.map((a) => [a.activity, a]));
 const incomeSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value: byKey.get(k)?.income ?? 0 }));
 const expensesSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value: byKey.get(k)?.expenses ?? 0 }));
@@ -59,7 +59,7 @@ const expensesSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value:
             )}
           </div>
         )}
-        {/* Cabecera de las columnas de la lista (las filas son <details>, no una tabla) */}
+        {/* Column header of the list (the rows are <details>, not a table) */}
         <div class="cols" aria-hidden="true">
           <span />
           <span>{m.income}</span>
@@ -141,7 +141,7 @@ const expensesSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value:
   li + li {
     border-top: 1px solid var(--line);
   }
-  /* Cabecera y filas comparten la misma rejilla: nombre (con su pista debajo), Ingresos, Gastos */
+  /* Header and rows share the same grid: name (with its hint below), Ingresos, Gastos */
   .cols,
   summary {
     display: grid;
@@ -187,7 +187,7 @@ const expensesSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value:
   summary::-webkit-details-marker {
     display: none;
   }
-  /* Chevrón propio: gira al desplegar */
+  /* Custom chevron: rotates when expanded */
   summary::before {
     content: '';
     position: absolute;
@@ -259,7 +259,7 @@ const expensesSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value:
     font-size: 13px;
   }
   @media (max-width: 600px) {
-    /* En móvil la pista pasa a su propia línea, a todo el ancho */
+    /* On mobile the hint moves to its own full-width line */
     .cols,
     summary {
       grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem;
@@ -286,7 +286,7 @@ const expensesSlices = ACTIVITIES.map((k) => ({ label: m.activityName[k], value:
       margin: 0 16px 14px;
       width: calc(100% - 32px);
     }
-    /* En móvil el desglose queda en tipo y neto; entradas y salidas siguen en el tooltip del neto */
+    /* On mobile the breakdown is just type and net; inflows and outflows remain in the net's tooltip */
     th:nth-child(2),
     th:nth-child(3),
     td:nth-child(2),

@@ -1,9 +1,9 @@
 import type { APIRoute } from 'astro';
 import { safeBackUrl } from '../../lib/safe-back';
-import { ActionError, addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, refreshPrices, setPlan } from '../../lib/api';
+import { ActionError, addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, refreshPrices, renameDoctrine, setPlan } from '../../lib/api';
 
-// Formularios de Doctrinas: crear o borrar doctrinas y fits, importar o quitar el plan (.emp, que se reenvía a la
-// API en base64). Vuelve a /doctrinas con el resultado en la query y un ancla al sitio tocado
+// Doctrinas forms: create, rename or delete doctrines and fits, import or remove the plan (.emp, forwarded to the
+// API in base64). Returns to /doctrinas with the result in the query and an anchor to the touched spot
 const MAX_PLAN_BYTES = 1_000_000;
 
 export const POST: APIRoute = async ({ request, redirect }) => {
@@ -26,13 +26,17 @@ export const POST: APIRoute = async ({ request, redirect }) => {
       const r = await refreshPrices();
       ok('prices', { n: String(r.updated) });
       anchor = 'fondos';
+    } else if (action === 'rename' && id) {
+      const r = await renameDoctrine(id, String(form.get('name') ?? ''));
+      ok('renamed', { name: r.name });
+      anchor = `doctrina-${id}`;
     } else if (action === 'delete-doctrine' && id) {
       await deleteDoctrine(id);
       ok('deleted');
     } else if (action === 'add-fit' && id) {
       const r = await addFit(id, String(form.get('eft') ?? ''));
       ok('fit');
-      // Las líneas que ESI no reconoce, para que el usuario vea qué se quedó fuera (recortado: va en la URL)
+      // The lines ESI does not recognise, so the user sees what was left out (trimmed: it goes in the URL)
       if (r.ignored.length) back.searchParams.set('ignored', r.ignored.slice(0, 12).join(' · ').slice(0, 600));
       anchor = `fit-${r.id}`;
     } else if (action === 'delete-fit' && id) {
@@ -54,13 +58,13 @@ export const POST: APIRoute = async ({ request, redirect }) => {
       anchor = `fit-${id}`;
     }
   } catch (err) {
-    // Lo que no es un error de lo pegado (código de la API) suele ser ESI sin responder al resolver los nombres
+    // Anything that is not an error in the pasted text (an API code) is usually ESI not responding while resolving names
     back.searchParams.set('error', err instanceof ActionError ? err.code : 'esi');
     if (err instanceof ActionError && err.detail) back.searchParams.set('detail', err.detail.slice(0, 200));
     if (!(err instanceof ActionError)) console.error(err);
-    anchor = action === 'add-fit' ? `doctrina-${id}` : action === 'plan' ? `fit-${id}` : '';
+    anchor = action === 'add-fit' || action === 'rename' ? `doctrina-${id}` : action === 'plan' ? `fit-${id}` : '';
   }
-  // El aviso se pinta junto a lo que se tocó (`at`), no arriba del todo: con el ancla, quedaba fuera de la vista
+  // The notice is drawn next to what was touched (`at`), not at the very top: with the anchor, it ended up out of view
   if (anchor) back.searchParams.set('at', anchor);
   return redirect(back.pathname + back.search + (anchor ? `#${anchor}` : ''), 303);
 };

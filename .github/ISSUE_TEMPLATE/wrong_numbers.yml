@@ -1,0 +1,58 @@
+name: A number doesn't add up
+description: A balance, net, loss or indicator doesn't match the game or another screen.
+labels: [numbers]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Numbers are what EVE Ledger is for, so these reports matter. You can write in English, Spanish or German.
+
+        **Never attach or paste** your `ledger.db`, your `ledger.env`, your `ENC_KEY`, or anything that looks like a token.
+  - type: input
+    id: version
+    attributes:
+      label: EVE Ledger version
+      description: It's at the bottom of the dashboard.
+      placeholder: v0.1.17
+    validations:
+      required: true
+  - type: dropdown
+    id: screen
+    attributes:
+      label: Which screen?
+      options:
+        - Summary (net, today, activities, pilots table)
+        - Lost ships
+        - Indicators
+        - Balances
+        - Doctrines
+        - Pilots
+    validations:
+      required: true
+  - type: input
+    id: view
+    attributes:
+      label: Period and view
+      description: The period tab and whether it's "All" or one pilot.
+      placeholder: Last 30 days · one pilot
+  - type: textarea
+    id: numbers
+    attributes:
+      label: What you see and what you expected
+      description: The figure in EVE Ledger, the figure you expected and where it comes from (the in-game wallet, another screen, your own sums).
+      placeholder: |
+        EVE Ledger says the pilot's balance is 1.20 B; the in-game wallet says 1.25 B.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything unusual?
+      description: Transfers between your pilots, a pilot linked recently or after a long break, PLEX, contracts, a lost ship… Screenshots help; blur what you don't want public.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I didn't include my database, my `ledger.env`, my encryption key or any token.
+          required: true

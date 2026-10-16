@@ -12,11 +12,21 @@ Descarga el instalador de tu sistema:
 | macOS (Apple Silicon: M1 o posterior) | `EVE Ledger_x.y.z_aarch64.dmg` |
 | Linux | `.deb` (Debian, Ubuntu, Mint) o `.AppImage` (cualquiera) |
 
-Los instaladores **no están firmados** (un certificado cuesta dinero), así que el sistema avisa la primera vez:
+Los instaladores **no están firmados**: EVE Ledger es un proyecto libre y abierto, y un certificado de firma cuesta dinero cada año. Se compilan en público con GitHub Actions desde este repositorio. Por eso el sistema avisa la primera vez:
 
 - **Windows:** «Windows protegió su PC» → *Más información* → *Ejecutar de todas formas*.
-- **macOS:** si dice que la app «está dañada» o «no se puede abrir», ábrela con clic derecho → *Abrir*. Si no basta, en la Terminal: `xattr -cr "/Applications/EVE Ledger.app"`.
+- **macOS:** si dice que la app «no se puede abrir» o «está dañada», ve a *Ajustes del Sistema → Privacidad y seguridad* y pulsa *Abrir igualmente* (en versiones anteriores de macOS, clic derecho sobre la app → *Abrir*). Si no basta, en la Terminal: `xattr -cr "/Applications/EVE Ledger.app"`.
 - **Linux (.AppImage):** dale permiso de ejecución (`chmod +x`) y ábrelo.
+
+**Comprobar la descarga (opcional).** Cada release trae `SHA256SUMS-windows.txt`, `SHA256SUMS-macos.txt` y `SHA256SUMS-linux.txt`, con la suma de cada instalador:
+
+- Windows (PowerShell): `Get-FileHash "EVE Ledger_x.y.z_x64-setup.exe"` y compara el resultado con la línea de ese archivo.
+- macOS: `shasum -a 256 "EVE Ledger_x.y.z_aarch64.dmg"`.
+- Linux: `sha256sum -c SHA256SUMS-linux.txt --ignore-missing`, en la carpeta de la descarga.
+
+Con la [CLI de GitHub](https://cli.github.com) también puedes comprobar que el archivo lo compiló el workflow de este repositorio: `gh attestation verify <archivo> --repo <propietario>/<repositorio>` (las notas de cada release traen el comando exacto).
+
+Las **actualizaciones automáticas** sí van firmadas, con la clave del proyecto: la app solo instala una versión nueva si la firma coincide.
 
 ## 2. Configura y vincula tus pilotos
 

@@ -1,5 +1,5 @@
 ---
-// Tabla de ítems: nombre, cantidad, ISK total y precio unitario
+// Items table: name, quantity, total ISK and unit price
 import { isk, iskFull } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
@@ -11,7 +11,7 @@ interface Props {
   iskLabel?: string;
   priceLabel?: string;
   empty?: string;
-  // Nota bajo la tabla (cómo se valora, p. ej.)
+  // Note under the table (how it is valued, e.g.)
   note?: string;
 }
 const lang = getLang(Astro);
@@ -82,7 +82,7 @@ const qty = new Intl.NumberFormat(lang);
 </section>
 
 <style>
-  /* La tarjeta es el contenedor: el precio unitario se oculta según su ancho, no el de la ventana */
+  /* The card is the container: the unit price hides based on its width, not the window's */
   .panel {
     container-type: inline-size;
   }
@@ -96,7 +96,7 @@ const qty = new Intl.NumberFormat(lang);
       padding-right: 22px;
     }
   }
-  /* Filas más compactas: 8 ítems ocupaban 400 px junto a una lista de 5 ubicaciones */
+  /* Tighter rows: 8 items took 400 px next to a list of 5 locations */
   table td {
     padding-block: 7px;
   }
@@ -132,7 +132,7 @@ const qty = new Intl.NumberFormat(lang);
     color: var(--text-muted);
     font-size: 13px;
   }
-  /* En móvil: sin precio unitario (queda en el tooltip del total) y celdas más compactas */
+  /* On mobile: no unit price (it stays in the total's tooltip) and tighter cells */
   @media (max-width: 480px) {
     th,
     td {

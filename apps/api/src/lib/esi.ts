@@ -3,10 +3,10 @@ import { getAccessToken } from './tokens';
 
 const BASE = 'https://esi.evetech.net';
 
-// Si quedan menos errores que esto en la ventana de ESI, pausamos hasta que se reinicie
+// If fewer errors than this remain in the ESI window, we pause until it resets
 const ERROR_LIMIT_FLOOR = 10;
 
-// Momento hasta el que no se debe llamar a ESI (compartido por todas las llamadas)
+// Time until which ESI must not be called (shared by all calls)
 let pausedUntil = 0;
 
 export class EsiError extends Error {
@@ -34,18 +34,18 @@ function pauseFor(seconds: number, reason: string) {
   }
 }
 
-// Lee los headers de límites de ESI y programa una pausa si hace falta
+// Reads ESI's limit headers and schedules a pause if needed
 function trackLimits(res: Response) {
   const h = res.headers;
 
-  // Límite de errores: X-ESI-Error-Limit-Remain / -Reset (420 al agotarlo)
+  // Error limit: X-ESI-Error-Limit-Remain / -Reset (420 when exhausted)
   const remain = headerSeconds(h, 'x-esi-error-limit-remain');
   const reset = headerSeconds(h, 'x-esi-error-limit-reset');
   if (reset !== undefined && (res.status === 420 || (remain !== undefined && remain < ERROR_LIMIT_FLOOR))) {
     pauseFor(reset, `límite de errores (quedan ${remain ?? 0})`);
   }
 
-  // Rate limit por grupo de rutas: 429 + Retry-After
+  // Rate limit per route group: 429 + Retry-After
   if (res.status === 429) pauseFor(headerSeconds(h, 'retry-after') ?? 60, 'rate limit 429');
 }
 
@@ -70,7 +70,7 @@ async function esiRequest<T>(
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const payload = body === undefined ? undefined : JSON.stringify(body);
 
-  // Como mucho un reintento, y solo tras esperar lo que pidió ESI (420/429)
+  // At most one retry, and only after waiting as long as ESI asked (420/429)
   for (let attempt = 0; ; attempt++) {
     await waitIfPaused();
     const res = await fetch(`${BASE}${path}`, { method, headers, body: payload });

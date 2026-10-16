@@ -1,7 +1,7 @@
-// Solo esta máquina (la misma regla que la API, apps/api/src/lib/local-only.ts): el dashboard muestra el wallet
-// sin login, así que una web que apunte su dominio a 127.0.0.1 (DNS rebinding) no debe poder leerlo con el
-// puerto fijo de la app de escritorio. Se rechaza cualquier Host que no sea local. ALLOWED_HOSTS (separados por
-// comas) añade nombres a mano. Los POST de otras webs ya los rechaza Astro (security.checkOrigin)
+// This machine only (same rule as the API, apps/api/src/lib/local-only.ts): the dashboard shows the wallet
+// without login, so a website pointing its domain at 127.0.0.1 (DNS rebinding) must not be able to read it via the
+// desktop app's fixed port. Any non-local Host is rejected. ALLOWED_HOSTS (comma-separated)
+// adds names manually. POSTs from other websites are already rejected by Astro (security.checkOrigin)
 const LOCAL = ['localhost', '127.0.0.1', '[::1]'];
 
 const hostname = (value: string) => {

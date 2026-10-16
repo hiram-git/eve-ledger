@@ -1,0 +1,36 @@
+name: Idea
+description: Something EVE Ledger could answer or do.
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: You can write in English, Spanish or German.
+  - type: textarea
+    id: question
+    attributes:
+      label: What do you want to know?
+      description: The question you'd like EVE Ledger to answer, in game terms. For example, "How much do my alts cost me each month?"
+    validations:
+      required: true
+  - type: dropdown
+    id: play
+    attributes:
+      label: How do you play?
+      multiple: true
+      options:
+        - Ratting / missions / PvE
+        - PvP
+        - Trading
+        - Industry / mining
+        - Hauling
+        - Several alts
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you work it out today?
+      description: A spreadsheet, another tool, in your head… and what bothers you about it.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: Optional. How you'd like it to look or work.

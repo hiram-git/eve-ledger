@@ -19,16 +19,16 @@ export const env = {
   esiCompatDate: Bun.env.ESI_COMPAT_DATE ?? '2025-12-16',
   esiUserAgent: Bun.env.ESI_USER_AGENT ?? 'eve-ledger/0.1',
   port: Number(Bun.env.PORT ?? 3000),
-  // Solo esta máquina: la API sirve el wallet sin login, no debe verse desde la red local
+  // This machine only: the API serves the wallet without login, it must not be visible from the local network
   host: Bun.env.HOST || '127.0.0.1',
-  // Dashboard (apps/web): el navegador vuelve ahí tras el login de EVE
+  // Dashboard (apps/web): the browser returns there after the EVE login
   webUrl: (Bun.env.WEB_URL ?? 'http://localhost:4321').replace(/\/$/, ''),
-  // App de escritorio: el login se abrió en el navegador del sistema; vuelve a ${WEB_URL}/vinculado (una página
-  // que dice el resultado y se intenta cerrar) en vez de a Pilotos, que ya se ve en la ventana de la app
+  // Desktop app: the login opened in the system browser; it returns to ${WEB_URL}/vinculado (a page
+  // that shows the result and tries to close itself) instead of Pilotos, which is already visible in the app window
   authDonePage: Bun.env.AUTH_DONE_PAGE === '1',
-  // Minutos entre syncs automáticos de todos los personajes (0 = desactivado)
+  // Minutes between automatic syncs of all characters (0 = disabled)
   syncIntervalMin: intOrDefault('SYNC_INTERVAL_MIN', 60),
-  // Indicador «Omega de todas las cuentas»: cuántas cuentas y PLEX por mes de Omega de cada una
+  // «Omega de todas las cuentas» indicator: how many accounts and PLEX per month of Omega for each
   omegaAccounts: intOrDefault('OMEGA_ACCOUNTS', 5),
   omegaPlexPerMonth: intOrDefault('OMEGA_PLEX_PER_MONTH', 500),
 };

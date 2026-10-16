@@ -1,11 +1,11 @@
-// Cuentas de skills: SP por nivel, prerrequisitos en cadena y tiempo de entrenamiento
+// Skill math: SP per level, chained prerequisites and training time
 import type { RequiredSkill } from '../db/schema';
 
-// Atributos de EVE por su id de dogma (lo que guardan primaryAttribute y secondaryAttribute de cada skill)
+// EVE attributes by their dogma id (what each skill's primaryAttribute and secondaryAttribute store)
 export const ATTRIBUTE_BY_ID = { 164: 'charisma', 165: 'intelligence', 166: 'memory', 167: 'perception', 168: 'willpower' } as const;
 export type Attributes = Record<(typeof ATTRIBUTE_BY_ID)[keyof typeof ATTRIBUTE_BY_ID], number>;
 
-// SP para tener una skill a un nivel: 250 × rango × √32^(nivel − 1) (nivel 5 de una de rango 1 = 256.000)
+// SP to have a skill at a level: 250 × rank × √32^(level − 1) (level 5 of a rank 1 skill = 256,000)
 export const spForLevel = (rank: number, level: number) => (level <= 0 ? 0 : Math.ceil(250 * rank * Math.pow(2, 2.5 * (level - 1))));
 
 export type SkillInfo = {
@@ -13,11 +13,11 @@ export type SkillInfo = {
   primaryAttr: number | null;
   secondaryAttr: number | null;
   required: RequiredSkill[];
-  // Solo Omega (un Alfa no puede entrenarla); null = no se sabe
+  // Omega only (an Alpha cannot train it); null = unknown
   omegaOnly?: boolean | null;
 };
 
-// Lo que pide un fit o un plan, con los prerrequisitos de cada skill (y los de esos) al nivel que piden
+// What a fit or plan requires, with each skill's prerequisites (and theirs) at the requested level
 export function withPrerequisites(targets: Iterable<RequiredSkill>, info: (skillId: number) => SkillInfo | undefined): Map<number, number> {
   const out = new Map<number, number>();
   const stack = [...targets];
@@ -41,12 +41,12 @@ export type MissingSkill = {
   active: number;
   trained: number;
   need: number;
-  // SP que faltan (0 si ya está entrenada pero un Alfa no puede usarla) y minutos de entrenamiento
+  // Missing SP (0 if already trained but an Alpha cannot use it) and training minutes
   sp: number | null;
   minutes: number | null;
-  // Entrenada a ese nivel, pero como Alfa no puede usarla (el tope de Alfa está por debajo)
+  // Trained to that level, but as an Alpha it cannot be used (the Alpha cap is below it)
   omegaOnly: boolean;
-  // Skill que un Alfa no puede entrenar en absoluto
+  // Skill an Alpha cannot train at all
   omegaSkill: boolean;
 };
 
@@ -54,16 +54,16 @@ export type Evaluation = {
   missing: MissingSkill[];
   missingSp: number | null;
   minutes: number | null;
-  // SP que pide el conjunto y SP que ya tiene de ellos: el progreso de un plan
+  // SP the set requires and SP already held of them: a plan's progress
   targetSp: number | null;
   haveSp: number | null;
-  // Le falta solo ser Omega: tiene entrenado todo, pero como Alfa no puede usarlo
+  // Only missing Omega: everything is trained, but as an Alpha it cannot be used
   needsOmega: boolean;
-  // Un Alfa no puede volarlo: le falta una skill solo Omega o un nivel por encima de su tope
+  // An Alpha cannot fly it: missing an Omega-only skill or a level above its cap
   alphaBlocked: boolean;
 };
 
-// SP por minuto en una skill: primario + secundario / 2; un Alfa, la mitad
+// SP per minute in a skill: primary + secondary / 2; an Alpha, half that
 export function spPerMinute(info: SkillInfo | undefined, pilot: PilotSkills): number | null {
   if (!info?.primaryAttr || !info.secondaryAttr || !pilot.attributes) return null;
   const a = pilot.attributes[ATTRIBUTE_BY_ID[info.primaryAttr as keyof typeof ATTRIBUTE_BY_ID]];

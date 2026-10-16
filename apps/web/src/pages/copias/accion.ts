@@ -2,8 +2,8 @@ import type { APIRoute } from 'astro';
 import { ActionError, BACKUP_NAME, createBackup, restoreBackup, restoreUpload } from '../../lib/api';
 import { safeBackUrl } from '../../lib/safe-back';
 
-// Copias de seguridad (panel de Pilotos): hacer una ahora, restaurar una guardada o un archivo subido. Vuelve a
-// Pilotos con el resultado en la query y el ancla del panel, donde se pinta el aviso
+// Backups (Pilotos panel): make one now, restore a stored one or an uploaded file. Returns to
+// Pilotos with the result in the query and the panel's anchor, where the notice is rendered
 export const POST: APIRoute = async ({ request, redirect }) => {
   const form = await request.formData();
   const back = safeBackUrl('/pilotos');

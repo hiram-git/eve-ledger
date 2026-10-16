@@ -1,14 +1,14 @@
 ---
-// Columnas divergentes por día: ingresos hacia arriba, gastos hacia abajo, un solo eje
+// Diverging columns per day: income upward, expenses downward, a single axis
 import type { Summary } from '../lib/api';
 import { isk, iskFull, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 interface Props {
   daily: Summary['daily'];
-  // Primer día con historial (YYYY-MM-DD): lo anterior no es «cero», es «sin datos»
+  // First day with history (YYYY-MM-DD): anything before it isn't «cero», it's «sin datos»
   firstDate?: string | null;
-  // Día del último sync de un piloto atascado (YYYY-MM-DD): lo posterior tampoco es «cero»
+  // Day of a stuck pilot's last sync (YYYY-MM-DD): anything after it isn't «cero» either
   lastDate?: string | null;
 }
 const { daily, firstDate, lastDate } = Astro.props;
@@ -17,7 +17,7 @@ const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const date = (iso: string) => shortDate(iso, lang);
-// Gasto con signo, sin «−0» en los días sin gastos
+// Signed expense, without «−0» on days with no expenses
 const out = (v: number) => (v ? -v : 0);
 
 const missing = firstDate ? daily.filter((d) => d.date < firstDate).length : 0;
@@ -32,8 +32,8 @@ function niceStep(range: number, count = 4) {
   return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
 }
 
-// El eje cubre también el punto del neto (hoy siempre está entre las dos barras; antes, en la vista de un piloto,
-// incluía lo movido con tus otros pilotos y un día que recibió 6 B dejaba el punto fuera del gráfico)
+// The axis also covers the net dot (now it's always between the two bars; before, in a pilot's view, it
+// included transfers with your other pilots and a day that received 6 B left the dot outside the chart)
 const maxIn = Math.max(0, ...daily.map((d) => Math.max(d.income, d.net)));
 const maxOut = Math.max(0, ...daily.map((d) => Math.max(d.expenses, -d.net)));
 const step = niceStep(maxIn + maxOut, 8);
@@ -41,33 +41,33 @@ const top = Math.max(step, Math.ceil(maxIn / step) * step);
 const bottom = Math.ceil(maxOut / step) * step;
 const span = top + bottom;
 const pct = (v: number) => (v / span) * 100;
-const zero = pct(bottom); // altura de la línea base desde abajo, en %
+const zero = pct(bottom); // baseline height from the bottom, in %
 
 const ticks: number[] = [];
 for (let v = -bottom; v <= top + step / 2; v += step) ticks.push(Math.round(v));
 
-// Etiquetas del eje en una sola unidad y con los mismos decimales (antes se mezclaban «50,0 M», «150 M» y «0»)
+// Axis labels in a single unit and with the same decimals (before, «50,0 M», «150 M» and «0» were mixed)
 const axisMax = Math.max(top, bottom);
 const [unit, suffix] = axisMax >= 1e9 ? [1e9, ' B'] : axisMax >= 1e6 ? [1e6, ' M'] : axisMax >= 1e3 ? [1e3, ' k'] : [1, ''];
 const axisDigits = Number.isInteger(step / unit) ? 0 : 1;
 const axisNum = new Intl.NumberFormat(lang, { minimumFractionDigits: axisDigits, maximumFractionDigits: axisDigits });
 const axisLabel = (v: number) => (v === 0 ? '0' : `${v < 0 ? '−' : ''}${axisNum.format(Math.abs(v) / unit)}${suffix}`);
 
-// Etiquetas del eje X: primera, última y una por semana
+// X-axis labels: first, last and one per week
 const labelEvery = daily.length > 14 ? 7 : daily.length > 7 ? 2 : 1;
 const showLabel = (i: number) => i === daily.length - 1 || (daily.length - 1 - i) % labelEvery === 0;
 
-// Una sola parada de Tab (roving tabindex): entra por el último día con movimientos y se recorre con las flechas
+// A single Tab stop (roving tabindex): enters on the last day with entries and is navigated with the arrow keys
 const hintId = 'daily-chart-hint';
 const hasActivity = (d: (typeof daily)[number]) => d.income > 0 || d.expenses > 0;
 const lastActive = daily.reduce((last, d, i) => (known(i) && hasActivity(d) ? i : last), -1);
 const entry = lastActive >= 0 ? lastActive : Math.max(missing, daily.length - 1 - trailing);
-// Cifras abreviadas (k/M/B) en el tooltip y para el lector de pantalla; las completas están en la tabla
+// Abbreviated figures (k/M/B) in the tooltip and for screen readers; the full ones are in the table
 const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
-// Tabla: cifra completa sin repetir «ISK» en cada celda (la unidad va en el encabezado)
+// Table: full figure without repeating «ISK» in every cell (the unit goes in the header)
 const wholeIsk = new Intl.NumberFormat(lang, { maximumFractionDigits: 0 });
 const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
-// PLEX (coste de las cuentas, aparte del resultado de juego): la parte de la barra que es PLEX va rayada
+// PLEX (account cost, separate from the game result): the part of the bar that is PLEX is hatched
 const hasPlex = daily.some((d) => Math.abs(d.accounts ?? 0) >= 0.5);
 const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part) / whole) * 100);
 ---
@@ -97,7 +97,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     {
       missing > 0 && (
         <div class="nodata-band" style={`width:${(missing / daily.length) * 100}%`}>
-          {/* Con pocos días la franja es estrecha: la etiqueta solo si cabe (si no, se leía «Sin h») */}
+          {/* With few days the band is narrow: the label only if it fits (otherwise it read «Sin h») */}
           {missing / daily.length >= 0.15 && <span>{m.noHistory}</span>}
         </div>
       )
@@ -105,7 +105,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     {
       trailing > 0 && (
         <div class="nodata-band after" style={`width:${(trailing / daily.length) * 100}%`}>
-          {/* Con pocos días la franja es estrecha: la etiqueta solo si cabe */}
+          {/* With few days the band is narrow: the label only if it fits */}
           {trailing / daily.length >= 0.15 && <span>{m.noSyncData}</span>}
         </div>
       )
@@ -140,9 +140,9 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
                 {d.accounts < 0 && <i class="plex-part bottom" style={`height:${plexShare(d.accounts, d.expenses)}%`} />}
               </div>
             )}
-            {/* Neto del día: un punto neutro sobre el eje; la barra sola no dice si el día cerró en positivo o en negativo */}
+            {/* Day's net: a neutral dot on the axis; the bar alone doesn't say whether the day closed positive or negative */}
             {hasActivity(d) && <i class="net-mark" aria-hidden="true" style={`bottom:${pct(d.net + bottom)}%`} />}
-            {/* Día sin movimientos: una marca corta en el eje; los días anteriores al historial van rayados */}
+            {/* Day with no entries: a short tick on the axis; days before the history are hatched */}
             {!hasActivity(d) && <i class="zero-mark" aria-hidden="true" style={`bottom:${zero}%`} />}
           </div>
           )
@@ -153,12 +153,12 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   <div class="x-axis" aria-hidden="true">
     {
       daily.map((d, i) => (
-        // data-k: pasos de etiqueta desde el último día (0 = el último); el script omite los impares si no caben
+        // data-k: label steps from the last day (0 = the last); the script skips the odd ones if they don't fit
         <span data-k={showLabel(i) ? (daily.length - 1 - i) / labelEvery : undefined}>{showLabel(i) ? date(d.date) : ''}</span>
       ))
     }
   </div>
-  <!-- Visual: el lector de pantalla ya lee la etiqueta del día enfocado -->
+  <!-- Visual: the screen reader already reads the focused day's label -->
   <div class="tooltip" aria-hidden="true" hidden></div>
   <p class="hint" id={hintId}>{m.chartHint}</p>
 </div>
@@ -204,7 +204,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
         <span><i class="key expenses"></i>${l.lExpenses}</span><b>${expenses}</b>
         <span>${l.lNet}</span><b>${net}</b>${plex ? `<span><i class="key plex"></i>${l.lPlex}</span><b>${plex}</b>` : ''}`;
       tip.hidden = false;
-      // Al lado de la columna (derecha si cabe, si no izquierda) para no tapar sus barras
+      // Next to the column (right if it fits, otherwise left) so it doesn't cover its bars
       const c = chart.getBoundingClientRect();
       const r = col.getBoundingClientRect();
       const right = r.right - c.left + 8;
@@ -212,7 +212,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
       tip.style.left = `${left}px`;
     };
     const hide = () => (tip.hidden = true);
-    // Etiquetas del eje X: si la cadencia deja menos de ~64 px por etiqueta (móvil, 90 días), muestra una de cada n
+    // X-axis labels: if the cadence leaves less than ~64 px per label (mobile, 90 days), show one in every n
     const axis = chart.querySelector<HTMLElement>('.x-axis')!;
     const labelled = [...axis.querySelectorAll<HTMLElement>('span[data-k]')];
     const fitLabels = () => {
@@ -232,7 +232,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     for (const col of cols) {
       col.addEventListener('pointerenter', () => show(col));
       col.addEventListener('focus', () => show(col));
-      // Un clic también mueve la parada de Tab a ese día
+      // A click also moves the Tab stop to that day
       col.addEventListener('pointerdown', () => {
         for (const c of cols) c.tabIndex = c === col ? 0 : -1;
       });
@@ -282,7 +282,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   :global(.key.expenses) {
     background: var(--expenses);
   }
-  /* Neto: punto en el color del texto, no en el de ingresos ni gastos */
+  /* Net: dot in the text color, not the income or expenses color */
   :global(.key.net) {
     width: 8px;
     height: 8px;
@@ -292,7 +292,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
 
   .chart {
     position: relative;
-    /* Margen para que la última etiqueta, centrada bajo su columna, no se recorte en el borde del panel */
+    /* Margin so the last label, centered under its column, isn't clipped at the panel edge */
     padding-right: 8px;
     display: grid;
     grid-template-columns: auto 1fr;
@@ -300,7 +300,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     column-gap: 8px;
   }
   @media (max-width: 600px) {
-    /* La última etiqueta de 7 caracteres sobresale ~23 px por la derecha de la columna: margen para que no toque el borde */
+    /* The last 7-character label sticks out ~23 px to the right of the column: margin so it doesn't touch the edge */
     .chart {
       padding-right: 22px;
     }
@@ -344,12 +344,12 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   .col:focus-visible {
     background: linear-gradient(180deg, transparent, #61cce524 50%, transparent);
   }
-  /* Anillo de foco de 2 px dentro de la columna (sin desplazamiento: las columnas están pegadas) */
+  /* 2 px focus ring inside the column (no offset: the columns are adjacent) */
   .col:focus-visible {
     outline: 2px solid var(--cyan);
     outline-offset: -1px;
   }
-  /* Día sin movimientos: una marca corta en el eje */
+  /* Day with no entries: a short tick on the axis */
   .zero-mark {
     position: absolute;
     left: 25%;
@@ -359,8 +359,8 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     border-radius: 1px;
     background: var(--text-muted);
   }
-  /* Días sin datos (antes del primer sync o después del último de un piloto atascado): textura diagonal,
-     sin barras ni tooltip */
+  /* Days without data (before the first sync or after a stuck pilot's last one): diagonal texture,
+     no bars or tooltip */
   .nodata-band {
     position: absolute;
     inset: 0 auto 0 0;
@@ -392,7 +392,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     transform: translateX(-50%);
     border-radius: 50%;
     background: var(--text);
-    /* Anillo del color del panel para separarlo de la barra que cruza */
+    /* Ring in the panel color to separate it from the bar it crosses */
     box-shadow: 0 0 0 2px #0f1822;
     pointer-events: none;
   }
@@ -411,7 +411,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     background: var(--expenses);
     border-radius: 0 0 4px 4px;
   }
-  /* La parte de la barra que es PLEX: rayada sobre el color de la barra (sigue siendo ingreso o gasto) */
+  /* The part of the bar that is PLEX: hatched over the bar color (it's still income or expense) */
   .plex-part {
     position: absolute;
     left: 0;
@@ -445,7 +445,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     display: flex;
     justify-content: center;
   }
-  /* Etiquetas que no caben en el ancho disponible: las omite el script, sin cambiar la cadencia del resto */
+  /* Labels that don't fit the available width: the script skips them without changing the others' cadence */
   .x-axis span.skip {
     visibility: hidden;
   }
@@ -486,7 +486,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   .tooltip[hidden] {
     display: none;
   }
-  /* La pista de teclado solo se ve mientras el gráfico tiene el foco */
+  /* The keyboard hint is only visible while the chart has focus */
   .hint {
     grid-column: 2;
     margin: 8px 0 0;

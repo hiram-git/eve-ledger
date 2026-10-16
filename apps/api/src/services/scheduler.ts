@@ -5,7 +5,7 @@ import { env } from '../lib/env';
 import { maybeAutoBackup } from './backups';
 import { syncAll } from './sync';
 
-// Margen al arrancar para no sincronizar en mitad del arranque (o de cada recarga de `bun --watch`)
+// Startup delay so as not to sync in the middle of starting up (or of each `bun --watch` reload)
 const STARTUP_DELAY_MS = 15_000;
 
 type LastRun = { startedAt: Date; finishedAt: Date; inserted: number; errors: number; characters: number };
@@ -27,7 +27,7 @@ function schedule(at: number) {
 }
 
 async function run() {
-  // Siguiente ejecución contada desde el inicio de esta: cada N minutos exactos, sin solaparse
+  // Next run counted from the start of this one: every N minutes exactly, without overlapping
   const startedAt = new Date();
   state.running = true;
   state.nextRunAt = undefined;
@@ -50,7 +50,7 @@ async function run() {
   } finally {
     state.running = false;
     schedule(startedAt.getTime() + intervalMs());
-    // Con los datos de esta ronda ya guardados
+    // With this round's data already stored
     maybeAutoBackup();
   }
 }
@@ -61,8 +61,8 @@ export async function startScheduler() {
     return;
   }
 
-  // Si la API se reinicia, continuar el ritmo según el último sync registrado
-  // en vez de volver a llamar a ESI en cada arranque
+  // If the API restarts, keep the pace according to the last logged sync
+  // instead of calling ESI again on every startup
   const [last] = await db.select({ startedAt: syncLog.startedAt }).from(syncLog).orderBy(desc(syncLog.id)).limit(1);
   const dueAt = last ? last.startedAt.getTime() + intervalMs() : 0;
   schedule(Math.max(Date.now() + STARTUP_DELAY_MS, dueAt));

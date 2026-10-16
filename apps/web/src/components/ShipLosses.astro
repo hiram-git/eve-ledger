@@ -1,10 +1,10 @@
 ---
-// Naves perdidas del período y lo que costaron. La nave se pagó al comprarla: perderla no mueve el wallet.
-// Lo que lo mueve, por pérdida: el seguro (+), reponer casco y equipo (−, lo compre el piloto que sea) y el courier
-// que lo lleva (−); todo eso está en el neto, en PvP. Lo que no volvió (ventana cerrada) es patrimonio perdido.
-// La cifra titular es lo firme (suma de las filas); lo que falta por reponer con la ventana abierta es una
-// estimación al precio medio y va aparte, en gris y con «~»: el verde/rojo solo para lo que ya no puede cambiar.
-// En la vista de un piloto son SUS naves (las pague quien las pague); su wallet va como línea secundaria
+// Ships lost in the period and what they cost. The ship was paid for when bought: losing it doesn't move the wallet.
+// What moves it, per loss: the insurance (+), replacing hull and fitting (−, whichever pilot buys it) and the courier
+// that carries it (−); all of that is in the net, in PvP. What didn't come back (window closed) is lost net worth.
+// The headline figure is the firm part (sum of the rows); what's still to replace with the window open is an
+// estimate at the average price and goes separately, in grey and with «~»: green/red only for what can no longer change.
+// In a pilot's view these are THEIR ships (whoever pays for them); their wallet goes as a secondary line
 import type { Losses } from '../lib/api';
 import Donut from './Donut.astro';
 import { isk, iskFull, remaining, shortDate, shortDateTime } from '../lib/format';
@@ -14,7 +14,7 @@ import { fold } from '../lib/shares';
 interface Props {
   losses: Losses;
   days: number;
-  // Vista de un piloto: su nombre (la fila no repite quién la perdió)
+  // Pilot view: their name (the row doesn't repeat who lost it)
   pilotName?: string;
 }
 const { losses, days, pilotName } = Astro.props;
@@ -23,7 +23,7 @@ const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 const fullNet = (v: number) => iskFull(v, lang, true);
-// «25 sept, 09:47» y «sin seguro» no se parten entre líneas
+// «25 sept, 09:47» and «sin seguro» don't break across lines
 const nbsp = (text: string) => text.replace(/ /g, ' ');
 const when = (iso: string) => nbsp(shortDateTime(iso, lang));
 const day = (iso: string) => nbsp(shortDate(iso, lang));
@@ -31,15 +31,15 @@ const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 const tot = losses.totals;
 type Loss = Losses['losses'][number];
 
-// Sin permiso de killmails en ningún piloto de la vista: no se sabe nada de sus pérdidas (no es «cero pérdidas»)
+// No killmails permission on any pilot in the view: nothing is known about their losses (it isn't «zero losses»)
 const noScope = losses.pilots > 0 && losses.missingScope.length === losses.pilots;
 const missingNames = losses.missingScope.map((p) => p.name).join(', ');
 const noContracts = losses.missingContracts.map((p) => p.name).join(', ');
-// Los mismos pilotos sin killmails ni contratos: una sola frase, no los mismos nombres dos veces
+// The same pilots without killmails or contracts: a single sentence, not the same names twice
 const sameMissing = !!missingNames && missingNames === noContracts;
-// «Amamake 0.4»: la seguridad del sistema, como en el juego
+// «Amamake 0.4»: the system's security, as in the game
 const where = (l: Loss) => [l.system ?? `#${l.systemId}`, l.security === null ? null : l.security.toFixed(1)].filter(Boolean).join('\u00a0');
-// Lo que falta, por partes: «casco ~124 M y equipo ~34,7 M» (la carga no es equipo: el Iteron llevaba MTUs)
+// What's missing, by part: «casco ~124 M y equipo ~34,7 M» (cargo isn't fitting: the Iteron carried MTUs)
 const listFmt = new Intl.ListFormat(lang, { style: 'long', type: 'conjunction' });
 const missingList = (l: Loss, estimate: boolean) => {
   const v = (x: number) => nbsp(`${estimate ? '~' : ''}${fmt(x)}`);
@@ -51,9 +51,9 @@ const missingList = (l: Loss, estimate: boolean) => {
     ].filter((p): p is string => !!p),
   );
 };
-// Las cápsulas no se pueden asegurar: «sin seguro» solo donde podía haberlo
+// Capsules can't be insured: «sin seguro» only where there could have been insurance
 const CAPSULES = new Set([670, 33328]);
-// El porqué de cada fila, en palabras que no se contradicen: qué se repuso (y con qué), qué falta, el courier, el seguro
+// The why of each row, in words that don't contradict each other: what was replaced (and with what), what's missing, the courier, the insurance
 const status = (l: Loss) => {
   const who = l.replacedBy?.name ?? '?';
   const left = nbsp(remaining(l.windowEndsAt, lang));
@@ -70,13 +70,13 @@ const status = (l: Loss) => {
     l.courier?.by ? m.lossCourier(l.courier.by) : null,
     l.insurance || l.trivial || CAPSULES.has(l.shipTypeId) ? null : m.lossNoInsurance,
   ];
-  // Los fragmentos cortos no se parten («sin seguro», «faltan 27 h»)
+  // Short fragments don't break («sin seguro», «faltan 27 h»)
   return parts
     .filter((p): p is string => !!p)
     .map((p) => (p.length <= 32 ? nbsp(p) : p))
     .join(' · ');
 };
-// Las pérdidas de menos de 1 M (cápsulas, naves de iniciación) se pliegan en una fila: siguen en los totales
+// Losses under 1 M (capsules, starter ships) are folded into one row: they're still in the totals
 const shown = losses.losses.filter((l) => !l.trivial);
 const folded = losses.losses.filter((l) => l.trivial);
 const foldedCount = new Map<string, number>();
@@ -84,7 +84,7 @@ for (const l of folded) foldedCount.set(l.ship ?? `#${l.shipTypeId}`, (foldedCou
 const foldedList = [...foldedCount]
   .map(([ship, n]) => (n > 1 ? `${ship} ×${n}` : ship))
   .join(', ');
-// Eventos: pérdidas en el mismo sistema con menos de 15 min entre una y la siguiente (una emboscada, una flota)
+// Events: losses in the same system with less than 15 min between one and the next (an ambush, a fleet)
 const EVENT_GAP_MS = 15 * 60_000;
 const groups: Loss[][] = [];
 for (const l of shown) {
@@ -105,8 +105,8 @@ const eventHead = (g: Loss[]) => {
     estimate,
   };
 };
-// De dónde sale el coste: valores en positivo, el operador en su columna (el lector oye «más»/«menos»), sin
-// filas a cero, y la cuenta cierra en «= Te costaron» (lo firme). Lo que falta por reponer va después, en gris
+// Where the cost comes from: values as positives, the operator in its own column (the reader hears «más»/«menos»), no
+// zero rows, and the sum closes on «= Te costaron» (the firm part). What's still to replace goes after, in grey
 const parts = [
   { label: m.lossesInsurance, op: '+', word: m.opPlus, value: tot.insurance },
   { label: m.lossesReplacement, op: '−', word: m.opMinus, value: tot.replacement },
@@ -115,12 +115,12 @@ const parts = [
 ].filter((p) => Math.abs(p.value) >= 0.5);
 const firm = tot.firmCost;
 const pending = tot.toReplace >= 0.5 ? tot.toReplace : 0;
-// Todo estimado (solo pérdidas con la ventana abierta y nada repuesto aún): la cifra es la estimación, en gris
+// All estimated (only losses with the window open and nothing replaced yet): the figure is the estimate, in grey
 const onlyEstimate = parts.length === 0 && pending > 0;
 const headValue = onlyEstimate ? -pending : firm;
-// Cifras estimadas: «~» delante (con un espacio fino: «~−» se leía como «~~») y «estimado» para el lector
+// Estimated figures: «~» in front (with a thin space: «~−» read as «~~») and «estimado» for the screen reader
 const approx = (v: number) => `~\u2009${fmt(v, { sign: true })}`;
-// Vista de un piloto: por dónde pasó el dinero (su wallet, quién pagó por sus naves, qué pagó él por las de otros)
+// Pilot view: where the money went (their wallet, who paid for their ships, what they paid for others')
 const own = losses.ownWallet;
 const ownLine =
   pilotName && own
@@ -136,7 +136,7 @@ const ownLine =
         : '') +
       '.'
     : null;
-// Una sola línea de cobertura: de quién faltan pérdidas (y couriers) y las primas, aparte de la cuenta y de quién son
+// A single coverage line: whose losses (and couriers) are missing, and the premiums, separate from the sum and whose they are
 const coverage = [
   !noScope && losses.missingScope.length > 0 ? (sameMissing ? m.lossesMissingBoth(missingNames) : m.lossesMissing(missingNames)) : null,
   tot.premiums > 0 ? (pilotName ? m.lossesPremiumsPilot(pilotName, fmt(tot.premiums)) : m.lossesPremiums(fmt(tot.premiums))) : null,
@@ -145,8 +145,8 @@ const coverage = [
   .filter(Boolean)
   .join(' ');
 const notes = coverage ? [coverage] : [];
-// Tortas: a quién y a qué nave se fue el coste (lo que te costó cada pérdida, con lo estimado por reponer; una
-// pérdida que el seguro dejó en positivo cuenta 0). De mayor a menor, 6 + «Otros». Por piloto solo en el consolidado
+// Donuts: which pilot and which ship the cost went to (what each loss cost you, with the estimate still to replace; a
+// loss the insurance left positive counts as 0). Largest to smallest, 6 + «Otros». By pilot only in the consolidated view
 const costOf = (l: Loss) => Math.max(0, -l.cost);
 const sumBy = (key: (l: Loss) => string) => {
   const acc = new Map<string, { label: string; value: number; count: number }>();
@@ -170,13 +170,13 @@ const pilotSlices = byPilot.length > 1 ? foldCount(byPilot, m.otherPilots) : [];
 const shipSlices = byShip.length > 1 ? foldCount(byShip, m.otherShips) : [];
 const costTotal = losses.losses.reduce((n, l) => n + costOf(l), 0);
 const shareCaption = (label: string) => (tot.toReplace >= 0.5 ? `${label} (${m.shareCostEstimate})` : label);
-// Vista de un piloto que no perdió nada pero pagó la reposición de otro (el alter de Jita): también hay cuenta
+// View of a pilot who lost nothing but paid for someone else's replacement (the Jita alt): there's a sum too
 const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
 ---
 
 {
   noScope ? (
-    /* Sin permiso: una franja compacta, no un panel entero para una frase */
+    /* No permission: a compact strip, not a whole panel for one sentence */
     <section class="panel losses compact" id="perdidas" aria-labelledby="losses-title">
       <div class="panel-heading">
         <h2 id="losses-title">{m.lossesPeriod(days)}</h2>
@@ -204,7 +204,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
       </div>
       <div class="panel-body losses-head">
         <div class="effect">
-          {/* La respuesta a «¿cuánto me costó perderlas?»: lo del wallet y además lo que no volvió */}
+          {/* The answer to «how much did losing them cost me?»: the wallet part plus what didn't come back */}
           <h3 class="label" id="losses-cost">{pilotName ? m.lossesCostPilot(pilotName) : m.lossesCost}</h3>
           <span class:list={['value', onlyEstimate ? 'estimate' : sign(headValue)]} title={fullNet(headValue)}>
             {onlyEstimate ? approx(headValue) : fmt(headValue, { sign: true })}
@@ -309,7 +309,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
             return (
               <tbody class:list={{ event: !!head }}>
                 {head && (
-                  /* Varias pérdidas juntas (mismo sistema, minutos): una cabecera con lo que costó el evento */
+                  /* Several losses together (same system, minutes apart): a header with what the event cost */
                   <tr class="event-head">
                     <th colspan="7" scope="colgroup">
                       <span>{head.text}</span>
@@ -323,7 +323,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                 )}
                 {g.map((l) => (
                   <tr>
-                    {/* El nombre de la fila es solo la nave: el lector no repite metadatos y estado en cada celda */}
+                    {/* The row name is only the ship: the screen reader doesn't repeat metadata and state in every cell */}
                     <th scope="row" aria-labelledby={`loss-${l.killmailId}`}>
                       <span class="ship" id={`loss-${l.killmailId}`}>{l.ship ?? `#${l.shipTypeId}`}</span>
                       <span class="meta">
@@ -337,7 +337,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                       </span>
                       <span class="status">{status(l)}</span>
                     </th>
-                    {/* Sin dato: «—» en la tabla; en la tarjeta móvil la celda desaparece (.empty) */}
+                    {/* No data: «—» in the table; in the mobile card the cell disappears (.empty) */}
                     <td data-label={m.lossInsurance} class:list={{ empty: !l.insurance }} title={l.insurance ? full(l.insurance) : undefined}>
                       {l.insurance ? fmt(l.insurance, { sign: true }) : '—'}
                     </td>
@@ -350,7 +350,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                     <td data-label={m.lossWallet} class:list={{ empty: !l.walletEffect }} title={`${m.lossWalletTitle}: ${fullNet(l.walletEffect)}`}>
                       {l.walletEffect ? fmt(l.walletEffect, { sign: true }) : '—'}
                     </td>
-                    {/* Lo que no volvió (firme) o lo que falta por reponer (estimado, en gris con «~») */}
+                    {/* What didn't come back (firm) or what's still to replace (estimated, in grey with «~») */}
                     <td
                       data-label={m.lossNotBack}
                       class:list={{ empty: !l.toReplace, estimate: l.state === 'pending' }}
@@ -359,7 +359,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                       {l.toReplace ? (l.state === 'pending' ? approx(-l.toReplace) : fmt(-l.toReplace)) : '—'}
                       {l.toReplace > 0 && l.state === 'pending' && <span class="sr-only"> ({m.lossEstimate})</span>}
                     </td>
-                    {/* Lo que te costó (Wallet − No volvió): con su signo si es firme; en gris con «~» mientras falte reponer */}
+                    {/* What it cost you (Wallet − No volvió): with its sign if firm; in grey with «~» while replacement is pending */}
                     <td
                       data-label={m.lossCost}
                       class:list={['total', l.state === 'pending' ? 'estimate' : sign(l.cost)]}
@@ -399,11 +399,11 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
 }
 
 <style>
-  /* Los enlaces «Ver» del vistazo saltan aquí: que el título no quede pegado al borde */
+  /* The glance's «Ver» links jump here: keep the title off the edge */
   .losses {
     scroll-margin-top: 16px;
   }
-  /* Sin permiso o sin pérdidas: el panel es una franja con su frase */
+  /* No permission or no losses: the panel is a strip with its sentence */
   .compact .panel-heading {
     flex-wrap: wrap;
     gap: 4px 16px;
@@ -419,7 +419,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
     border-top: 0;
     padding-top: 0;
   }
-  /* El efecto en el wallet (lo que preguntas) a la izquierda y grande; de dónde sale, a la derecha */
+  /* The wallet effect (what you ask) on the left and large; where it comes from, on the right */
   .losses-head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
@@ -447,7 +447,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
   .effect .value.neg {
     color: var(--critical);
   }
-  /* Todo estimado: la cifra aún puede cambiar, en gris */
+  /* All estimated: the figure can still change, in grey */
   .effect .value.estimate {
     color: var(--text-muted);
   }
@@ -505,12 +505,12 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
   .breakdown td:last-child {
     padding-left: 10px;
   }
-  /* Lo que falta por reponer es una estimación (precio medio): en gris */
+  /* What's still to replace is an estimate (average price): in grey */
   .breakdown tr.estimate th,
   .breakdown tr.estimate td {
     color: var(--text-muted);
   }
-  /* La fila «=»: el resultado de la cuenta, con su signo */
+  /* The «=» row: the result of the sum, with its sign */
   .breakdown tr.equals th,
   .breakdown tr.equals td {
     border-top-color: var(--line-strong);
@@ -552,7 +552,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
   .loss-table td {
     border-bottom: 1px solid var(--line);
   }
-  /* La última fila cierra en la nota de abajo: sin línea propia (antes solo la llevaba la celda de la nave) */
+  /* The last row closes on the note below: no line of its own (it used to be only on the ship cell) */
   .loss-table tbody tr:last-child > * {
     border-bottom: 0;
   }
@@ -568,7 +568,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
     color: var(--text);
     white-space: nowrap;
   }
-  /* El signo del total de cada nave, como el del neto (más específico que la regla de la tabla) */
+  /* The sign of each ship's total, like the net's (more specific than the table rule) */
   .loss-table td.total.pos {
     color: var(--positive);
   }
@@ -579,7 +579,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
   .loss-table td.estimate {
     color: var(--text-muted);
   }
-  /* Cabecera de un evento (varias pérdidas en minutos en el mismo sistema) y fila de pérdidas menores */
+  /* Event header (several losses within minutes in the same system) and minor-losses row */
   .loss-table tr.event-head th {
     padding-top: 12px;
     padding-bottom: 8px;
@@ -644,7 +644,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
       grid-template-columns: 1fr;
     }
   }
-  /* Móvil: cada pérdida es una tarjeta con la nave y su total arriba (la respuesta), el desglose debajo */
+  /* Mobile: each loss is a card with the ship and its total at the top (the answer), the breakdown below */
   @media (max-width: 600px) {
     .loss-table thead {
       display: none;
@@ -678,7 +678,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
     .loss-table td.total::before {
       text-align: right;
     }
-    /* Sin dato, en la tarjeta no se pinta un «—» con su etiqueta */
+    /* No data: the card doesn't paint a «—» with its label */
     .loss-table td.empty {
       display: none;
     }

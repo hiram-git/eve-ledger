@@ -5,11 +5,11 @@ import { EsiError, esiGet } from '../lib/esi';
 
 type EsiType = { type_id: number; group_id: number; market_group_id?: number };
 
-// Consultas por sync: el resto llega en el siguiente (los tipos no cambian)
+// Lookups per sync: the rest come on the next one (types don't change)
 const MAX_LOOKUPS = 200;
 
-// Pide a ESI el grupo de mercado de los tipos que pueden reponer una nave perdida: los de las pérdidas de tus
-// pilotos (casco y equipo) y los que tus pilotos compran en el mercado. Devuelve cuántos se añadieron
+// Asks ESI for the market group of the types that can replace a lost ship: those from your pilots' losses
+// (hull and equipment) and those your pilots buy on the market. Returns how many were added
 export async function resolvePendingTypes(): Promise<number> {
   const known = new Set((await db.select({ id: types.typeId }).from(types)).map((r) => r.id));
   const wanted = new Set<number>();
