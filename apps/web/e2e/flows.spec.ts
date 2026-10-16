@@ -153,6 +153,42 @@ test('Descuentos: impuesto de corporación exacto y penalización de incursión 
   await expect(systems.getByRole('rowheader', { name: /Kamela/ }).getByText('incursión')).toBeVisible();
 });
 
+test('Doctrinas: renombrar una doctrina y plegarla; el pliegue se recuerda', async ({ page, request }) => {
+  const { id } = await (await request.post(`${API_URL}/doctrines`, { data: { name: 'Nombre equivocado' } })).json();
+  try {
+    await page.goto('/doctrinas');
+    const doc = page.locator(`#doctrina-${id}`);
+    await expect(doc.getByRole('heading', { level: 2, name: 'Nombre equivocado' })).toBeVisible();
+    await expect(doc.locator('.doctrine-meta')).toHaveText('Sin fits');
+    // Renombrar sin borrar: el campo aparece en el propio panel con el nombre actual
+    await doc.locator('details.rename > summary').click();
+    const input = doc.getByLabel('Nuevo nombre de «Nombre equivocado»');
+    await expect(input).toHaveValue('Nombre equivocado');
+    await input.fill('Beehive');
+    await input.press('Enter');
+    await expect(page.locator(`#doctrina-${id}`).getByRole('heading', { level: 2, name: 'Beehive' })).toBeVisible();
+    await expect(page.getByText('Doctrina renombrada: «Beehive».')).toBeVisible();
+    const api = await (await request.get(`${API_URL}/doctrines`)).json();
+    expect(api.doctrines.find((d: { id: number }) => d.id === id).name).toBe('Beehive');
+    // Plegar: el cuerpo se oculta, el título sigue a la vista y la elección sobrevive a una recarga
+    await page.goto('/doctrinas');
+    const fold = page.locator(`#doctrina-${id} details.doctrine-fold`);
+    await expect(fold).toHaveJSProperty('open', true);
+    await fold.locator('> summary').click();
+    await expect(fold).toHaveJSProperty('open', false);
+    await expect(page.locator(`#doctrina-${id} .add-fit`)).toBeHidden();
+    await page.reload();
+    await expect(page.locator(`#doctrina-${id} details.doctrine-fold`)).toHaveJSProperty('open', false);
+    await expect(page.locator(`#doctrina-${id}`).getByRole('heading', { level: 2, name: 'Beehive' })).toBeVisible();
+    // Una acción sobre la doctrina plegada la abre para mostrar su aviso
+    await page.goto(`/doctrinas?ok=renamed&name=Beehive&at=doctrina-${id}#doctrina-${id}`);
+    await expect(page.locator(`#doctrina-${id} details.doctrine-fold`)).toHaveJSProperty('open', true);
+    await expect(page.getByText('Doctrina renombrada: «Beehive».')).toBeVisible();
+  } finally {
+    await request.delete(`${API_URL}/doctrines/${id}`);
+  }
+});
+
 test('el pie enlaza el aviso legal con el texto original de CCP', async ({ page }) => {
   await page.goto('/');
   await page.locator('footer').getByRole('link', { name: 'Aviso legal' }).click();

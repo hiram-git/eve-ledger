@@ -31,6 +31,15 @@ export async function createDoctrine(name: string) {
   return row;
 }
 
+// Renames a doctrine (the user asked for it after mistyping a name and having to delete the whole doctrine)
+export async function renameDoctrine(id: number, name: string) {
+  const clean = name.trim().slice(0, 80);
+  if (!clean) throw new DoctrineError('name');
+  const [row] = await db.update(doctrines).set({ name: clean }).where(eq(doctrines.id, id)).returning({ id: doctrines.id, name: doctrines.name });
+  if (!row) throw new DoctrineError('doctrine');
+  return row;
+}
+
 export async function deleteDoctrine(id: number) {
   await db.delete(doctrines).where(eq(doctrines.id, id));
 }

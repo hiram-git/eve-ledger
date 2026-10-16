@@ -59,6 +59,8 @@ const okText =
       ? m.fitOk
       : okKind === 'plan'
         ? m.planOk(q.get('name') ?? '', Number(q.get('n') ?? 0))
+        : okKind === 'renamed'
+          ? m.renamedOk(q.get('name') ?? '')
         : okKind === 'deleted'
           ? m.deletedOk
           : okKind === 'prices'
@@ -330,42 +332,71 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   {
     view?.doctrines.map((d) => {
       const withData = view!.pilots.filter((p) => p.hasScope && p.skillsAt);
+      // The heading sums it up (the user asked for it: with 6 pilots and 5 doctrines the page got very long, so
+      // each doctrine folds): pilots with skills who fly at least one of its ships, and ships someone can fly
+      const flies = (f: DoctrineFit, pilotId: number) => f.pilots.find((x) => x.characterId === pilotId)?.status === 'ok';
+      const pilotsOk = withData.filter((p) => d.fits.some((f) => flies(f, p.id))).length;
+      const fitsOk = d.fits.filter((f) => f.pilots.some((x) => x.status === 'ok')).length;
+      const summed = d.fits.length > 0 && withData.length > 0;
+      const meta = d.fits.length === 0 ? m.doctrineNoFits : summed ? m.doctrineMeta(pilotsOk, withData.length, fitsOk, d.fits.length) : m.doctrineFitCount(d.fits.length);
+      const metaFull = summed ? m.doctrineMetaFull(pilotsOk, withData.length, fitsOk, d.fits.length) : null;
       return (
         <section class="panel doctrine" id={`doctrina-${d.id}`} aria-labelledby={`doctrina-${d.id}-title`}>
-          <div class="panel-heading">
-            <h2 id={`doctrina-${d.id}-title`}>{d.name}</h2>
-            <form method="post" action="/doctrinas/accion" data-confirm={m.doctrineDeleteConfirm(d.name)}>
-              <input type="hidden" name="action" value="delete-doctrine" />
-              <input type="hidden" name="id" value={d.id} />
-              <button type="submit" class="icon-button" title={m.doctrineDelete} aria-label={`${m.doctrineDelete}: ${d.name}`}>
-                <Icon name="trash" />
-              </button>
-            </form>
-          </div>
+          <details class="doctrine-fold" open data-doctrine={d.id}>
+            <summary class="panel-heading">
+              <Icon name="chevron" class="chevron" />
+              <h2 id={`doctrina-${d.id}-title`}>{d.name}</h2>
+              <span class="doctrine-meta" title={metaFull ?? undefined}>
+                {meta}
+                {metaFull && <span class="sr-only">. {metaFull}</span>}
+              </span>
+            </summary>
 
-          {noticeAt(`doctrina-${d.id}`) && (
-            <div class="panel-notice">
-              <ActionNotice ok={okText} extra={extraText} error={errorText} />
+            {/* Who flies the doctrine (how many of its fits each pilot can fly, with synced skills), rename and delete */}
+            <div class="doctrine-bar">
+              {summed && (
+                <div class="who-flies">
+                  <span class="who-label">{m.doctrineWho}</span>
+                  <ul>
+                    {withData.map((p) => {
+                      const n = d.fits.filter((f) => flies(f, p.id)).length;
+                      return (
+                        <li class:list={{ none: n === 0, some: n > 0 && n < d.fits.length, all: n === d.fits.length }}>
+                          <span class="name">{p.name}</span>
+                          <span class="count">{m.doctrineFlies(n, d.fits.length)}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+              <details class="rename">
+                <summary class="icon-button" title={m.doctrineRename}>
+                  <Icon name="pencil" />
+                  <span class="sr-only">{m.doctrineRenameLabel(d.name)}</span>
+                </summary>
+                <form method="post" action="/doctrinas/accion" class="rename-form">
+                  <input type="hidden" name="action" value="rename" />
+                  <input type="hidden" name="id" value={d.id} />
+                  <label class="sr-only" for={`rename-${d.id}`}>{m.doctrineRenameLabel(d.name)}</label>
+                  <input id={`rename-${d.id}`} type="text" name="name" value={d.name} maxlength="80" required autocomplete="off" />
+                  <button type="submit" class="secondary-button">{m.doctrineRenameSave}</button>
+                </form>
+              </details>
+              <form method="post" action="/doctrinas/accion" class="delete-form" data-confirm={m.doctrineDeleteConfirm(d.name)}>
+                <input type="hidden" name="action" value="delete-doctrine" />
+                <input type="hidden" name="id" value={d.id} />
+                <button type="submit" class="icon-button" title={m.doctrineDelete} aria-label={`${m.doctrineDelete}: ${d.name}`}>
+                  <Icon name="trash" />
+                </button>
+              </form>
             </div>
-          )}
 
-          {/* Who flies the doctrine: how many of its fits each pilot can fly (with synced skills) */}
-          {d.fits.length > 0 && withData.length > 0 && (
-            <div class="who-flies">
-              <span class="who-label">{m.doctrineWho}</span>
-              <ul>
-                {withData.map((p) => {
-                  const n = d.fits.filter((f) => f.pilots.find((x) => x.characterId === p.id)?.status === 'ok').length;
-                  return (
-                    <li class:list={{ none: n === 0, some: n > 0 && n < d.fits.length, all: n === d.fits.length }}>
-                      <span class="name">{p.name}</span>
-                      <span class="count">{m.doctrineFlies(n, d.fits.length)}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
+            {noticeAt(`doctrina-${d.id}`) && (
+              <div class="panel-notice">
+                <ActionNotice ok={okText} extra={extraText} error={errorText} />
+              </div>
+            )}
 
           {d.fits.length === 0 && <p class="panel-body muted">{m.fitNone}</p>}
 
@@ -621,10 +652,26 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
               </button>
             </form>
           </details>
+          </details>
         </section>
       );
     })
   }
+  {/* Folded doctrines are remembered per browser (localStorage); the anchor's doctrine (a notice, a new fit) must
+      be visible. Inline, right after the list, so the fold happens before the first paint */}
+  <script is:inline>
+    (() => {
+      try {
+        const closed = new Set(JSON.parse(localStorage.getItem('doctrines-closed') || '[]'));
+        document.querySelectorAll('details.doctrine-fold').forEach((d) => {
+          if (closed.has(d.dataset.doctrine)) d.open = false;
+        });
+      } catch {}
+      const target = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+      const fold = target && (target.querySelector('details.doctrine-fold') || target.closest('details.doctrine-fold'));
+      if (fold) fold.open = true;
+    })();
+  </script>
 </Base>
 
 <script>
@@ -662,6 +709,23 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
       note.textContent = pending;
     });
   });
+  // Folding a doctrine is remembered (per browser): the list of folded ids
+  document.querySelectorAll<HTMLDetailsElement>('details.doctrine-fold').forEach((d) =>
+    d.addEventListener('toggle', () => {
+      try {
+        const closed = new Set<string>(JSON.parse(localStorage.getItem('doctrines-closed') || '[]'));
+        if (d.open) closed.delete(d.dataset.doctrine ?? '');
+        else closed.add(d.dataset.doctrine ?? '');
+        localStorage.setItem('doctrines-closed', JSON.stringify([...closed]));
+      } catch {}
+    }),
+  );
+  // The rename field gets the focus when its form unfolds
+  document.querySelectorAll<HTMLDetailsElement>('details.rename').forEach((d) =>
+    d.addEventListener('toggle', () => {
+      if (d.open) d.querySelector<HTMLInputElement>('input[type=text]')?.select();
+    }),
+  );
   // On going back, the browser restores the page as it was: without busy buttons
   window.addEventListener('pageshow', () => {
     document.querySelectorAll<HTMLButtonElement>('button[aria-busy=true]').forEach((b) => {
@@ -798,13 +862,94 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     color: var(--text);
   }
 
+  /* Each doctrine folds: the heading is the summary (chevron, name and the count of pilots and ships that fly) */
+  .doctrine-fold > summary {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    list-style: none;
+    cursor: pointer;
+  }
+  .doctrine-fold > summary::-webkit-details-marker {
+    display: none;
+  }
+  .doctrine-fold > summary:hover h2 {
+    color: var(--cyan);
+  }
+  .doctrine-fold > summary :global(.chevron) {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+  }
+  .doctrine-fold[open] > summary :global(.chevron) {
+    transform: rotate(90deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .doctrine-fold > summary :global(.chevron) {
+      transition: none;
+    }
+  }
+  .doctrine-fold > summary h2 {
+    min-width: 0;
+  }
+  .doctrine-meta {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+    text-align: right;
+  }
+  /* Under the heading: who flies it (left), rename and delete (right). The rename form, when open, takes a row of its own */
+  .doctrine-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 10px 22px;
+    border-bottom: 1px solid #26313b88;
+  }
+  .doctrine-bar .rename {
+    margin-left: auto;
+  }
+  .rename > summary {
+    list-style: none;
+  }
+  .rename > summary::-webkit-details-marker {
+    display: none;
+  }
+  /* Open, the details takes a row of its own: the pencil in one column and the form in the other. A grid with
+     minmax(0, 1fr), because the browser wraps the details' content in a box of its own, which a flex row would
+     size to the form's intrinsic width (the field then pushed «Guardar» out of a 390 px screen) */
+  .rename[open] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    flex-basis: 100%;
+    order: 3;
+  }
+  /* With the rename form on its own row, the delete button keeps to the right */
+  .doctrine-bar:has(.rename[open]) .delete-form {
+    margin-left: auto;
+  }
+  .rename-form {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+  }
+  .rename-form input[type='text'] {
+    flex: 1;
+    max-width: 480px;
+  }
   .who-flies {
     display: flex;
+    flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: baseline;
     gap: 8px 14px;
-    padding: 14px 22px;
-    border-bottom: 1px solid #26313b88;
+    min-width: 0;
   }
   .who-label {
     font-size: 12px;
@@ -1443,6 +1588,13 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   }
 
   @media (max-width: 600px) {
+    /* The count wraps under the name, aligned with it (past the chevron) */
+    .doctrine-meta {
+      flex-basis: 100%;
+      margin-left: 0;
+      padding-left: 28px;
+      text-align: left;
+    }
     .new-doctrine {
       width: 100%;
     }

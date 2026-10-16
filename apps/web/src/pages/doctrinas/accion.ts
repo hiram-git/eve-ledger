@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
 import { safeBackUrl } from '../../lib/safe-back';
-import { ActionError, addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, refreshPrices, setPlan } from '../../lib/api';
+import { ActionError, addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, refreshPrices, renameDoctrine, setPlan } from '../../lib/api';
 
-// Doctrinas forms: create or delete doctrines and fits, import or remove the plan (.emp, forwarded to the
+// Doctrinas forms: create, rename or delete doctrines and fits, import or remove the plan (.emp, forwarded to the
 // API in base64). Returns to /doctrinas with the result in the query and an anchor to the touched spot
 const MAX_PLAN_BYTES = 1_000_000;
 
@@ -26,6 +26,10 @@ export const POST: APIRoute = async ({ request, redirect }) => {
       const r = await refreshPrices();
       ok('prices', { n: String(r.updated) });
       anchor = 'fondos';
+    } else if (action === 'rename' && id) {
+      const r = await renameDoctrine(id, String(form.get('name') ?? ''));
+      ok('renamed', { name: r.name });
+      anchor = `doctrina-${id}`;
     } else if (action === 'delete-doctrine' && id) {
       await deleteDoctrine(id);
       ok('deleted');
@@ -58,7 +62,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     back.searchParams.set('error', err instanceof ActionError ? err.code : 'esi');
     if (err instanceof ActionError && err.detail) back.searchParams.set('detail', err.detail.slice(0, 200));
     if (!(err instanceof ActionError)) console.error(err);
-    anchor = action === 'add-fit' ? `doctrina-${id}` : action === 'plan' ? `fit-${id}` : '';
+    anchor = action === 'add-fit' || action === 'rename' ? `doctrina-${id}` : action === 'plan' ? `fit-${id}` : '';
   }
   // The notice is drawn next to what was touched (`at`), not at the very top: with the anchor, it ended up out of view
   if (anchor) back.searchParams.set('at', anchor);

@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { refreshDoctrinePrices } from '../services/jita';
-import { addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, DoctrineError, listDoctrines, setClone, setPlan } from '../services/doctrines';
+import { addFit, createDoctrine, deleteDoctrine, deleteFit, deletePlan, DoctrineError, listDoctrines, renameDoctrine, setClone, setPlan } from '../services/doctrines';
 
 const id = t.Object({ id: t.Numeric({ minimum: 1 }) });
 
@@ -33,6 +33,17 @@ export const doctrineRoutes = new Elysia()
       return status(502, { error: 'esi' });
     }
   })
+  .put(
+    '/doctrines/:id',
+    async ({ params, body, status }) => {
+      try {
+        return await renameDoctrine(params.id, body.name);
+      } catch (err) {
+        return fail(err, status);
+      }
+    },
+    { params: id, body: t.Object({ name: t.String({ maxLength: 200 }) }) },
+  )
   .delete('/doctrines/:id', async ({ params }) => {
     await deleteDoctrine(params.id);
     return { ok: true };

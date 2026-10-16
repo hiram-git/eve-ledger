@@ -434,6 +434,7 @@ async function write<T>(method: string, path: string, body?: unknown): Promise<T
   return data as T;
 }
 export const createDoctrine = (name: string) => write<{ id: number }>('POST', '/doctrines', { name });
+export const renameDoctrine = (id: number, name: string) => write<{ id: number; name: string }>('PUT', `/doctrines/${id}`, { name });
 export const deleteDoctrine = (id: number) => write('DELETE', `/doctrines/${id}`);
 export const addFit = (doctrineId: number, eft: string) =>
   write<{ id: number; ignored: string[] }>('POST', `/doctrines/${doctrineId}/fits`, { eft });

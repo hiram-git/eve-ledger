@@ -85,7 +85,7 @@ const s = await import(`${API}/db/schema.ts`);
 const { parseEft } = await import(`${API}/lib/eft.ts`);
 const { parseEmp } = await import(`${API}/lib/emp.ts`);
 const { spForLevel, withPrerequisites, evaluate } = await import(`${API}/lib/skill-math.ts`);
-const { addFit, budget, createDoctrine, listDoctrines, refreshDoctrineDogma, setPlan, DoctrineError } = await import(`${API}/services/doctrines.ts`);
+const { addFit, budget, createDoctrine, listDoctrines, refreshDoctrineDogma, setPlan, DoctrineError, renameDoctrine, deleteDoctrine } = await import(`${API}/services/doctrines.ts`);
 const { injectorsFor, largeYield } = await import(`${API}/lib/injectors.ts`);
 const { inArray } = await import('drizzle-orm');
 runMigrations();
@@ -297,6 +297,15 @@ test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   const before = esiCalls.filter((c) => c.startsWith('/universe/types')).length;
   await addFit(id, EFT);
   expect(esiCalls.filter((c) => c.startsWith('/universe/types')).length).toBe(before);
+});
+
+test('renombra una doctrina: recorta el nombre, rechaza el vacío y la que no existe', async () => {
+  const { id } = await createDoctrine('Temporal');
+  expect(await renameDoctrine(id, '  Beehive  ')).toEqual({ id, name: 'Beehive' });
+  await expect(renameDoctrine(id, '   ')).rejects.toMatchObject({ code: 'name' });
+  await expect(renameDoctrine(999_999, 'X')).rejects.toMatchObject({ code: 'doctrine' });
+  expect((await listDoctrines()).doctrines.find((d) => d.id === id)?.name).toBe('Beehive');
+  await deleteDoctrine(id);
 });
 
 test('las skills guardadas sin saber si son solo Omega se vuelven a pedir una vez', async () => {
