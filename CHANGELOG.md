@@ -4,12 +4,15 @@ What changed in each version of the EVE Ledger desktop app. Every version is a [
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
-## Unreleased
+## 0.1.18 — 2026-10-16
 
 - **Faster with a long history.** With a year of data from a busy trader (100,000 wallet entries), the Summary loads in about 0.25 s instead of 0.7–1.7 s, and Indicators in 0.2 s instead of 1.4 s. Lost ships are worked out once and shared by the Summary, Lost ships and Indicators until something changes.
 - **Upgrades tested from every published version.** An automated test opens a database from each earlier release (0.1.0 onwards) with the current app. It checks that the backup is made, that no wallet entry, transaction, asset or loss is lost and that the numbers match.
 - **Check your download.** The installers stay unsigned (it's an open project; certificates cost money every year), but every release now includes SHA-256 sums for each installer and a GitHub build attestation proving it was built from this repository. The install guide explains how to check them and how to get past the first-run warning on Windows and macOS.
-- **Doctrines: rename and fold.** A pencil next to each doctrine renames it in place (no more deleting a doctrine over a typo). Each doctrine folds from its heading, which now says how many pilots fly at least one of its ships and how many ships have a pilot ("4 of 6 pilots · 3 of 5 ships"); folded doctrines stay folded on the next visit. Both were asked for by the community.
+- **Doctrines: rename, fold and a compact view.** Asked for by the community.
+  - A pencil next to each doctrine renames it in place (no more deleting a doctrine over a typo).
+  - Each doctrine folds from its heading, which now says how many pilots fly at least one of its ships and how many ships have a pilot ("4 of 6 pilots · 3 of 5 ships"); folded doctrines stay folded on the next visit.
+  - **Compact view** folds every fit to one line (ship, name, Jita cost, "4 of 6 pilots"); click a fit to expand it. The choice is remembered in your browser.
 - **Issue templates** for bugs, numbers that don't add up and ideas. None of them ask for your database or your settings.
 
 ## 0.1.17 — 2026-10-13

@@ -44,8 +44,8 @@ export function seed() {
 
   db.insert(s.characters)
     .values([
-      { id: aria.id, name: aria.name, ownerHash: 'a', scopes: [...ALL_SCOPES, 'esi-universe.read_structures.v1'].join(' '), refreshToken: 'x', authMethod: 'pkce', lastSyncAt: minutesAgo(10), createdAt: ago(40), linkedAt: ago(40) },
-      { id: kade.id, name: kade.name, ownerHash: 'k', scopes: ALL_SCOPES.join(' '), refreshToken: 'x', authMethod: 'pkce', clone: 'alpha', lastSyncAt: minutesAgo(12), createdAt: ago(40), linkedAt: ago(40) },
+      { id: aria.id, name: aria.name, ownerHash: 'a', scopes: [...ALL_SCOPES, 'esi-universe.read_structures.v1'].join(' '), refreshToken: 'x', authMethod: 'pkce', lastSyncAt: minutesAgo(10), createdAt: ago(40), linkedAt: ago(40), skillsAt: minutesAgo(10), totalSp: 42_000_000, unallocatedSp: 0 },
+      { id: kade.id, name: kade.name, ownerHash: 'k', scopes: ALL_SCOPES.join(' '), refreshToken: 'x', authMethod: 'pkce', clone: 'alpha', lastSyncAt: minutesAgo(12), createdAt: ago(40), linkedAt: ago(40), skillsAt: minutesAgo(12), totalSp: 4_800_000, unallocatedSp: 0 },
       { id: nyx.id, name: nyx.name, ownerHash: 'n', scopes: ALL_SCOPES.join(' '), refreshToken: 'x', authMethod: 'pkce', createdAt: minutesAgo(180), linkedAt: minutesAgo(180) },
     ])
     .run();
@@ -215,6 +215,13 @@ export function seed() {
     ])
     .run();
   db.insert(s.structureLookups).values({ id: CITADEL_NAMED, status: 'ok', checkedAt: minutesAgo(10) }).run();
+  // Una doctrina con un fit que no pide skills: Aria y Kade (con skills sincronizadas) pueden volarlo
+  const attrs = { charisma: 20, intelligence: 21, memory: 21, perception: 21, willpower: 21, updatedAt };
+  db.insert(s.characterAttributes).values([{ characterId: aria.id, ...attrs }, { characterId: kade.id, ...attrs }]).run();
+  db.insert(s.typeDogma).values({ typeId: T.rifter, name: 'Rifter', groupId: 25, categoryId: 6, rank: null, primaryAttr: null, secondaryAttr: null, required: [], omegaOnly: false, updatedAt }).run();
+  db.insert(s.doctrines).values({ id: 1, name: 'Frigates' }).run();
+  db.insert(s.fits).values({ id: 1, doctrineId: 1, name: 'Rifter PvP', shipTypeId: T.rifter, eft: '[Rifter, Rifter PvP]', items: [] }).run();
+  db.insert(s.jitaPrices).values({ typeId: T.rifter, sellMin: 500_000, sellOrders: 10, updatedAt }).run();
 
   // Each pilot's last sync, without errors
   for (const p of [aria, kade]) {

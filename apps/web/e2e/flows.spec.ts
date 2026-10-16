@@ -189,6 +189,30 @@ test('Doctrinas: renombrar una doctrina y plegarla; el pliegue se recuerda', asy
   }
 });
 
+test('Doctrinas: la vista compacta pliega los fits a una línea y se recuerda', async ({ page }) => {
+  await page.goto('/doctrinas');
+  const fit = page.locator('#fit-1 details.fit-fold');
+  await expect(fit).toHaveJSProperty('open', true);
+  // La línea del fit resume el coste en Jita y quién lo vuela; la cabecera de la doctrina, lo mismo en conjunto
+  await expect(page.locator('#fit-1 .fit-brief')).toContainText('2 de 2 pilotos');
+  await expect(page.locator('#doctrina-1 .doctrine-meta')).toContainText('2 de 2 pilotos · 1 de 1 nave');
+  const toggle = page.getByRole('button', { name: 'Vista compacta' });
+  await toggle.click();
+  await expect(fit).toHaveJSProperty('open', false);
+  await expect(page.locator('#fit-1 .fit-head')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#fit-1 details.fit-fold')).toHaveJSProperty('open', false);
+  await expect(page.getByRole('button', { name: 'Vista compacta' })).toHaveAttribute('aria-pressed', 'true');
+  // Un fit se despliega sin salir del modo compacto, y el ancla de un fit lo abre aunque la vista sea compacta
+  await page.locator('#fit-1 details.fit-fold > summary').click();
+  await expect(page.locator('#fit-1 .fit-head')).toBeVisible();
+  await page.goto('/doctrinas#fit-1');
+  await expect(page.locator('#fit-1 details.fit-fold')).toHaveJSProperty('open', true);
+  await page.getByRole('button', { name: 'Vista compacta' }).click();
+  await expect(page.getByRole('button', { name: 'Vista compacta' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#fit-1 details.fit-fold')).toHaveJSProperty('open', true);
+});
+
 test('el pie enlaza el aviso legal con el texto original de CCP', async ({ page }) => {
   await page.goto('/');
   await page.locator('footer').getByRole('link', { name: 'Aviso legal' }).click();

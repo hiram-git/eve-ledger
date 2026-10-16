@@ -21,6 +21,7 @@ const RELEASES: [string, number][] = [
   ['0.1.12', 14],
   ['0.1.13', 15],
   ['0.1.15', 17],
+  ['0.1.17', 18],
 ];
 
 const ARIA = 2_100_000_001;
@@ -136,9 +137,13 @@ for (const [version, migrations] of RELEASES) {
     if (Bun.env.UPGRADE_DEBUG) console.log(version, JSON.stringify(r));
     expect(r.before).toBe(migrations);
     expect(r.after).toBe(KNOWN);
-    // The backup from before the update is that version's database, as-is
-    expect(r.update).not.toBeNull();
-    expect(r.update.migrations).toBe(migrations);
+    // The backup from before the update is that version's database, as-is (a version with no new migrations makes none)
+    if (migrations < KNOWN) {
+      expect(r.update).not.toBeNull();
+      expect(r.update.migrations).toBe(migrations);
+    } else {
+      expect(r.update).toBeNull();
+    }
     expect(r.counts).toMatchObject({
       characters: 2,
       wallet_journal: old.journal,
@@ -152,7 +157,8 @@ for (const [version, migrations] of RELEASES) {
     expect(r.ratting.ticks).toBe(28 * 3);
     expect(r.inventory).toBe(4_600_000);
     // Restoring the backup from before leaves the database with everything from back then
-    expect(r.restored).toMatchObject({ migrations, entries: old.journal, after: old.journal });
+    if (migrations < KNOWN) expect(r.restored).toMatchObject({ migrations, entries: old.journal, after: old.journal });
+    else expect(r.restored).toBeNull();
   }, 30_000);
 }
 
