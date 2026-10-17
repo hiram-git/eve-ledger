@@ -95,8 +95,11 @@ const selected = pilotId ? summary?.characters.find((c) => c.id === pilotId) : u
 const noPilots = !!summary && summary.characters.length === 0;
 const waiting = !!summary && summary.characters.length > 0 && !pilotId && !summary.coverage.firstEntryAt;
 const dashboard = !!summary && summary.characters.length > 0 && !waiting;
-// Consolidated net = sum of the per-pilot nets (trading is folded per pilot, but the net is additive)
-const allNet = summary?.characters.reduce((n, c) => n + c.net, 0) ?? 0;
+// The pilot strip shows each wallet's balance (user's decision, 0.1.19: the period net is already in the Net card
+// and in the pilots table); «Todos» is the sum of the balances, what Net worth calls «Saldo de los wallets».
+// chipBalance: the balance of the last sync (null: no sync yet, the chip shows «—»)
+const allBalance = summary?.characters.reduce((n, c) => n + (c.balance ?? 0), 0) ?? 0;
+const chipBalance = (c: Summary['characters'][number]) => (c.lastSyncAt && c.balance !== null ? c.balance : null);
 
 const synced = q.get('synced');
 const syncErrors = q.get('syncErrors');
@@ -488,35 +491,32 @@ const worthNote =
                   <a
                     href={href(days)}
                     aria-current={!pilotId ? 'true' : undefined}
-                    title={m.allPilotsTitle(fullNet(allNet), days)}
-                    aria-label={m.chipLabel(m.allPilots, fmt(allNet, { sign: true }), null)}
+                    title={m.allPilotsTitle(full(allBalance))}
+                    aria-label={m.chipLabel(m.allPilots, fmt(allBalance), null)}
                   >
                     <span class="pilot-name">{m.allPilots}</span>
-                    <span class:list={['pilot-net', { pos: allNet > 0, neg: allNet < 0 }]}>{fmt(allNet, { sign: true })}</span>
+                    <span class="pilot-balance">{fmt(allBalance)}</span>
                   </a>
                 </li>
-                {summary.characters.map((c) => (
-                  <li>
-                    <a
-                      href={href(days, c.id)}
-                      aria-current={c.id === pilotId ? 'true' : undefined}
-                      class:list={{ stale: isStale(c.lastSyncAt) }}
-                      title={m.pilotNetTitle(c.name, fullNet(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
-                      aria-label={m.chipLabel(
-                        c.name,
-                        c.lastSyncAt ? fmt(c.net, { sign: true }) : null,
-                        isStale(c.lastSyncAt) ? rel(c.lastSyncAt) : null,
-                      )}
-                    >
-                      {isStale(c.lastSyncAt) && <i class="stale-dot" aria-hidden="true" />}
-                      <span class="pilot-name">{c.name}</span>
-                      <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
-                        {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
-                      </span>
-                      {isStale(c.lastSyncAt) && c.lastSyncAt && <span class="chip-age" aria-hidden="true">{rel(c.lastSyncAt)}</span>}
-                    </a>
-                  </li>
-                ))}
+                {summary.characters.map((c) => {
+                  const balance = chipBalance(c);
+                  return (
+                    <li>
+                      <a
+                        href={href(days, c.id)}
+                        aria-current={c.id === pilotId ? 'true' : undefined}
+                        class:list={{ stale: isStale(c.lastSyncAt) }}
+                        title={m.pilotBalanceTitle(c.name, balance === null ? null : full(balance)) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
+                        aria-label={m.chipLabel(c.name, balance === null ? null : fmt(balance), isStale(c.lastSyncAt) ? rel(c.lastSyncAt) : null)}
+                      >
+                        {isStale(c.lastSyncAt) && <i class="stale-dot" aria-hidden="true" />}
+                        <span class="pilot-name">{c.name}</span>
+                        <span class="pilot-balance">{balance === null ? '—' : fmt(balance)}</span>
+                        {isStale(c.lastSyncAt) && c.lastSyncAt && <span class="chip-age" aria-hidden="true">{rel(c.lastSyncAt)}</span>}
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             </nav>
 
@@ -529,7 +529,7 @@ const worthNote =
                 const want = active.parentElement!.offsetLeft - strip.offsetLeft - all.offsetWidth;
                 const max = strip.scrollWidth - strip.clientWidth;
                 // If the active chip is one of the last, the row can't scroll it next to «Todos» and the previous one
-                // would peek half-hidden under «Todos» (reading «40 M» without its sign): extend the end of the row
+                // would peek half-hidden under «Todos» (reading «40 M» out of «1,40 B»): extend the end of the row
                 if (want > max) strip.style.paddingRight = `${parseFloat(getComputedStyle(strip).paddingRight) + want - max}px`;
                 strip.scrollLeft = want;
               }
@@ -1813,7 +1813,7 @@ const worthNote =
   .map-fold > summary:hover::before {
     border-color: var(--cyan);
   }
-  /* Filtered pilot broken or stale: their net is dimmed, as in the chips (stale data doesn't compete with real data) */
+  /* Filtered pilot broken or stale: their net is dimmed, like the balance in the chips (stale data doesn't compete with real data) */
   .hero-stat.stale .value.signed.pos,
   .hero-stat.stale .value.signed.neg,
   .hero-stat.stale .act-net {
@@ -2087,9 +2087,8 @@ const worthNote =
   .pilot-strip a.stale {
     border-color: var(--line);
   }
-  /* Net from stale data: dimmed, so it doesn't compete with the real net */
-  .pilot-strip a.stale .pilot-net.pos,
-  .pilot-strip a.stale .pilot-net.neg {
+  /* Balance from stale data: dimmed, so it doesn't compete with current data */
+  .pilot-strip a.stale .pilot-balance {
     color: var(--text-secondary);
   }
   .chip-age {
@@ -2196,15 +2195,10 @@ const worthNote =
     height: 14px;
     color: var(--cyan-dim);
   }
-  .pilot-net {
+  /* A balance, not a net: no sign and no green/red */
+  .pilot-balance {
     font: 500 13px var(--mono);
     color: var(--text);
-  }
-  .pilot-net.pos {
-    color: var(--positive);
-  }
-  .pilot-net.neg {
-    color: var(--critical);
   }
   .ratio {
     display: flex;

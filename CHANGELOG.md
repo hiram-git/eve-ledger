@@ -4,6 +4,10 @@ What changed in each version of the EVE Ledger desktop app. Every version is a [
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
+## Unreleased
+
+- **Summary: the pilot chips show the wallet balance.** The filter strip under the period tabs now shows what each pilot has in the wallet (and "All", the sum of the wallets), instead of the period net, which is already in the Net card and in the pilots table. A pilot without a sync shows "—"; stale data is greyed with its age, as before.
+
 ## 0.1.18 — 2026-10-16
 
 - **Faster with a long history.** With a year of data from a busy trader (100,000 wallet entries), the Summary loads in about 0.25 s instead of 0.7–1.7 s, and Indicators in 0.2 s instead of 1.4 s. Lost ships are worked out once and shared by the Summary, Lost ships and Indicators until something changes.

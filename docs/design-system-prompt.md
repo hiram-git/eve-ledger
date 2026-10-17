@@ -95,7 +95,7 @@ Validados en contraste sobre `--panel`. No los reutilices como colores de botone
 - **Barra superior:** 52 px; marca compacta (cuadrado de 26 px con «E» en Barlow y borde `--cyan-dim`), estado del sync (punto de 6 px: verde al día, ámbar desactivado, cian latiendo mientras sincroniza), selector ES/EN/DE y botón Sincronizar.
 - **Franja de marca:** 118 px (92 px en móvil) con el logotipo sobre un mapa estelar decorativo. Nunca empuja el neto fuera de la primera pantalla.
 - **Navegación de secciones:** pestañas de 13 px 550, texto `#93a6b7`. La activa lleva fondo `#16304070`, texto `#8addee`, borde `#30506480` y una línea inferior de 2 px en cian; `aria-current="page"`.
-- **Filtros** (pestañas de período, chips de piloto): `aria-current="true"`. Cada chip lleva el nombre y su neto con signo; un piloto con problemas lleva solo un icono ámbar pequeño y la edad en gris, con borde neutro.
+- **Filtros** (pestañas de período, chips de piloto): `aria-current="true"`. Cada chip lleva el nombre y el saldo de su wallet (sin signo ni color: no es un neto); un piloto con problemas lleva solo un icono ámbar pequeño y la edad en gris, con borde neutro.
 - **Botones:**
   - principal: fondo `#60c8e0`, texto `#06202b`, 13 px 650, padding 8 × 14 px, radio 5 px;
   - principal en contorno (`.outline`, el habitual en la cabecera para que el dato brille más): fondo `#61cce514`, borde `--cyan-dim`, texto `#8addee`;
@@ -154,7 +154,7 @@ Nada decorativo imita un dato. Transiciones de color de 0,18 s en botones y enla
 - Enlace «Saltar al contenido» como primera parada de Tab.
 - Las pistas que solo dan el color o la posición (signo, operadores «más»/«menos», estado) van también en texto `sr-only`. Un neto de 0 se anuncia como «sin cambio».
 - Contraste AA sobre `--panel`; nada por debajo de 12 px.
-- Etiquetas `aria-label` compuestas en los chips («Lio Tanaka, −145 M, sin sync hace 4 d»).
+- Etiquetas `aria-label` compuestas en los chips («Lio Tanaka, saldo 1,45 B, sin sync hace 4 d»).
 
 ## 11. Voz y textos
 

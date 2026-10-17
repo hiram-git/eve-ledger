@@ -93,7 +93,7 @@ Contrast-checked against `--panel`. Do not reuse them for buttons, borders or in
 - **Top bar:** 52 px; compact mark (26 px square with an "E" in Barlow and a `--cyan-dim` border), sync status (6 px dot: green when up to date, amber when turned off, pulsing cyan while syncing), ES/EN/DE switcher and the Sync button.
 - **Brand strip:** 118 px (92 px on mobile) with the wordmark over a decorative star map. It never pushes the net below the first screen.
 - **Section navigation:** 13 px tabs at weight 550, text `#93a6b7`. The active one has background `#16304070`, text `#8addee`, border `#30506480` and a 2 px cyan bottom line; `aria-current="page"`.
-- **Filters** (period tabs, pilot chips): `aria-current="true"`. Each chip shows the pilot's name and their signed net; a pilot with issues shows only a small amber icon and the data age in grey, with a neutral border.
+- **Filters** (period tabs, pilot chips): `aria-current="true"`. Each chip shows the pilot's name and their wallet balance (no sign, no colour: it isn't a net); a pilot with issues shows only a small amber icon and the data age in grey, with a neutral border.
 - **Buttons:**
   - primary: background `#60c8e0`, text `#06202b`, 13 px 650, 8 × 14 px padding, 5 px radius;
   - outlined primary (`.outline`, the usual one in the header so the data stays brighter): background `#61cce514`, border `--cyan-dim`, text `#8addee`;
@@ -152,7 +152,7 @@ Nothing decorative imitates data. 0.18 s colour transitions on buttons and links
 - A "Skip to content" link as the first Tab stop.
 - Cues conveyed only by colour or position (sign, "plus"/"minus" operators, state) are also given as `sr-only` text. A net of 0 is announced as "no change".
 - AA contrast against `--panel`; nothing below 12 px.
-- Composite `aria-label`s on chips ("Lio Tanaka, −145 M, no sync for 4 d").
+- Composite `aria-label`s on chips ("Lio Tanaka, balance 1.45 B, no sync for 4 d").
 
 ## 11. Voice and copy
 

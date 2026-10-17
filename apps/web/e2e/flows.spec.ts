@@ -135,6 +135,20 @@ test('el saldo es el del wallet de ESI y Balances concilia lo que el journal aú
   await expect(page.getByText(/va por delante del journal en Aria Vex/).first()).toBeAttached();
 });
 
+test('los chips de pilotos muestran el saldo del wallet, no el neto del período', async ({ page, request }) => {
+  const summary = await (await request.get(`${API_URL}/summary?days=30`)).json();
+  const aria = summary.characters.find((c: { id: number }) => c.id === PILOTS.aria.id);
+  const full = (v: number) => `${new Intl.NumberFormat('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)} ISK`;
+  await page.goto('/?days=30');
+  const chip = page.locator('.pilot-strip a', { hasText: PILOTS.aria.name });
+  await expect(chip).toHaveAttribute('title', `${PILOTS.aria.name}: saldo del wallet ${full(aria.balance)}`);
+  await expect(chip).toHaveAttribute('aria-label', /^Aria Vex, saldo /);
+  // «Todos» is the sum of the wallets, and a pilot without a sync shows «—»
+  const all = summary.characters.reduce((n: number, c: { balance: number | null }) => n + (c.balance ?? 0), 0);
+  await expect(page.locator('.pilot-strip a').first()).toHaveAttribute('title', `Todos tus pilotos: saldo de los wallets ${full(all)}`);
+  await expect(page.locator('.pilot-strip a', { hasText: PILOTS.nyx.name }).locator('.pilot-balance')).toHaveText('—');
+});
+
 test('Descuentos: impuesto de corporación exacto y penalización de incursión estimada', async ({ page, request }) => {
   const { deductions: d } = await (await request.get(`${API_URL}/indicators`)).json();
   expect(d.byCorp[0].name).toBe('School of Applied Knowledge');

@@ -475,7 +475,8 @@ const es = {
   noInventory: 'Sin inventario sincronizado',
   filterByPilot: 'Filtrar por piloto',
   allPilots: 'Todos',
-  allPilotsTitle: (v: string, days: number) => `Todos tus pilotos: neto ${v} en ${days} días`,
+  // The pilot strip shows the wallet balances (the period net is in the Net card and the pilots table)
+  allPilotsTitle: (v: string) => `Todos tus pilotos: saldo de los wallets ${v}`,
   netPeriodPilot: (name: string, days: number) => `Neto de ${name} · últimos ${days} días`,
   summaryH1Pilot: (name: string, days: number) => `Resumen de ${name}: últimos ${days} días`,
   // Result: the wallet net minus the net worth of lost ships that didn't come back or are still to replace
@@ -491,7 +492,7 @@ const es = {
   resultCompareOf: 'Neto del wallet:',
   resultCompareOfPilot: 'Neto en juego:',
   viewLedger: (name: string) => `Ver el ledger de ${name}`,
-  pilotNetTitle: (name: string, v: string, days: number) => `${name}: neto ${v} en ${days} días`,
+  pilotBalanceTitle: (name: string, v: string | null) => (v === null ? `${name}: sin primer sync` : `${name}: saldo del wallet ${v}`),
   noSyncSince: (ago: string) => ` · sin sync ${ago}`,
   dailyFlow: 'Flujo diario',
   byActivity: 'Por actividad',
@@ -647,8 +648,8 @@ const es = {
   invPlus: '+ inventario',
   omegaLine: (v: string) => `Omega de todas las cuentas: te faltan ${v}`,
   omegaLineCovered: 'Omega de todas las cuentas: cubierto',
-  chipLabel: (name: string, net: string | null, ago: string | null) =>
-    net === null ? `${name}, sin primer sync` : `${name}, ${net}${ago ? `, sin sync ${ago}` : ''}`,
+  chipLabel: (name: string, balance: string | null, ago: string | null) =>
+    balance === null ? `${name}, sin primer sync` : `${name}, saldo ${balance}${ago ? `, sin sync ${ago}` : ''}`,
   valuablePlex: 'Valorado con la media de ESI, también el PLEX (Indicadores usa su venta más baja).',
   notePrices: (ago: string) => ` (actualizado ${ago})`,
   noteBpc: '; las copias de blueprint cuentan como 0',
@@ -1300,7 +1301,7 @@ const en: Messages = {
   noInventory: 'No assets synced',
   filterByPilot: 'Filter by pilot',
   allPilots: 'All',
-  allPilotsTitle: (v, days) => `All your pilots: net ${v} in ${days} days`,
+  allPilotsTitle: (v) => `All your pilots: ${v} in the wallets`,
   netPeriodPilot: (name, days) => `${name} net · last ${days} days`,
   summaryH1Pilot: (name, days) => `${name}: overview of the last ${days} days`,
   result: 'Result',
@@ -1314,7 +1315,7 @@ const en: Messages = {
   resultCompareOf: 'Wallet net:',
   resultCompareOfPilot: 'In-game net:',
   viewLedger: (name) => `View ${name}'s ledger`,
-  pilotNetTitle: (name, v, days) => `${name}: net ${v} in ${days} days`,
+  pilotBalanceTitle: (name, v) => (v === null ? `${name}: no first sync` : `${name}: wallet balance ${v}`),
   noSyncSince: (ago) => ` · not synced ${ago}`,
   dailyFlow: 'Daily flow',
   byActivity: 'By activity',
@@ -1466,8 +1467,8 @@ const en: Messages = {
   invPlus: '+ assets',
   omegaLine: (v) => `Omega for all accounts: ${v} short`,
   omegaLineCovered: 'Omega for all accounts: covered',
-  chipLabel: (name, net, ago) =>
-    net === null ? `${name}, no first sync` : `${name}, ${net}${ago ? `, not synced ${ago}` : ''}`,
+  chipLabel: (name, balance, ago) =>
+    balance === null ? `${name}, no first sync` : `${name}, balance ${balance}${ago ? `, not synced ${ago}` : ''}`,
   valuablePlex: 'Valued at the ESI average, PLEX included (Indicators uses its lowest sell price).',
   notePrices: (ago) => ` (updated ${ago})`,
   noteBpc: '; blueprint copies count as 0',
@@ -2117,7 +2118,7 @@ const de: Messages = {
   noInventory: 'Kein Inventar synchronisiert',
   filterByPilot: 'Nach Pilot filtern',
   allPilots: 'Alle',
-  allPilotsTitle: (v, days) => `Alle deine Piloten: Netto ${v} in ${days} Tagen`,
+  allPilotsTitle: (v) => `Alle deine Piloten: Guthaben der Wallets ${v}`,
   netPeriodPilot: (name, days) => `Netto ${name} · letzte ${days} Tage`,
   summaryH1Pilot: (name, days) => `${name}: Übersicht der letzten ${days} Tage`,
   result: 'Ergebnis',
@@ -2131,7 +2132,7 @@ const de: Messages = {
   resultCompareOf: 'Wallet-Netto:',
   resultCompareOfPilot: 'Netto im Spiel:',
   viewLedger: (name) => `Ledger von ${name} anzeigen`,
-  pilotNetTitle: (name, v, days) => `${name}: netto ${v} in ${days} Tagen`,
+  pilotBalanceTitle: (name, v) => (v === null ? `${name}: noch kein erster Sync` : `${name}: Wallet-Guthaben ${v}`),
   noSyncSince: (ago) => ` · kein Sync ${ago}`,
   dailyFlow: 'Täglicher Fluss',
   byActivity: 'Nach Aktivität',
@@ -2283,8 +2284,8 @@ const de: Messages = {
   invPlus: '+ Inventar',
   omegaLine: (v) => `Omega für alle Accounts: es fehlen ${v}`,
   omegaLineCovered: 'Omega für alle Accounts: gedeckt',
-  chipLabel: (name, net, ago) =>
-    net === null ? `${name}, noch kein erster Sync` : `${name}, ${net}${ago ? `, kein Sync ${ago}` : ''}`,
+  chipLabel: (name, balance, ago) =>
+    balance === null ? `${name}, noch kein erster Sync` : `${name}, Guthaben ${balance}${ago ? `, kein Sync ${ago}` : ''}`,
   valuablePlex: 'Bewertet zum ESI-Durchschnitt, auch PLEX (Kennzahlen nutzt den niedrigsten Verkaufspreis).',
   notePrices: (ago) => ` (aktualisiert ${ago})`,
   noteBpc: '; Blaupausenkopien zählen als 0',
