@@ -28,7 +28,9 @@ const TAX_CORP = 1000044;
 // System with an incursion: Kade rats there from day 4 to day 2 and bounties are paid at half
 const INCURSION_SYS = 30002090;
 const STRANGER = 95_000_001;
-const T = { rifter: 587, tritanium: 34, plex: 44992, autocannon: 2873 };
+const T = { rifter: 587, tritanium: 34, plex: 44992, autocannon: 2873, probe: 30488 };
+// Loyalty points: Sisters of EVE (store with a priced offer), Federation Navy (no store) and Paragon (EverMarks)
+const LP = { soe: 1000130, fednavy: 1000181, paragon: 1000432 };
 
 const ALL_SCOPES = [
   'esi-wallet.read_character_wallet.v1',
@@ -36,6 +38,7 @@ const ALL_SCOPES = [
   'esi-killmails.read_killmails.v1',
   'esi-contracts.read_character_contracts.v1',
   'esi-skills.read_skills.v1',
+  'esi-characters.read_loyalty.v1',
 ];
 
 export function seed() {
@@ -180,6 +183,7 @@ export function seed() {
       { typeId: T.tritanium, averagePrice: 4.9, adjustedPrice: 4.5, updatedAt },
       { typeId: T.plex, averagePrice: 4_750_000, adjustedPrice: 4_700_000, updatedAt },
       { typeId: T.autocannon, averagePrice: 21_000, adjustedPrice: 20_000, updatedAt },
+      { typeId: T.probe, averagePrice: 8_000_000, adjustedPrice: 7_800_000, updatedAt },
     ])
     .run();
   db.insert(s.marketQuotes).values({ typeId: T.plex, sellMin: 4_800_000, sellOrders: 120, updatedAt }).run();
@@ -189,6 +193,10 @@ export function seed() {
       { id: T.tritanium, name: 'Tritanium', category: 'inventory_type' },
       { id: T.plex, name: 'PLEX', category: 'inventory_type' },
       { id: T.autocannon, name: '200mm AutoCannon I', category: 'inventory_type' },
+      { id: T.probe, name: 'Sisters Core Probe Launcher', category: 'inventory_type' },
+      { id: LP.soe, name: 'Sisters of EVE', category: 'corporation' },
+      { id: LP.fednavy, name: 'Federation Navy', category: 'corporation' },
+      { id: LP.paragon, name: 'Paragon', category: 'corporation' },
       { id: JITA_STATION, name: 'Jita IV - Moon 4 - Caldari Navy Assembly Plant', category: 'station' },
       { id: CITADEL_NAMED, name: 'Perimeter - Tranquility Trading Tower', category: 'structure' },
       { id: JITA, name: 'Jita', category: 'solar_system' },
@@ -223,9 +231,38 @@ export function seed() {
   db.insert(s.fits).values({ id: 1, doctrineId: 1, name: 'Rifter PvP', shipTypeId: T.rifter, eft: '[Rifter, Rifter PvP]', items: [] }).run();
   db.insert(s.jitaPrices).values({ typeId: T.rifter, sellMin: 500_000, sellOrders: 10, updatedAt }).run();
 
+  // Loyalty points: Aria with Sisters of EVE and the Federation Navy, Kade with Sisters; EverMarks for both.
+  // Sisters' store: a probe launcher for 24 000 LP + 2,4 M ISK that sells for 8 M → 233 ISK/LP
+  const lpAt = minutesAgo(10);
+  const lpRows: [number, number, number, number][] = [
+    // [pilot, corporation, points now, points 40 days ago (before the period: the change covers it whole)]
+    [aria.id, LP.soe, 240_000, 200_000],
+    [aria.id, LP.fednavy, 60_000, 60_000],
+    [aria.id, LP.paragon, 12_000, 9_000],
+    [kade.id, LP.soe, 30_000, 30_000],
+    [kade.id, LP.paragon, 4_500, 4_500],
+  ];
+  db.insert(s.loyaltyPoints).values(lpRows.map(([characterId, corporationId, points]) => ({ characterId, corporationId, points, updatedAt: lpAt }))).run();
+  db.insert(s.loyaltyLog)
+    .values(
+      lpRows.flatMap(([characterId, corporationId, points, before]) => [
+        { characterId, corporationId, at: ago(40), points: before },
+        ...(points !== before ? [{ characterId, corporationId, at: lpAt, points }] : []),
+      ]),
+    )
+    .run();
+  db.insert(s.loyaltyOffers).values({ corporationId: LP.soe, offerId: 1, typeId: T.probe, quantity: 1, lpCost: 24_000, iskCost: 2_400_000, requiredItems: [] }).run();
+  db.insert(s.loyaltyStores)
+    .values([
+      { corporationId: LP.soe, offers: 1, status: 'ok', checkedAt: lpAt },
+      { corporationId: LP.fednavy, offers: 0, status: 'missing', checkedAt: lpAt },
+      { corporationId: LP.paragon, offers: 0, status: 'ok', checkedAt: lpAt },
+    ])
+    .run();
+
   // Each pilot's last sync, without errors
   for (const p of [aria, kade]) {
-    for (const kind of ['journal', 'transactions', 'assets', 'killmails', 'contracts', 'skills']) {
+    for (const kind of ['journal', 'transactions', 'assets', 'killmails', 'contracts', 'skills', 'loyalty']) {
       db.insert(s.syncLog).values({ characterId: p.id, kind, startedAt: minutesAgo(11), finishedAt: minutesAgo(10), rowsInserted: 0 }).run();
     }
   }

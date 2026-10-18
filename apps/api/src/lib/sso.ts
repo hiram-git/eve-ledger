@@ -15,10 +15,12 @@ export const SCOPES = [
   'esi-skills.read_skills.v1',
   // Optional: names and system of the citadels where you store things or trade (GET /universe/structures/{id})
   'esi-universe.read_structures.v1',
+  // Optional: loyalty points by corporation and EverMarks (GET /characters/{id}/loyalty/points)
+  'esi-characters.read_loyalty.v1',
 ];
 // The ones that are not "really" missing: everything works without them (citadels show as «Estructura #id»). They do not
 // light up the health line or the Pilotos notice; /characters reports them separately (missingOptionalScopes)
-export const OPTIONAL_SCOPES = ['esi-universe.read_structures.v1'];
+export const OPTIONAL_SCOPES = ['esi-universe.read_structures.v1', 'esi-characters.read_loyalty.v1'];
 
 export type TokenResponse = {
   access_token: string;

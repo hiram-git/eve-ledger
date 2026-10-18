@@ -85,6 +85,37 @@ const balanceSlices = fold(
   otherPilots,
 );
 const balanceTotal = balanceSlices.reduce((n, b) => n + b.value, 0);
+// Loyalty points: LP by corporation (largest first; from the seventh on, «Otras N corporaciones»), valued at the
+// best exchange of each store (estimate, grey); EverMarks (Paragon) apart, they can't become ISK
+const lp = indicators?.loyalty;
+const lpCorps = lp?.corps ?? [];
+const lpSlices = fold(
+  lpCorps.map((c) => ({ label: c.name ?? `#${c.corporationId}`, value: c.points, corp: c })),
+  m.lpOtherCorps,
+);
+const lpWithPoints = lpCorps.filter((c) => c.points > 0).length;
+const lpNoScope = !!lp && lp.pilots.length === 0;
+const lpNotSynced = (lp?.pilots ?? []).filter((p) => !p.synced).map((p) => p.name);
+const lpMissing = (lp?.missingScope ?? []).map((p) => p.name);
+// More than one pilot with LP: each corporation says whose they are
+const lpMultiPilot = (lp?.pilots ?? []).filter((p) => p.synced).length > 1;
+// «Aria Vex 1.180.000» never breaks between the name and the figure; the list breaks at the « · »
+const lpPilots = (c: { byPilot: { name: string; points: number }[] }) =>
+  c.byPilot.map((p) => `${p.name} ${qty.format(p.points)}`.replace(/ /g, '\u00a0')).join(' · ');
+const signedQty = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${qty.format(Math.abs(v))}`;
+const lpChangeText = (delta: number, short = false) =>
+  lp?.changePartial && lp.historySince
+    ? (short ? m.lpChangeSinceShort : m.lpChangeSince)(signedQty(delta), shortDate(lp.historySince, lang))
+    : (short ? m.lpChangeShort : m.lpChange)(signedQty(delta), lp?.days ?? 30);
+const emChangeText = (delta: number) =>
+  lp?.changePartial && lp.historySince ? m.emChangeSinceShort(signedQty(delta), shortDate(lp.historySince, lang)) : m.emChangeShort(signedQty(delta), lp?.days ?? 30);
+const lpOfferTitle = (c: (typeof lpCorps)[number]) =>
+  c.offer
+    ? m.lpOffer(c.offer.name ?? `#${c.offer.typeId}`, qty.format(c.offer.quantity), qty.format(c.offer.lpCost), c.offer.iskCost > 0 ? fmt(c.offer.iskCost) : '') +
+      (c.offer.required ? m.lpOfferInputs(c.offer.required) : '')
+    : c.storeRead
+      ? m.lpNoStore
+      : m.lpStorePending;
 // «8 h», «2,3 h», «0,6 h»: one decimal below 10 h; without breaking across lines
 // Under an hour, in minutes (a Rifter is «1 min» of ratting, not «0 h»)
 const hours = (h: number) =>
@@ -601,6 +632,99 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
             </div>
           </section>
         )}
+
+        {lp && (
+          <section class="panel" aria-labelledby="lp-title">
+            <div class="panel-heading">
+              <h2 id="lp-title">{m.lpTitle}</h2>
+              <span class="meta">{m.lpLead}</span>
+            </div>
+            <div class="panel-body">
+              {lpNoScope ? (
+                <p class="eta">
+                  {m.lpNoScope} <a href="/pilotos">{m.pilots}</a>.
+                </p>
+              ) : lp.points === 0 && !lp.evermarks ? (
+                <p class="eta">{m.lpNone}</p>
+              ) : (
+                <>
+                  {/* The value is an estimate (average price, best exchange): grey with «~»; the LP count is exact */}
+                  <p class="answer">
+                    {lp.value > 0 ? (
+                      <>
+                        <span class="answer-label">{m.lpValueLabel}</span>
+                        <span class="answer-value est" title={full(lp.value)}>
+                          ~{'\u2009'}{fmt(lp.value)}<span class="unit"> ISK</span>
+                        </span>
+                        <span class="answer-sub">{m.lpSub(qty.format(lp.points), lpWithPoints)}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span class="answer-label">{m.lpPointsLabel}</span>
+                        <span class="answer-value">
+                          {qty.format(lp.points)}<span class="unit"> LP</span>
+                        </span>
+                        {lpWithPoints > 0 && <span class="answer-sub">{m.lpCorpsCount(lpWithPoints)}</span>}
+                      </>
+                    )}
+                  </p>
+                  {lp.change !== null && lp.points > 0 && <p class="lp-change">{lpChangeText(lp.change)}</p>}
+                  {lp.points > 0 && (
+                    <div class="donut-row">
+                      <Donut slices={lpSlices} label={m.lpChart} format={(v) => `${qty.format(v)} LP`} lang={lang} center={qty.format(lp.points)} centerSub="LP" />
+                      <table class="mini lp">
+                        <caption class="sr-only">{m.lpChart}</caption>
+                        <thead>
+                          <tr>
+                            <th>{m.lpCorp}</th>
+                            <th>LP</th>
+                            <th>{m.lpRateCol}</th>
+                            <th>{m.lpValueCol}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lpSlices.map((b, i) => {
+                            const c = 'corp' in b ? b.corp : null;
+                            return (
+                              <tr>
+                                <th scope="row">
+                                  <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                                  {b.label}
+                                  {c && lpMultiPilot && c.byPilot.length > 0 && <span class="who">{lpPilots(c)}</span>}
+                                </th>
+                                <td title={c && c.change !== null ? lpChangeText(c.change, true) : undefined}>{qty.format(b.value)}</td>
+                                <td title={c ? lpOfferTitle(c) : undefined}>{c && c.iskPerLp !== null ? qty.format(Math.round(c.iskPerLp)) : '—'}</td>
+                                <td class="est" title={c && c.value !== null ? full(c.value) : c ? lpOfferTitle(c) : undefined}>
+                                  {c && c.value !== null ? `~\u2009${fmt(c.value)}` : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {lp.evermarks && (
+                    <p class="lp-evermarks">
+                      <b>{m.lpEvermarks(qty.format(lp.evermarks.points))}</b>
+                      {lpMultiPilot && lp.evermarks.byPilot.length > 0 && <> · {lpPilots(lp.evermarks)}</>}
+                      {lp.evermarks.change !== null && lp.evermarks.change !== 0 && <> · {emChangeText(lp.evermarks.change)}</>}
+                      {' · '}
+                      {m.lpEvermarksNoIsk}
+                    </p>
+                  )}
+                </>
+              )}
+              <p class="price-meta">
+                {m.lpNote}
+                {lp.unvaluedCorps > 0 && <> {m.lpUnvalued(lp.unvaluedCorps)}.</>}
+                {lp.storesPending > 0 && <> {m.lpStoresPending(lp.storesPending)}.</>}
+                {lpMissing.length > 0 && <> {m.lpMissing(lpMissing.join(', '))}.</>}
+                {lpNotSynced.length > 0 && <> {m.lpNotSynced(lpNotSynced.join(', '))}.</>}
+              </p>
+            </div>
+          </section>
+        )}
       </div>
     )
   }
@@ -630,10 +754,35 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
   .mini.ded td {
     white-space: nowrap;
   }
-  .ded-rate {
+  .ded-rate,
+  .lp-change {
     margin: 0 0 12px;
     color: var(--text-secondary);
     font-size: 13px;
+  }
+  /* Puntos de lealtad: the value is an estimate (grey); whose LP they are goes under the corporation */
+  .lp-evermarks {
+    margin: 12px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .lp-evermarks b {
+    color: var(--text);
+    font-weight: 500;
+  }
+  .mini.lp td {
+    white-space: nowrap;
+  }
+  .mini.lp td.est {
+    color: var(--text-muted);
+  }
+  .mini.lp .who {
+    display: block;
+    padding-left: 18px;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 400;
   }
   .mini tr.group th {
     padding-top: 10px;

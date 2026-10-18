@@ -323,6 +323,35 @@ export type Indicators = {
     iskPerHour: number | null;
     grossPerHour: number | null;
   };
+  // Loyalty points: LP by corporation, valued (estimate) at the best exchange of its LP store; EverMarks (Paragon) apart
+  loyalty: {
+    days: number;
+    // Pilots with the optional scope (synced: a loyalty sync finished) and those without it
+    pilots: { characterId: number; name: string; synced: boolean }[];
+    missingScope: { characterId: number; name: string }[];
+    corps: {
+      corporationId: number;
+      name: string | null;
+      npc: boolean;
+      points: number;
+      byPilot: { characterId: number; name: string; points: number }[];
+      iskPerLp: number | null;
+      value: number | null;
+      offer: { typeId: number; name: string | null; quantity: number; lpCost: number; iskCost: number; required: number } | null;
+      storeRead: boolean;
+      // Change over the period (earned minus spent); null without any log entry
+      change: number | null;
+    }[];
+    evermarks: { points: number; byPilot: { characterId: number; name: string; points: number }[]; change: number | null } | null;
+    points: number;
+    value: number;
+    valuedCorps: number;
+    unvaluedCorps: number;
+    storesPending: number;
+    change: number | null;
+    historySince: string | null;
+    changePartial: boolean;
+  };
 };
 export const getIndicators = () => call<Indicators>('/indicators');
 

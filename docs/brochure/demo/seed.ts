@@ -66,6 +66,7 @@ const ALL_SCOPES = [
   'esi-contracts.read_character_contracts.v1',
   'esi-skills.read_skills.v1',
   'esi-universe.read_structures.v1',
+  'esi-characters.read_loyalty.v1',
 ].join(' ');
 
 runMigrations();
@@ -393,9 +394,61 @@ for (const [idStr, p] of Object.entries(PROFILES)) {
   db.insert(s.characterAttributes).values({ characterId: id, charisma: 19, intelligence: 21, memory: 20, perception: 27, willpower: 24, updatedAt: skillsAt }).run();
 }
 
+// Loyalty points: missions with Sisters of EVE and the Federation Navy; EverMarks from daily goals ------------------
+const LP_CORP = { soe: 1000130, fednavy: 1000181, paragon: 1000432 };
+const LP_TYPE = { probe: 30488, navyAntimatter: 21898 };
+db.insert(s.names)
+  .values([
+    { id: LP_CORP.soe, name: 'Sisters of EVE', category: 'corporation' },
+    { id: LP_CORP.fednavy, name: 'Federation Navy', category: 'corporation' },
+    { id: LP_CORP.paragon, name: 'Paragon', category: 'corporation' },
+    { id: LP_TYPE.probe, name: 'Sisters Core Probe Launcher', category: 'inventory_type' },
+    { id: LP_TYPE.navyAntimatter, name: 'Federation Navy Antimatter Charge M', category: 'inventory_type' },
+  ])
+  .onConflictDoNothing()
+  .run();
+db.insert(s.marketPrices)
+  .values([
+    { typeId: LP_TYPE.probe, averagePrice: 7_900_000, adjustedPrice: 7_700_000, updatedAt },
+    { typeId: LP_TYPE.navyAntimatter, averagePrice: 420, adjustedPrice: 400, updatedAt },
+  ])
+  .onConflictDoNothing()
+  .run();
+db.insert(s.loyaltyOffers)
+  .values([
+    // (7,9 M − 2,4 M) / 24 000 = 229 ISK/LP
+    { corporationId: LP_CORP.soe, offerId: 1, typeId: LP_TYPE.probe, quantity: 1, lpCost: 24_000, iskCost: 2_400_000, requiredItems: [] },
+    // (5000 × 420 − 10 000) / 2000 = 1045 ISK/LP
+    { corporationId: LP_CORP.fednavy, offerId: 2, typeId: LP_TYPE.navyAntimatter, quantity: 5000, lpCost: 2_000, iskCost: 10_000, requiredItems: [] },
+  ])
+  .run();
+db.insert(s.loyaltyStores)
+  .values(Object.values(LP_CORP).map((corporationId) => ({ corporationId, offers: corporationId === LP_CORP.paragon ? 0 : 1, status: 'ok', checkedAt: minutesAgo(12) })))
+  .run();
+const lpRows: [number, number, number, number][] = [
+  // [pilot, corporation, points now, points 40 days ago]
+  [P.aria.id, LP_CORP.soe, 1_180_000, 1_050_000],
+  [P.aria.id, LP_CORP.paragon, 21_400, 15_200],
+  [P.nyx.id, LP_CORP.fednavy, 640_000, 520_000],
+  [P.nyx.id, LP_CORP.paragon, 9_800, 6_100],
+  [P.rhea.id, LP_CORP.soe, 310_000, 310_000],
+  [P.rhea.id, LP_CORP.paragon, 4_300, 2_900],
+  [P.kade.id, LP_CORP.paragon, 2_600, 1_100],
+  [P.lio.id, LP_CORP.fednavy, 45_000, 60_000],
+];
+db.insert(s.loyaltyPoints).values(lpRows.map(([characterId, corporationId, points]) => ({ characterId, corporationId, points, updatedAt: minutesAgo(12) }))).run();
+db.insert(s.loyaltyLog)
+  .values(
+    lpRows.flatMap(([characterId, corporationId, points, before]) => [
+      { characterId, corporationId, at: at(40, 12), points: before },
+      ...(points !== before ? [{ characterId, corporationId, at: minutesAgo(12), points }] : []),
+    ]),
+  )
+  .run();
+
 // Each pilot's last sync, without errors
 for (const p of Object.values(P)) {
-  for (const kind of ['journal', 'transactions', 'assets', 'killmails', 'contracts', 'skills']) {
+  for (const kind of ['journal', 'transactions', 'assets', 'killmails', 'contracts', 'skills', 'loyalty']) {
     db.insert(s.syncLog).values({ characterId: p.id, kind, startedAt: minutesAgo(13), finishedAt: minutesAgo(12), rowsInserted: 0 }).run();
   }
 }

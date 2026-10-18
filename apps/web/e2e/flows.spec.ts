@@ -227,6 +227,25 @@ test('Doctrinas: la vista compacta pliega los fits a una línea y se recuerda', 
   await expect(page.locator('#fit-1 details.fit-fold')).toHaveJSProperty('open', true);
 });
 
+test('Puntos de lealtad: LP por corporación valorados al mejor cambio y EverMarks aparte', async ({ page, request }) => {
+  const { loyalty } = await (await request.get(`${API_URL}/indicators`)).json();
+  expect(loyalty.corps.map((c: { name: string; points: number }) => [c.name, c.points])).toEqual([['Sisters of EVE', 270_000], ['Federation Navy', 60_000]]);
+  expect(loyalty.corps[0].iskPerLp).toBeCloseTo((8_000_000 - 2_400_000) / 24_000, 0);
+  expect(loyalty.corps[1].value).toBeNull();
+  expect(loyalty.evermarks.points).toBe(16_500);
+  expect(loyalty.change).toBe(40_000);
+  await page.goto('/indicadores');
+  const card = page.locator('section[aria-labelledby="lp-title"]');
+  // 270 000 LP × 233,33 ISK/LP = 63,0 M, estimated; the LP figure and the EverMarks are exact
+  await expect(card.locator('.answer-value')).toContainText('63,0 M');
+  await expect(card.locator('.answer-sub')).toContainText('330.000 LP');
+  await expect(card.locator('.lp-change')).toContainText('+40.000 LP en 30 días');
+  await expect(card.locator('table.lp tbody tr').first()).toContainText('Sisters of EVE');
+  await expect(card.locator('.lp-evermarks')).toContainText('16.500');
+  // Nyx has the scope but no sync yet: the card says so
+  await expect(card.locator('.price-meta')).toContainText(PILOTS.nyx.name);
+});
+
 test('el pie enlaza el aviso legal con el texto original de CCP', async ({ page }) => {
   await page.goto('/');
   await page.locator('footer').getByRole('link', { name: 'Aviso legal' }).click();

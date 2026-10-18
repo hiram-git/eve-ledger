@@ -16,6 +16,7 @@ import { refreshDoctrinePrices } from './jita';
 import { refreshPlexQuote } from './quotes';
 import { refreshIncursions } from './deductions';
 import { fetchSkills, SKILLS_SCOPE } from './skills';
+import { fetchLoyalty, LOYALTY_SCOPE, refreshLoyaltyStores } from './loyalty';
 
 // GET /characters/{id}/wallet/journal (only the fields we store)
 type EsiJournalEntry = {
@@ -46,7 +47,7 @@ type EsiTransaction = {
   journal_ref_id: number;
 };
 
-type Kind = 'journal' | 'transactions' | 'assets' | 'killmails' | 'contracts' | 'skills';
+type Kind = 'journal' | 'transactions' | 'assets' | 'killmails' | 'contracts' | 'skills' | 'loyalty';
 
 export type StepResult = { pages: number; fetched: number; inserted: number; error?: string };
 
@@ -60,6 +61,7 @@ export type SyncResult = {
   killmails?: StepResult; // inserted = new killmails (kills and losses)
   contracts?: StepResult; // snapshot of the contracts: inserted = contracts stored
   skills?: StepResult; // snapshot of the skills: inserted = skills stored
+  loyalty?: StepResult; // snapshot of the loyalty points: inserted = corporations with LP
   skipped?: string[];
   namesResolved?: number;
   error?: string;
@@ -216,6 +218,8 @@ export const syncContracts = (characterId: number) =>
 
 export const syncSkills = (characterId: number) => logged(characterId, 'skills', (r) => fetchSkills(characterId, r));
 
+export const syncLoyalty = (characterId: number) => logged(characterId, 'loyalty', (r) => fetchLoyalty(characterId, r));
+
 // Public tasks (no token) after syncing: they fail without invalidating the data already stored
 // and are retried on the next sync
 async function bestEffort<T>(label: string, fn: () => Promise<T>): Promise<T | undefined> {
@@ -266,6 +270,8 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
       else result.skipped.push(`contratos: falta el scope ${CONTRACTS_SCOPE}, vuelve a vincular el personaje`);
       if (scopes.includes(SKILLS_SCOPE)) result.skills = await syncSkills(characterId);
       else result.skipped.push(`skills: falta el scope ${SKILLS_SCOPE}, vuelve a vincular el personaje`);
+      // Optional scope: nothing is reported as missing without it
+      if (scopes.includes(LOYALTY_SCOPE)) result.loyalty = await syncLoyalty(characterId);
     }
     result.inserted = result.journal.inserted + (result.transactions?.inserted ?? 0);
 
@@ -276,6 +282,7 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
       result.killmails?.error,
       result.contracts?.error,
       result.skills?.error,
+      result.loyalty?.error,
     ].filter(Boolean);
     if (errors.length) result.error = errors.join(' | ');
     else await db.update(characters).set({ lastSyncAt: new Date() }).where(eq(characters.id, characterId));
@@ -284,6 +291,8 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
     await bestEffort('quotes', refreshPlexQuote);
     // Systems with an incursion right now (public): without this record their bounty penalty can't be estimated
     await bestEffort('incursions', refreshIncursions);
+    // LP stores of the corporations your pilots have LP with (public, daily): what the LP is worth
+    await bestEffort('loyalty', () => refreshLoyaltyStores());
     // Lowest sell in Jita for what the doctrines carry and for injectors (at most once an hour: once per round)
     await bestEffort('jita', refreshDoctrinePrices);
     // Doctrine skills stored before knowing whether they're Omega-only (public; only requests the missing ones)

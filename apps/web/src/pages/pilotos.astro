@@ -74,8 +74,12 @@ const SCOPE_LABELS: Record<string, string> = {
   'esi-skills.read_skills.v1': m.scopeSkills,
 };
 const REQUIRED = Object.keys(SCOPE_LABELS);
-// Optional permission: citadel names and systems (the API returns it separately, in missingOptionalScopes)
-const STRUCTURES_SCOPE = 'esi-universe.read_structures.v1';
+// Optional permissions (the API returns them separately, in missingOptionalScopes): citadel names and systems,
+// loyalty points. Not a problem, just an improvement one click away
+const OPTIONAL: { scope: string; icon: 'pin' | 'medal'; label: string; hint: string }[] = [
+  { scope: 'esi-universe.read_structures.v1', icon: 'pin', label: m.scopeStructures, hint: m.scopeStructuresHint },
+  { scope: 'esi-characters.read_loyalty.v1', icon: 'medal', label: m.scopeLoyalty, hint: m.scopeLoyaltyHint },
+];
 
 const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
 const stateOf = (p: Pilot) => pilotState(p, m, staleAfterMs, status?.running);
@@ -252,16 +256,16 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
                   </li>
                 ))
               )}
-              {/* Optional (citadel names): no amber; the whole chip leads to the EVE login to grant it */}
-              {(p.missingOptionalScopes ?? []).includes(STRUCTURES_SCOPE) && (
+              {/* Optional: no amber; the whole chip leads to the EVE login to grant it */}
+              {OPTIONAL.filter((o) => (p.missingOptionalScopes ?? []).includes(o.scope)).map((o) => (
                 <li class="optional">
-                  <a href={loginUrl} title={`${m.scopeStructuresHint} ${m.relinkAs(p.name)}`}>
-                    <Icon name="pin" />
-                    {m.scopeStructures}
+                  <a href={loginUrl} title={`${o.hint} ${m.relinkAs(p.name)}`}>
+                    <Icon name={o.icon} />
+                    {o.label}
                     <span class="scope-missing">· {m.scopeOptional}</span>
                   </a>
                 </li>
-              )}
+              ))}
             </ul>
 
             <dl class="figures">

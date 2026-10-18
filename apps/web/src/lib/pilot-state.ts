@@ -37,6 +37,8 @@ export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunn
       assets: m.kindAssets,
       killmails: m.kindKillmails,
       contracts: m.kindContracts,
+      skills: m.kindSkills,
+      loyalty: m.kindLoyalty,
     };
     const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
     const hint = explainError(p.lastError.message, m);
