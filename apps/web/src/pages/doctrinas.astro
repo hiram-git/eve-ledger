@@ -364,9 +364,9 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
               </span>
             </summary>
 
-            {/* Who flies the doctrine (how many of its fits each pilot can fly, with synced skills), rename and delete */}
-            <div class="doctrine-bar">
-              {summed && (
+            {/* Who flies the doctrine (how many of its fits each pilot can fly, with synced skills) */}
+            {summed && (
+              <div class="doctrine-bar">
                 <div class="who-flies">
                   <span class="who-label">{m.doctrineWho}</span>
                   <ul>
@@ -381,28 +381,8 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                     })}
                   </ul>
                 </div>
-              )}
-              <details class="rename">
-                <summary class="icon-button" title={m.doctrineRename}>
-                  <Icon name="pencil" />
-                  <span class="sr-only">{m.doctrineRenameLabel(d.name)}</span>
-                </summary>
-                <form method="post" action="/doctrinas/accion" class="rename-form">
-                  <input type="hidden" name="action" value="rename" />
-                  <input type="hidden" name="id" value={d.id} />
-                  <label class="sr-only" for={`rename-${d.id}`}>{m.doctrineRenameLabel(d.name)}</label>
-                  <input id={`rename-${d.id}`} type="text" name="name" value={d.name} maxlength="80" required autocomplete="off" />
-                  <button type="submit" class="secondary-button">{m.doctrineRenameSave}</button>
-                </form>
-              </details>
-              <form method="post" action="/doctrinas/accion" class="delete-form" data-confirm={m.doctrineDeleteConfirm(d.name)}>
-                <input type="hidden" name="action" value="delete-doctrine" />
-                <input type="hidden" name="id" value={d.id} />
-                <button type="submit" class="icon-button" title={m.doctrineDelete} aria-label={`${m.doctrineDelete}: ${d.name}`}>
-                  <Icon name="trash" />
-                </button>
-              </form>
-            </div>
+              </div>
+            )}
 
             {noticeAt(`doctrina-${d.id}`) && (
               <div class="panel-notice">
@@ -473,7 +453,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
                   <input type="hidden" name="action" value="delete-fit" />
                   <input type="hidden" name="id" value={f.id} />
                   <input type="hidden" name="doctrine" value={d.id} />
-                  <button type="submit" class="icon-button" title={m.fitDelete} aria-label={`${m.fitDelete}: ${fitLabel(f)}`}>
+                  <button type="submit" class="icon-button danger" title={m.fitDelete} aria-label={`${m.fitDelete}: ${fitLabel(f)}`}>
                     <Icon name="trash" />
                   </button>
                 </form>
@@ -683,6 +663,32 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
             </form>
           </details>
           </details>
+
+          {/* Rename and delete sit in the heading row, outside the summary (a control inside it would also fold the
+              doctrine): laid over the heading's right end, so they're there with the doctrine folded too (user's
+              decision: the pencil in amber, the bin in red). The rename form opens as a popover under the pencil */}
+          <div class="doctrine-actions">
+            <details class="rename">
+              <summary class="icon-button edit" title={m.doctrineRename}>
+                <Icon name="pencil" />
+                <span class="sr-only">{m.doctrineRenameLabel(d.name)}</span>
+              </summary>
+              <form method="post" action="/doctrinas/accion" class="rename-form">
+                <input type="hidden" name="action" value="rename" />
+                <input type="hidden" name="id" value={d.id} />
+                <label class="sr-only" for={`rename-${d.id}`}>{m.doctrineRenameLabel(d.name)}</label>
+                <input id={`rename-${d.id}`} type="text" name="name" value={d.name} maxlength="80" required autocomplete="off" />
+                <button type="submit" class="secondary-button">{m.doctrineRenameSave}</button>
+              </form>
+            </details>
+            <form method="post" action="/doctrinas/accion" class="delete-form" data-confirm={m.doctrineDeleteConfirm(d.name)}>
+              <input type="hidden" name="action" value="delete-doctrine" />
+              <input type="hidden" name="id" value={d.id} />
+              <button type="submit" class="icon-button danger" title={m.doctrineDelete} aria-label={`${m.doctrineDelete}: ${d.name}`}>
+                <Icon name="trash" />
+              </button>
+            </form>
+          </div>
         </section>
       );
     })
@@ -770,12 +776,17 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
       localStorage.setItem('fits-compact', compact ? '1' : '0');
     } catch {}
   });
-  // The rename field gets the focus when its form unfolds
-  document.querySelectorAll<HTMLDetailsElement>('details.rename').forEach((d) =>
+  // The rename field gets the focus when its popover opens; Escape closes it and returns to the pencil
+  document.querySelectorAll<HTMLDetailsElement>('details.rename').forEach((d) => {
     d.addEventListener('toggle', () => {
       if (d.open) d.querySelector<HTMLInputElement>('input[type=text]')?.select();
-    }),
-  );
+    });
+    d.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !d.open) return;
+      d.open = false;
+      d.querySelector<HTMLElement>('summary')?.focus();
+    });
+  });
   // On going back, the browser restores the page as it was: without busy buttons
   window.addEventListener('pageshow', () => {
     document.querySelectorAll<HTMLButtonElement>('button[aria-busy=true]').forEach((b) => {
@@ -916,6 +927,8 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   .doctrine-fold > summary {
     flex-wrap: wrap;
     justify-content: flex-start;
+    /* Room for the rename and delete buttons laid over the right end of the heading */
+    padding-right: 104px;
     list-style: none;
     cursor: pointer;
   }
@@ -952,7 +965,7 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     color: var(--text-secondary);
     text-align: right;
   }
-  /* Under the heading: who flies it (left), rename and delete (right). The rename form, when open, takes a row of its own */
+  /* Under the heading: who flies it */
   .doctrine-bar {
     display: flex;
     flex-wrap: wrap;
@@ -961,8 +974,36 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     padding: 10px 22px;
     border-bottom: 1px solid #26313b88;
   }
-  .doctrine-bar .rename {
-    margin-left: auto;
+  /* Rename and delete, over the right end of the heading (58 px high: 36 px buttons centred); the panel is the
+     positioning context */
+  .doctrine-actions {
+    position: absolute;
+    top: 11px;
+    right: 16px;
+    z-index: 1;
+    display: flex;
+    gap: 6px;
+  }
+  /* User's decision: the pencil in amber (warning) and the bin in red (danger), with a tinted border so they read
+     as buttons on the heading; filled on hover */
+  .icon-button.edit {
+    border-color: #e7b75f55;
+    color: var(--warning);
+  }
+  .icon-button.edit:hover,
+  .rename[open] > summary.icon-button.edit {
+    border-color: var(--warning);
+    background: #e7b75f1f;
+    color: var(--warning);
+  }
+  .icon-button.danger {
+    border-color: #f0857a55;
+    color: var(--critical);
+  }
+  .icon-button.danger:hover {
+    border-color: var(--critical);
+    background: #f0857a1f;
+    color: var(--critical);
   }
   .rename > summary {
     list-style: none;
@@ -970,29 +1011,24 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   .rename > summary::-webkit-details-marker {
     display: none;
   }
-  /* Open, the details takes a row of its own: the pencil in one column and the form in the other. A grid with
-     minmax(0, 1fr), because the browser wraps the details' content in a box of its own, which a flex row would
-     size to the form's intrinsic width (the field then pushed «Guardar» out of a 390 px screen) */
-  .rename[open] {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 8px;
-    flex-basis: 100%;
-    order: 3;
-  }
-  /* With the rename form on its own row, the delete button keeps to the right */
-  .doctrine-bar:has(.rename[open]) .delete-form {
-    margin-left: auto;
-  }
+  /* The rename form is a popover under the buttons (anchored to .doctrine-actions, not to the pencil: anchored to the
+     pencil it ran off the left edge of a 390 px screen), right-aligned and narrow enough for that screen */
   .rename-form {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
     display: flex;
     gap: 8px;
-    min-width: 0;
+    width: min(420px, 100vw - 48px);
+    padding: 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--panel-2);
+    box-shadow: 0 12px 32px #00000066;
   }
   .rename-form input[type='text'] {
     flex: 1;
-    max-width: 480px;
+    min-width: 0;
   }
   .who-flies {
     display: flex;
@@ -1740,6 +1776,12 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     .icon-button {
       width: 40px;
       height: 40px;
+    }
+    .doctrine-fold > summary {
+      padding-right: 108px;
+    }
+    .doctrine-actions {
+      top: 9px;
     }
     .who-flies,
     .fit,

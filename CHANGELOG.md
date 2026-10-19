@@ -6,6 +6,7 @@ When a new version changes the database, the app first saves a copy of it as an 
 
 ## Unreleased
 
+- **Doctrines: rename and delete in the heading row.** The pencil and the bin sit at the right end of each doctrine's heading, so they are there with the doctrine folded too; the pencil is amber and the bin red (the bin of each fit as well). The rename field opens under the pencil.
 - **Indicators → Loyalty points.** What each pilot has with each corporation (missions, faction warfare, your own corporation's projects) and what it is worth in ISK at the best exchange of that corporation's LP store, valued at ESI's average price (an estimate: not what Jita would pay). EverMarks, the loyalty points of Paragon, are shown apart: they can't become ISK. ESI only gives balances, so the change over the period (earned minus spent) is recorded from the first sync on. Needs a new optional permission: pilots linked before show "Loyalty points · optional" in Pilots; click it to grant it. The corporation's own LP wallet is not in ESI.
 - **Summary: the pilot chips show the wallet balance.** The filter strip under the period tabs now shows what each pilot has in the wallet (and "All", the sum of the wallets), instead of the period net, which is already in the Net card and in the pilots table. A pilot without a sync shows "—"; stale data is greyed with its age, as before.
 

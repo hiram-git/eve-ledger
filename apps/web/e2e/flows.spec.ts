@@ -191,6 +191,9 @@ test('Doctrinas: renombrar una doctrina y plegarla; el pliegue se recuerda', asy
     await fold.locator('> summary').click();
     await expect(fold).toHaveJSProperty('open', false);
     await expect(page.locator(`#doctrina-${id} .add-fit`)).toBeHidden();
+    // Rename and delete live in the heading row: still there with the doctrine folded
+    await expect(page.locator(`#doctrina-${id} .doctrine-actions details.rename > summary`)).toBeVisible();
+    await expect(page.locator(`#doctrina-${id} .doctrine-actions .delete-form button`)).toBeVisible();
     await page.reload();
     await expect(page.locator(`#doctrina-${id} details.doctrine-fold`)).toHaveJSProperty('open', false);
     await expect(page.locator(`#doctrina-${id}`).getByRole('heading', { level: 2, name: 'Beehive' })).toBeVisible();
