@@ -4,11 +4,22 @@ What changed in each version of the EVE Ledger desktop app. Every version is a [
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
-## Unreleased
+## 1.0.0 — 2026-10-19
+
+First stable release. EVE Ledger answers "am I making or losing ISK?" for all your EVE Online pilots, on your own computer: it reads your wallets, assets, losses, contracts, skills and loyalty points through ESI, keeps the history ESI drops after 30 days, and shows it as a Summary (net by activity, today, daily chart, pilots, inventory, market review), Lost ships (what they really cost you), Indicators (Omega for all your accounts, ratting ISK/h, deductions, fees, loyalty points…), Balances (a balance sheet, an income statement and a wallet reconciliation) and Doctrines (who can fly each fit, what it costs, what is missing). Everything stays local: no server, no account, read-only permissions, login with PKCE and no secrets to keep. Spanish, English and German.
+
+Since 0.1.18:
 
 - **Doctrines: rename and delete in the heading row.** The pencil and the bin sit at the right end of each doctrine's heading, so they are there with the doctrine folded too; the pencil is amber and the bin red (the bin of each fit as well). The rename field opens under the pencil.
 - **Indicators → Loyalty points.** What each pilot has with each corporation (missions, faction warfare, your own corporation's projects) and what it is worth in ISK at the best exchange of that corporation's LP store, valued at ESI's average price (an estimate: not what Jita would pay). EverMarks, the loyalty points of Paragon, are shown apart: they can't become ISK. ESI only gives balances, so the change over the period (earned minus spent) is recorded from the first sync on. Needs a new optional permission: pilots linked before show "Loyalty points · optional" in Pilots; click it to grant it. The corporation's own LP wallet is not in ESI.
 - **Summary: the pilot chips show the wallet balance.** The filter strip under the period tabs now shows what each pilot has in the wallet (and "All", the sum of the wallets), instead of the period net, which is already in the Net card and in the pilots table. A pilot without a sync shows "—"; stale data is greyed with its age, as before.
+
+Upgrading from 0.1.x:
+
+- The app updates itself. This version adds the loyalty-point tables to the database; an `update` backup is saved first (**Pilots → Backups**).
+- Loyalty points need a new optional permission: pilots linked before show "Loyalty points · optional" in Pilots. Click it and sign in with that pilot; everything else keeps working without it.
+- The installers stay unsigned: it's a free, open project and signing certificates cost money every year. Windows (SmartScreen) and macOS (Gatekeeper) warn the first time; every release carries SHA-256 sums and a GitHub build attestation, and the install guide explains how to check them and get past the warning.
+- Tested by hand on Windows and Linux. The macOS (Apple Silicon) build comes straight from CI and hasn't been tried on a Mac yet: reports are welcome.
 
 ## 0.1.18 — 2026-10-16
 

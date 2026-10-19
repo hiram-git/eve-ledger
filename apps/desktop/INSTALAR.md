@@ -44,7 +44,7 @@ Pulsa **Guardar y abrir el ledger**. Se abre el dashboard. Ve a **Pilotos → Vi
 
 > **Nombres de las citadelas (opcional):** desde la 0.1.14, EVE Ledger puede mostrar el nombre de las citadelas donde guardas cosas o comercias (si no, salen como «Estructura …»). Los pilotos vinculados antes muestran en Pilotos el chip «Nombres de citadelas · opcional»: púlsalo (o **Revincular**) y entra con ese personaje para concederlo. Solo se ven las citadelas a las que ese piloto tiene acceso.
 
-> **Puntos de lealtad (opcional):** Indicadores muestra los LP de cada piloto por corporación, los EverMarks y lo que valen en ISK al mejor cambio de cada tienda. Es un permiso nuevo: los pilotos vinculados antes muestran en Pilotos el chip «Puntos de lealtad · opcional»; púlsalo (o **Revincular**) y entra con ese personaje para concederlo. ESI solo da el saldo, así que lo ganado y gastado se apunta desde el primer sync con el permiso.
+> **Puntos de lealtad (opcional):** desde la 1.0.0, Indicadores muestra los LP de cada piloto por corporación, los EverMarks y lo que valen en ISK al mejor cambio de cada tienda. Es un permiso nuevo: los pilotos vinculados antes muestran en Pilotos el chip «Puntos de lealtad · opcional»; púlsalo (o **Revincular**) y entra con ese personaje para concederlo. ESI solo da el saldo, así que lo ganado y gastado se apunta desde el primer sync con el permiso.
 
 > **¿Configuraste tu propia aplicación de EVE con una Secret Key en una versión anterior?** Desde la 0.1.13 la Secret Key no se usa (solo el Client ID). Los pilotos vinculados con ella salen como «Token caducado»: pulsa **Revincular** en cada uno.
 

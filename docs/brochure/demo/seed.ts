@@ -39,6 +39,10 @@ const ST = {
   staging: 1_045_000_000_001, // made-up citadel in VFK-IV
 };
 const NPC_CORP = 1000125; // CONCORD
+// Corporation tax (Descuentos): the pilots' corporation keeps 10 % of bounties and ESS; Tomas, still in an NPC
+// corporation, pays 11 %
+const TAX_CORP = 98_100_002;
+const TAX_NPC_CORP = 1000049; // Brutor Tribe
 const STRANGERS = [95_100_001, 95_100_002, 95_100_003, 95_100_004];
 const BUYBACK_CORP = 98_100_001;
 const T = {
@@ -240,6 +244,8 @@ for (const e of entries) {
       journalRefId: id,
     });
   }
+  const taxed = e.ref === 'bounty_prizes' || e.ref === 'ess_escrow_transfer';
+  const npcTax = e.char === P.tomas.id;
   journal.push({
     journalId: id,
     characterId: e.char,
@@ -251,6 +257,9 @@ for (const e of entries) {
     secondPartyId: e.second,
     contextId: ctx?.[0],
     contextIdType: ctx?.[1],
+    // ESI gives the tax with the amount already net of it
+    tax: taxed ? round(e.amount * (npcTax ? 0.11 / 0.89 : 0.1 / 0.9)) : 0,
+    taxReceiverId: taxed ? (npcTax ? TAX_NPC_CORP : TAX_CORP) : null,
   });
 }
 for (const [id, b] of balance) if (b < 0) throw new Error(`saldo negativo en ${id}`);
@@ -358,6 +367,8 @@ db.insert(s.names)
     ...systems.map((x) => ({ id: x.id, name: x.name, category: 'solar_system' })),
     { id: NPC_CORP, name: 'CONCORD', category: 'corporation' },
     { id: BUYBACK_CORP, name: 'Demo Buyback Corp', category: 'corporation' },
+    { id: TAX_CORP, name: 'Ledger Demo Corp', category: 'corporation' },
+    { id: TAX_NPC_CORP, name: 'Brutor Tribe', category: 'corporation' },
     ...STRANGERS.map((id, i) => ({ id, name: `Demo Trader ${i + 1}`, category: 'character' })),
   ])
   .onConflictDoNothing()

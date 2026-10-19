@@ -161,7 +161,7 @@ const slide = T[q.get('slide')] ? q.get('slide') : 'portada';
 const t = { ...T[slide][lang], ...COMMON[lang] };
 document.documentElement.lang = lang;
 document.body.dataset.slide = slide;
-document.querySelector('[data-version]').textContent = q.get('v') || '0.1.14';
+document.querySelector('[data-version]').textContent = q.get('v') || '1.0.0';
 for (const el of document.querySelectorAll('[data-t]')) {
   const k = el.dataset.t;
   // A bullet in square brackets is the new feature: chip «NUEVO»
