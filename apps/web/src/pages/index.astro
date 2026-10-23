@@ -224,7 +224,7 @@ const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firs
 // otherwise it moves down next to the inventory and Net worth becomes a compact strip
 const showMap = withInv && !!geo && geo.nodes.some((n) => n.earnedToday > 0);
 const mapBelow = withInv && !!geo && !showMap && geo.nodes.length > 0;
-// Where you earned today, whatever the inventory preference (user's decision after the eighteenth critique: the only
+// Where you earned today, whatever the inventory preference (user's decision after a UI review: the only
 // datum with motion disappeared with «Wallets»): with wallets only, a mini-map of today's systems in the «Hoy» column;
 // with «+ inventario» the Net worth card carries the full map
 const todayMap = !withInv && !!geo && geo.nodes.some((n) => n.earnedToday > 0) ? geo : undefined;
@@ -671,7 +671,7 @@ const worthNote =
                             </tr>
                             {hasAccounts && (
                               /* The label says why the sign: PLEX bought left the wallet and comes back to the result
-                                 (eighteenth critique: «PLEX (cuentas, aparte) + 4,09 B» read as paying more). The count and
+                                 (a UI review found that «PLEX (cuentas, aparte) + 4,09 B» read as paying more). The count and
                                  the Omega link, which were a second PLEX line at the card's foot with the opposite sign, go here */
                               <tr>
                                 <th scope="row">
