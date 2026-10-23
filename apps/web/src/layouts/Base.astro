@@ -45,6 +45,9 @@ const cron = !status
         : {
             cls: '',
             text: m.cronEvery(status.intervalMin) + (status.nextRunAt ? m.cronNext(until(status.nextRunAt, lang)) : ''),
+            // On a phone: how long ago the last round ran (kept live by the script), or the interval while there is none
+            short: status.lastRun ? ago(status.lastRun.finishedAt, lang) : m.cronShort(status.intervalMin),
+            agoAt: status.lastRun?.finishedAt,
           };
 const cronTitle = status?.lastRun
   ? m.cronLast(ago(status.lastRun.finishedAt, lang), status.lastRun.inserted) +
@@ -104,7 +107,11 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
             <span class:list={['status-badge', cron.cls]} title={cronTitle}>
               <i class="dot" />
               <span class="text">{cron.text}</span>
-              {'short' in cron && <span class="text-short" aria-hidden="true">{cron.short}</span>}
+              {'short' in cron && (
+                <span class="text-short" aria-hidden="true" data-ago={'agoAt' in cron ? cron.agoAt : undefined}>
+                  {cron.short}
+                </span>
+              )}
             </span>
           )
         }
@@ -150,6 +157,16 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
 
     <footer class="shell">
       <span class="footer-brand">EVE LEDGER · localhost{APP_VERSION && <span class="footer-version"> · v{APP_VERSION}</span>}</span>
+      {/* On a phone the language switch lives here (in the header it took 125 px that the sync status needed) */}
+      <nav class="lang-switch footer-lang" aria-label={m.language}>
+        {
+          LANGS.map((l) => (
+            <a href={langHref(l)} hreflang={l} lang={l} title={LANG_NAMES[l]} aria-current={l === lang ? 'true' : undefined}>
+              {l.toUpperCase()}
+            </a>
+          ))
+        }
+      </nav>
       <span>
         {m.footer} <a class="footer-link" href="/aviso-legal" aria-current={section === 'legal' ? 'page' : undefined}>{m.legalLink}</a>
       </span>
@@ -262,7 +279,8 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     background: #16304070;
     color: #8addee;
   }
-  .text-short {
+  .text-short,
+  .footer-lang {
     display: none;
   }
   .update-notice {
@@ -368,6 +386,13 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
        to make room for it, Sincronizar becomes icon-only while the notice lasts */
     .text-short {
       display: inline;
+    }
+    /* The language switch moves to the footer: the header keeps brand, sync status with its age, and Sincronizar */
+    .utility-right .lang-switch {
+      display: none;
+    }
+    .footer-lang {
+      display: flex;
     }
     .utility-right:has(.status-badge.off, .status-badge.error) .sync-form .label {
       position: absolute;

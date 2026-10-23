@@ -262,6 +262,7 @@ const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.l
     // (the whole plot is the target; the pointer events above keep working for mouse and pen)
     chart.querySelector<HTMLElement>('.cols')?.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch' || cols.length === 0) return;
+      chart.dataset.touch = '1'; // the keyboard hint stays hidden until a key is pressed
       let nearest = cols[0];
       let best = Infinity;
       for (const col of cols) {
@@ -277,6 +278,7 @@ const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.l
       show(nearest);
     });
     chart.addEventListener('keydown', (e) => {
+      delete chart.dataset.touch;
       const i = cols.indexOf(document.activeElement as HTMLElement);
       if (i < 0) return;
       const step: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, PageUp: -7, PageDown: 7 };
@@ -557,7 +559,8 @@ const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.l
   .tooltip[hidden] {
     display: none;
   }
-  /* The keyboard hint is only visible while the chart has focus */
+  /* The keyboard hint is only visible while the chart has focus, and not after a tap (a tap focuses the day too, and the
+     hint showed on a phone; :focus-visible doesn't tell a programmatic focus after a touch from a keyboard one) */
   .hint {
     grid-column: 2;
     margin: 8px 0 0;
@@ -567,6 +570,9 @@ const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.l
   }
   .chart:focus-within .hint {
     visibility: visible;
+  }
+  .chart[data-touch] .hint {
+    visibility: hidden;
   }
   .table-view {
     margin-top: 4px;
