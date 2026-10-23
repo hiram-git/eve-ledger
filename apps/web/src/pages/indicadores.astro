@@ -927,46 +927,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
     font-size: 13px;
     color: var(--text-muted);
   }
-  .equation {
-    width: 100%;
-    margin: 6px 0 0;
-    border-collapse: collapse;
-  }
-  .equation th,
-  .equation td {
-    padding: 9px 0;
-    border-top: 1px solid var(--line);
-    /* The theme's tables have a bottom border on th: here it only separates the top one */
-    border-bottom: 0;
-    vertical-align: baseline;
-  }
-  .equation th {
-    /* The label takes the leftover width: operator and figure go together on the right */
-    width: 100%;
-    /* The theme sets nowrap on th: here long labels (German) can wrap */
-    white-space: normal;
-    padding-right: 16px;
-    font: 400 13px var(--font);
-    color: var(--text-secondary);
-    text-align: left;
-    text-transform: none;
-    letter-spacing: 0;
-  }
-  .equation td {
-    font: 15px var(--mono);
-    color: var(--text);
-    text-align: right;
-    white-space: nowrap;
-  }
-  .equation td:last-child {
-    padding-left: 10px;
-  }
-  .equation td.op {
-    width: 2ch;
-    padding-left: 12px;
-    color: var(--text-muted);
-    text-align: center;
-  }
+  /* .equation lives in theme.css: the Net card uses it too */
   .row-meta {
     display: block;
     margin-top: 2px;

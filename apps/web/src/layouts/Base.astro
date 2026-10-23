@@ -35,10 +35,17 @@ const cron = !status
     ? { cls: 'off', text: m.cronOff, short: m.cronOffShort }
     : status.running
       ? { cls: 'busy', text: m.syncing }
-      : {
-          cls: '',
-          text: m.cronEvery(status.intervalMin) + (status.nextRunAt ? m.cronNext(until(status.nextRunAt, lang)) : ''),
-        };
+      : status.lastRun?.errors
+        ? {
+            // The last round failed for some pilot: the badge says so (it stayed green with the failure only in its title)
+            cls: 'error',
+            text: m.cronEvery(status.intervalMin) + m.cronErrors(status.lastRun.errors),
+            short: m.cronErrorsShort(status.lastRun.errors),
+          }
+        : {
+            cls: '',
+            text: m.cronEvery(status.intervalMin) + (status.nextRunAt ? m.cronNext(until(status.nextRunAt, lang)) : ''),
+          };
 const cronTitle = status?.lastRun
   ? m.cronLast(ago(status.lastRun.finishedAt, lang), status.lastRun.inserted) +
     (status.lastRun.errors ? m.cronLastErrors(status.lastRun.errors) : '')
@@ -362,7 +369,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     .text-short {
       display: inline;
     }
-    .utility-right:has(.status-badge.off) .sync-form .label {
+    .utility-right:has(.status-badge.off, .status-badge.error) .sync-form .label {
       position: absolute;
       width: 1px;
       height: 1px;
@@ -370,7 +377,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       clip: rect(0 0 0 0);
       white-space: nowrap;
     }
-    .utility-right:has(.status-badge.off) .sync-form .primary-button {
+    .utility-right:has(.status-badge.off, .status-badge.error) .sync-form .primary-button {
       padding-inline: 12px;
     }
     /* 40 px touch targets: the language selector was 21 px tall and the brand 26 */

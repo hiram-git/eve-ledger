@@ -176,6 +176,20 @@ export async function getSummary(days: number, characterId?: number) {
   const today = await flowBetween(pilot, todayStart);
   const previousFrom = new Date(from.getTime() - days * DAY_MS);
   const previous = await flowBetween(pilot, previousFrom, from);
+  // What the Net card also takes out of the previous period's result, so its comparison is like for like: the PLEX of
+  // that period (the cost of the accounts) and the value of its lost ships that didn't come back or is still to replace
+  // (before, under a «Resultado» headline the arrow compared the wallet net: the green figure and the red arrow spoke
+  // of different numbers). shipLosses is cached, so the second window costs nothing
+  const [previousAccounts] = await db
+    .select({ net: sql<number>`coalesce(sum(case when ${activity} = 'accounts' then ${walletJournal.amount} end), 0)` })
+    .from(walletJournal)
+    .where(and(gte(walletJournal.date, previousFrom), lt(walletJournal.date, from), eq(isInternal, 0), pilot));
+  const previousLosses = (await shipLosses(days * 2, characterId)).losses.filter((l) => l.time < from);
+  const previousExtras = {
+    accounts: previousAccounts?.net ?? 0,
+    lossesNotBack: previousLosses.reduce((n, l) => n + (l.state === 'unreplaced' ? l.toReplace : 0), 0),
+    lossesToReplace: previousLosses.reduce((n, l) => n + (l.state === 'pending' ? l.toReplace : 0), 0),
+  };
 
   // Coverage: history starts with the first stored movement, not with the requested period
   const [first] = await db.select({ at: min(walletJournal.date) }).from(walletJournal).where(pilot);
@@ -427,7 +441,7 @@ export async function getSummary(days: number, characterId?: number) {
     shipFlow: { replacement: moved.replacement, transport: moved.transport.expenses - moved.transport.income },
     daily,
     today,
-    previous: { ...previous, complete: previousComplete },
+    previous: { ...previous, ...previousExtras, complete: previousComplete },
     coverage: { firstEntryAt, coveredDays },
     market: await marketReview(from, characterId),
     // PLEX / accounts: apart from the game result (the activity's net is in byActivity)

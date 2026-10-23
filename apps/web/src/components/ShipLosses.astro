@@ -384,16 +384,21 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
           )}
         </table>
       )}
-      <div class="panel-note losses-note">
-        {notes.map((n) => (
-          <p>{n}</p>
-        ))}
-        <p>
-          {m.lossesNote}
-          {tot.unpricedTypes > 0 && m.lossesUnpriced(tot.unpricedTypes)}
-          {noContracts && !sameMissing && <> {m.lossesNoContracts(noContracts)}</>}
-        </p>
-      </div>
+      {/* Coverage only (who is left out, losses before the history, premiums, unpriced types): the lesson on what a loss
+          costs is gone, the figures and the row texts say it */}
+      {(notes.length > 0 || tot.unpricedTypes > 0 || (noContracts && !sameMissing)) && (
+        <div class="panel-note losses-note">
+          {notes.map((n) => (
+            <p>{n}</p>
+          ))}
+          {(tot.unpricedTypes > 0 || (noContracts && !sameMissing)) && (
+            <p>
+              {tot.unpricedTypes > 0 && m.lossesUnpriced(tot.unpricedTypes).trim()}
+              {noContracts && !sameMissing && <> {m.lossesNoContracts(noContracts)}</>}
+            </p>
+          )}
+        </div>
+      )}
     </section>
   )
 }

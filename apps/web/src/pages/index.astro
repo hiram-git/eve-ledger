@@ -179,7 +179,17 @@ const selectedBroken = !!selectedState && selectedState.kind !== 'ok';
 // Filtered pilot with no sync at all: there's no data, and a «0 ISK» would read as data. Its own empty state
 const pilotEmpty = !!selected && !selected.lastSyncAt;
 // Its action is already in the empty state: the health line doesn't repeat it
-const healthShown = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id) : healthItems;
+const healthVisible = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id) : healthItems;
+// Pilots with the same cause and action share one line («6 pilotos: falló el sync de wallet → Revisar» instead of six
+// identical lines; a grouped «Sincronizar» syncs every pilot, like the header button). Relink keeps one line per pilot:
+// its login hint names them one by one
+type HealthLine = (typeof healthItems)[number] & { names: string[] };
+const healthShown = healthVisible.reduce<HealthLine[]>((lines, h) => {
+  const line = h.action === 'review' || h.action === 'sync' ? lines.find((l) => l.cause === h.cause && l.action === h.action) : undefined;
+  if (line) line.names.push(h.name);
+  else lines.push({ ...h, names: [h.name] });
+  return lines;
+}, []);
 // Consolidated: how much of the net comes from pilots with stale or broken data. A single line that quantifies
 // (the net doesn't change color; who and why is in the health line)
 const staleNetPilots = !selected
@@ -229,7 +239,6 @@ const partialHistory = summary && summary.coverage.firstEntryAt && summary.cover
 
 // Sign of the net as semantic state (green/red + arrow), not decoration
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
-const delta = summary && summary.previous.complete ? summary.totals.net - summary.previous.net : undefined;
 // Game result: the wallet net without PLEX (the cost of the accounts, kept apart: user's decision) and
 // minus the value of lost ships that didn't come back (window closed) or is still to be replaced (estimated).
 // Replacement, courier and insurance are already in the net (PvP)
@@ -239,6 +248,12 @@ const accountsNet = summary?.byActivity.find((a) => a.activity === 'accounts')?.
 const hasAccounts = Math.abs(accountsNet) >= 0.5;
 const showResult = !!summary && ((!!losses && notBack + toReplace >= 0.5) || hasAccounts);
 const headline = summary ? summary.totals.net - (showResult ? accountsNet + notBack + toReplace : 0) : 0;
+// The previous period's result takes out the same things, so the comparison is of the headline figure (before it
+// compared the wallet net under a «Resultado» headline: the green figure and the red arrow spoke of different numbers)
+const previousHeadline = summary
+  ? summary.previous.net - (showResult ? summary.previous.accounts + summary.previous.lossesNotBack + summary.previous.lossesToReplace : 0)
+  : 0;
+const delta = summary && summary.previous.complete ? headline - previousHeadline : undefined;
 // The card's activities are gameplay ones: PLEX goes on its own line at the foot
 const cardActivities = summary?.byActivity.filter((a) => a.activity !== 'accounts') ?? [];
 // Moved with your other pilots: not in any net. In a pilot's view, in both directions (what they received
@@ -400,7 +415,6 @@ const worthNote =
         {
           PERIODS.map((p) => (
             <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'true' : undefined}>
-              <Icon name="clock" />
               {m.days(p)}
             </a>
           ))
@@ -500,6 +514,9 @@ const worthNote =
                 </li>
                 {summary.characters.map((c) => {
                   const balance = chipBalance(c);
+                  // The amber dot follows the health line (broken sync, no first sync, missing permission), not only the
+                  // age of the data; the gray balance and the age stay for old data only
+                  const issue = needsAttention(c);
                   return (
                     <li>
                       <a
@@ -509,7 +526,7 @@ const worthNote =
                         title={m.pilotBalanceTitle(c.name, balance === null ? null : full(balance)) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
                         aria-label={m.chipLabel(c.name, balance === null ? null : fmt(balance), isStale(c.lastSyncAt) ? rel(c.lastSyncAt) : null)}
                       >
-                        {isStale(c.lastSyncAt) && <i class="stale-dot" aria-hidden="true" />}
+                        {issue && <i class="stale-dot" aria-hidden="true" />}
                         <span class="pilot-name">{c.name}</span>
                         <span class="pilot-balance">{balance === null ? '—' : fmt(balance)}</span>
                         {isStale(c.lastSyncAt) && c.lastSyncAt && <span class="chip-age" aria-hidden="true">{rel(c.lastSyncAt)}</span>}
@@ -542,7 +559,10 @@ const worthNote =
                   <ul class="health-full">
                     {healthShown.map((h) => (
                       <li>
-                        <span class="health-name">{h.name}:</span> {h.cause}
+                        <span class="health-name" title={h.names.length > 1 ? h.names.join(' · ') : undefined}>
+                          {h.names.length > 1 ? m.healthPilots(h.names.length) : h.name}:
+                        </span>{' '}
+                        {h.cause}
                         {h.action === 'relink' && (
                           <>
                             {' → '}
@@ -552,15 +572,19 @@ const worthNote =
                         {h.action === 'review' && (
                           <>
                             {' → '}
-                            <a class="inline-action" href="/pilotos">{m.healthReview}</a>
+                            <a class="inline-action" href="/pilotos" title={m.healthReviewOf(h.names.join(', '))} aria-label={m.healthReviewOf(h.names.join(', '))}>
+                              {m.healthReview}
+                            </a>
                           </>
                         )}
                         {h.action === 'sync' && (
                           <form method="post" action="/sync" class="sync-form inline">
                             <input type="hidden" name="back" value={href(days, pilotId)} />
-                            <input type="hidden" name="character" value={h.id} />
+                            {h.names.length === 1 && <input type="hidden" name="character" value={h.id} />}
                             {' → '}
-                            <button type="submit" class="inline-action" title={m.syncOneTitle(h.name)}>{m.syncOne}</button>
+                            <button type="submit" class="inline-action" title={h.names.length > 1 ? m.syncAllTitle : m.syncOneTitle(h.name)}>
+                              {m.syncOne}
+                            </button>
                           </form>
                         )}
                       </li>
@@ -622,44 +646,58 @@ const worthNote =
                         <span class="sr-only">{headline > 0 ? m.gain : headline < 0 ? m.loss : m.even} ({fullNet(headline)})</span>
                       </span>
                       {showResult && (
-                        /* Where it comes from: the wallet net (what the activities, «Hoy» and the chart measure) minus
-                           the value of the ships that didn't come back; the estimate, in gray */
-                        <p class="versus result-note">
-                          {selected ? m.resultWalletPilot : m.resultWallet}{' '}
-                          <span class="num" title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</span>
-                          {hasAccounts && (
-                            <>
-                              {' '}
-                              {m.resultAccounts(accountsNet < 0 ? '+' : '−', nbsp(fmt(Math.abs(accountsNet))))}
-                            </>
-                          )}
-                          {notBack >= 0.5 && (
-                            <>
-                              {' '}
-                              {m.resultNotBack(nbsp(fmt(notBack)))}
-                            </>
-                          )}
-                          {toReplace >= 0.5 && (
-                            <span class="estimate">
-                              {' '}
-                              {m.resultToReplace(nbsp(fmt(toReplace)))}
-                            </span>
-                          )}
-                        </p>
+                        /* Where it comes from, as the equation Indicators uses (operator in its column, figures aligned):
+                           the wallet net (what the activities, «Hoy» and the chart measure), the PLEX kept apart, the ships
+                           that didn't come back and, in gray, the estimate. Before it was a four-term sentence on three lines */
+                        <table class="equation hero-eq">
+                          <caption class="sr-only">{m.resultBreakdown}</caption>
+                          <tbody>
+                            <tr>
+                              <th scope="row">{selected ? m.resultWalletPilot : m.resultWallet}</th>
+                              <td class="op" aria-hidden="true"></td>
+                              <td title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</td>
+                            </tr>
+                            {hasAccounts && (
+                              <tr>
+                                <th scope="row">{m.resultAccountsRow}</th>
+                                <td class="op">{accountsNet < 0 ? '+' : '−'}</td>
+                                <td title={full(Math.abs(accountsNet))}>{fmt(Math.abs(accountsNet))}</td>
+                              </tr>
+                            )}
+                            {notBack >= 0.5 && (
+                              <tr>
+                                <th scope="row">{m.resultNotBackRow}</th>
+                                <td class="op">−</td>
+                                <td title={full(notBack)}>{fmt(notBack)}</td>
+                              </tr>
+                            )}
+                            {toReplace >= 0.5 && (
+                              <tr class="estimate">
+                                <th scope="row">{m.resultToReplaceRow}</th>
+                                <td class="op">−</td>
+                                <td title={full(toReplace)}>{`~\u2009${fmt(toReplace)}`}</td>
+                              </tr>
+                            )}
+                            <tr class="total">
+                              <th scope="row">{m.result}</th>
+                              <td class="op">=</td>
+                              <td title={fullNet(headline)}>{fmt(headline, { sign: true })}</td>
+                            </tr>
+                          </tbody>
+                        </table>
                       )}
                       {
                         delta !== undefined ? (
                           <p class="versus compare">
-                            {/* The comparison is of the wallet net (there's no result for the previous period) */}
-                            {showResult && <span class="compare-of">{selected ? m.resultCompareOfPilot : m.resultCompareOf} </span>}
+                            {/* Of the headline figure: the previous period's result takes out the same things (PLEX, ships) */}
                             {delta === 0 ? (
                               m.versusSame(days)
                             ) : (
                               <span class:list={['delta', sign(delta)]}>
                                 <Icon name={delta > 0 ? 'up' : 'down'} />
                                 {delta > 0
-                                  ? m.versusMore(fmt(delta), days, fmt(summary.previous.net, { sign: true }))
-                                  : m.versusLess(fmt(-delta), days, fmt(summary.previous.net, { sign: true }))}
+                                  ? m.versusMore(fmt(delta), days, fmt(previousHeadline, { sign: true }))
+                                  : m.versusLess(fmt(-delta), days, fmt(previousHeadline, { sign: true }))}
                               </span>
                             )}
                           </p>
@@ -673,7 +711,9 @@ const worthNote =
                           title={staleNetPilots.map((c) => `${c.name}: ${fmt(c.net, { sign: true })} (${rel(c.lastSyncAt)})`).join(' · ')}
                         >
                           <Icon name="alert" class="stale-icon" />
-                          {m.netStaleShare(fmt(staleNet, { sign: true }), nbsp(rel(staleNetOldest)))}
+                          {Math.abs(staleNet - summary.totals.net) < 0.5
+                            ? m.netStaleAll(nbsp(rel(staleNetOldest)))
+                            : m.netStaleShare(fmt(staleNet, { sign: true }), nbsp(rel(staleNetOldest)))}
                         </p>
                       )}
                     </div>
@@ -1204,7 +1244,9 @@ const worthNote =
                   select?.addEventListener('change', () => apply(select.value, first(select.value)));
                 }
               </script>
-              {/* Two short notes: what the Total is (in a pilot's view, that it's the consolidated total) and where balance and inventory come from */}
+              {/* Short notes that reconcile and give coverage: what the Total is (in a pilot's view, that it's the consolidated
+                  total), the wallet equation and where balance and inventory come from. The definitions («Neto = ingresos −
+                  gastos…») are gone: the user knows them, and the column titles carry them */}
               <div class="panel-note pilots-note">
                 <p>
                   {selected && !pilotEmpty ? (
@@ -1216,7 +1258,6 @@ const worthNote =
                     </>
                   )}
                 </p>
-                <p>{m.betweenPilotsNote}</p>
                 <p>
                   {m.reconcileNote}
                   {reconcileGaps.length > 0 && m.reconcileGap(reconcileGaps.map((c) => m.reconcileItem(c.name, fmt(gapOf(c), { sign: true }))).join(', '))}
@@ -1284,8 +1325,10 @@ const worthNote =
 <style>
   .glance {
     display: grid;
-    /* The net leads (~60 %); Net worth and the map support it */
+    /* The net leads (~60 %); Net worth and the map support it. Each card is as tall as its content: stretched to the
+       Net card's height, Net worth ended in 270 px of empty panel under the map */
     grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    align-items: start;
     gap: 16px;
   }
   /* Period net and «Hoy» as a pair of big figures: a container so it depends on the card's width */
@@ -1407,18 +1450,25 @@ const worthNote =
     background: var(--critical);
     border-radius: 3px 0 0 3px;
   }
-  /* Where the result comes from: wallet net − what didn't come back − the estimate (in gray) */
-  .result-note {
+  /* Where the result comes from: the shared equation table, compact in the card; the estimate row in gray */
+  .hero-eq {
+    max-width: 36rem;
+    margin-top: 8px;
+  }
+  .hero-eq th,
+  .hero-eq td {
+    padding: 4px 0;
+    border-top: 0;
     font-size: 13px;
-    color: var(--text-secondary);
   }
-  /* The figure inside the sentence uses the sentence's typeface (the monospace one left a wide gap) */
-  .result-note .num {
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+  .hero-eq tr.total th,
+  .hero-eq tr.total td {
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    color: var(--text);
   }
-  .result-note .estimate,
-  .compare-of {
+  .hero-eq tr.estimate th,
+  .hero-eq tr.estimate td {
     color: var(--text-muted);
   }
   /* Card footer, full width: lost ships and internal transfers */
@@ -1754,7 +1804,7 @@ const worthNote =
   }
   .worth :global(.coverage-note),
   .worth-note {
-    flex-basis: 100%;
+    width: 100%;
     margin-top: 10px;
   }
   .worth-note {

@@ -59,7 +59,8 @@ export type Summary = {
   // internal: in a single pilot's view, what was moved with your other pilots that day (not in net nor in income/expenses)
   daily: (Flow & { date: string; accounts: number; internal: number })[];
   today: Flow;
-  previous: Flow & { complete: boolean };
+  // accounts, lossesNotBack, lossesToReplace: what the Net card takes out of the previous period's result too
+  previous: Flow & { complete: boolean; accounts: number; lossesNotBack: number; lossesToReplace: number };
   coverage: { firstEntryAt: string | null; coveredDays: number };
   market: { items: MarketItem[]; totals: { sold: number; bought: number; net: number; items: number } };
 };
