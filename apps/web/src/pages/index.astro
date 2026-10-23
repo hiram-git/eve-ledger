@@ -879,10 +879,13 @@ const worthNote =
                   </dl>
                   )}
                   {/* What counts toward net worth: wallets only (what pays for Omega) or + inventory. Remembered (cookie) */}
-                  <form class="inv-toggle" method="get" action="/inv" role="group" aria-label={m.invToggle}>
-                    <input type="hidden" name="back" value={invBack} />
-                    <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
-                    <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                  <form class="inv-toggle" method="get" action="/inv">
+                    <fieldset>
+                      <legend class="sr-only">{m.invToggle}</legend>
+                      <input type="hidden" name="back" value={invBack} />
+                      <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
+                      <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                    </fieldset>
                   </form>
                 </div>
                 {omega && omega.missing !== null && (
@@ -1890,7 +1893,7 @@ const worthNote =
   .pilot-strip a[aria-current='true'],
   .pilot-strip a.stale[aria-current='true'] {
     border-color: var(--cyan-dim);
-    background: #61cce514;
+    background: color-mix(in srgb, var(--cyan) 8%, transparent);
     color: var(--text);
   }
   .pilot-strip a[aria-current='true'] .pilot-name {
@@ -1977,7 +1980,7 @@ const worthNote =
       border-bottom: 1px solid var(--line);
     }
     .pilot-cards li.selected {
-      background: #61cce50d;
+      background: var(--hover);
       box-shadow: inset 2px 0 var(--cyan);
     }
     .card-head {
@@ -2065,7 +2068,7 @@ const worthNote =
     color: var(--critical);
   }
   tr.selected td {
-    background: #61cce50d;
+    background: var(--hover);
   }
   tr.selected td:first-child {
     box-shadow: inset 2px 0 var(--cyan);
@@ -2110,11 +2113,17 @@ const worthNote =
     margin-right: 6px;
     vertical-align: -2px;
   }
-  /* Net worth toggle: a discreet segmented control on the card itself, state in cyan */
+  /* Net worth toggle: a discreet segmented control on the card itself, state in cyan. The group is a fieldset with
+     its legend for screen readers (role="group" is not allowed on a form) */
   .inv-toggle {
-    display: inline-flex;
+    display: flex;
     align-self: center;
     margin-left: auto;
+  }
+  .inv-toggle fieldset {
+    display: inline-flex;
+    min-width: 0;
+    margin: 0;
     padding: 2px;
     border: 1px solid var(--line);
     border-radius: 6px;

@@ -316,11 +316,14 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
 
             <div class="actions">
               {/* Alpha or Omega: used by Doctrinas (an Alpha trains at half speed and cannot use every skill) */}
-              <form method="post" action="/clone" class="clone-toggle" role="group" aria-label={`${m.cloneToggle}: ${p.name}`} title={m.cloneHint}>
-                <input type="hidden" name="back" value="/pilotos" />
-                <input type="hidden" name="character" value={p.id} />
-                <button type="submit" name="clone" value="omega" aria-pressed={p.clone === 'alpha' ? 'false' : 'true'}>{m.cloneOmega}</button>
-                <button type="submit" name="clone" value="alpha" aria-pressed={p.clone === 'alpha' ? 'true' : 'false'}>{m.cloneAlpha}</button>
+              <form method="post" action="/clone" class="clone-toggle">
+                <fieldset title={m.cloneHint}>
+                  <legend class="sr-only">{`${m.cloneToggle}: ${p.name}`}</legend>
+                  <input type="hidden" name="back" value="/pilotos" />
+                  <input type="hidden" name="character" value={p.id} />
+                  <button type="submit" name="clone" value="omega" aria-pressed={p.clone === 'alpha' ? 'false' : 'true'}>{m.cloneOmega}</button>
+                  <button type="submit" name="clone" value="alpha" aria-pressed={p.clone === 'alpha' ? 'true' : 'false'}>{m.cloneAlpha}</button>
+                </fieldset>
               </form>
               {p.missingScopes.length > 0 || p.state.kind === 'error' ? (
                 <a class="secondary-button" href={loginUrl} title={m.relinkAs(p.name)} aria-label={m.relinkAs(p.name)}>
@@ -719,7 +722,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
   /* Optional: dashed border and dimmed text; it is not a problem, it is an improvement one click away */
   .scopes li.optional {
     padding: 0;
-    border: 1px dashed #2d4556;
+    border: 1px dashed var(--line-strong);
     background: none;
   }
   .scopes li.optional a {
@@ -775,9 +778,15 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     gap: 8px;
     justify-self: end;
   }
-  /* Alpha | Omega: discreet segmented control, like the one in Patrimonio */
+  /* Alpha | Omega: discreet segmented control, like the one in Patrimonio (a fieldset with its legend for screen
+     readers: role="group" is not allowed on a form) */
   .clone-toggle {
     display: inline-flex;
+  }
+  .clone-toggle fieldset {
+    display: inline-flex;
+    min-width: 0;
+    margin: 0;
     padding: 2px;
     border: 1px solid var(--line);
     border-radius: 6px;
@@ -970,11 +979,6 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     gap: 10px;
     margin-top: 6px;
   }
-  .upload-row input[type='file'] {
-    max-width: 100%;
-    font-size: 13px;
-    color: var(--text-secondary);
-  }
   /* Mobile: each backup on two lines (date, type and size; below, the actions) instead of a table that scrolls */
   @media (max-width: 600px) {
     .backup-list thead {
@@ -1094,7 +1098,9 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     }
     /* 40 px touch targets here too */
     .actions .secondary-button,
-    .page-head .secondary-button {
+    .page-head .secondary-button,
+    .backup-actions .secondary-button,
+    .upload-row .secondary-button {
       min-height: 40px;
     }
     h2 a {

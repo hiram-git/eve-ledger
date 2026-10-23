@@ -67,8 +67,9 @@ Eres diseñador de producto y front-end. Vas a diseñar para **EVE Ledger** sigu
 | `--expenses` | `#e8604c` | Gastos |
 | `--inventory` | `#9a7cf0` | Inventario |
 | `--balance` | `#6b8799` | Saldo, neutro junto al inventario |
+| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Paleta categórica de los repartos (tortas y su tabla-leyenda, partes del coste de un fit): orden fijo, la porción i siempre lleva `--cat-((i mod 7) + 1)` |
 
-Validados en contraste sobre `--panel`. No los reutilices como colores de botones, bordes o texto de interfaz, y no uses los acentos de interfaz como series.
+Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, también en separación para daltonismo). No los reutilices como colores de botones, bordes o texto de interfaz, y no uses los acentos de interfaz como series. Los tintes translúcidos de un token (borde o relleno al pasar) se derivan con `color-mix(in srgb, var(--token) N%, transparent)`, no con un hex copiado.
 
 ### Forma y espacio
 

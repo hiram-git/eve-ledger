@@ -237,6 +237,24 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
         for (const c of cols) c.tabIndex = c === col ? 0 : -1;
       });
     }
+    // Touch: a column is 4–8 px wide on a phone, so a tap anywhere on the plot picks the nearest day with data
+    // (the whole plot is the target; the pointer events above keep working for mouse and pen)
+    chart.querySelector<HTMLElement>('.cols')?.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' || cols.length === 0) return;
+      let nearest = cols[0];
+      let best = Infinity;
+      for (const col of cols) {
+        const r = col.getBoundingClientRect();
+        const d = Math.abs(e.clientX - (r.left + r.width / 2));
+        if (d < best) {
+          best = d;
+          nearest = col;
+        }
+      }
+      for (const c of cols) c.tabIndex = c === nearest ? 0 : -1;
+      nearest.focus();
+      show(nearest);
+    });
     chart.addEventListener('keydown', (e) => {
       const i = cols.indexOf(document.activeElement as HTMLElement);
       if (i < 0) return;
@@ -342,7 +360,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   }
   .col:hover,
   .col:focus-visible {
-    background: linear-gradient(180deg, transparent, #61cce524 50%, transparent);
+    background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--cyan) 14%, transparent) 50%, transparent);
   }
   /* 2 px focus ring inside the column (no offset: the columns are adjacent) */
   .col:focus-visible {
@@ -393,7 +411,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     border-radius: 50%;
     background: var(--text);
     /* Ring in the panel color to separate it from the bar it crosses */
-    box-shadow: 0 0 0 2px #0f1822;
+    box-shadow: 0 0 0 2px var(--panel);
     pointer-events: none;
   }
   .bar {
@@ -416,7 +434,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     position: absolute;
     left: 0;
     right: 0;
-    background: repeating-linear-gradient(135deg, #0f1822 0 2px, transparent 2px 5px);
+    background: repeating-linear-gradient(135deg, var(--panel) 0 2px, transparent 2px 5px);
   }
   .plex-part.bottom {
     bottom: 0;
@@ -427,7 +445,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     border-radius: 4px 4px 0 0;
   }
   :global(.key.plex) {
-    background: repeating-linear-gradient(135deg, #0f1822 0 2px, transparent 2px 5px), var(--expenses);
+    background: repeating-linear-gradient(135deg, var(--panel) 0 2px, transparent 2px 5px), var(--expenses);
   }
   .x-axis {
     grid-column: 2;

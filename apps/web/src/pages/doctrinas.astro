@@ -857,21 +857,6 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     font: 12px/1.5 var(--mono);
     resize: vertical;
   }
-  input[type='file'] {
-    max-width: 100%;
-    font: 13px var(--font);
-    color: var(--text-secondary);
-  }
-  input[type='file']::file-selector-button {
-    margin-right: 10px;
-    padding: 6px 10px;
-    border: 1px solid var(--line-strong);
-    border-radius: 6px;
-    background: #0f1a25;
-    color: var(--text);
-    font: 13px var(--font);
-    cursor: pointer;
-  }
   .ignored {
     margin-top: 4px;
     color: var(--text-secondary);
@@ -987,22 +972,22 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
   /* User's decision: the pencil in amber (warning) and the bin in red (danger), with a tinted border so they read
      as buttons on the heading; filled on hover */
   .icon-button.edit {
-    border-color: #e7b75f55;
+    border-color: color-mix(in srgb, var(--warning) 33%, transparent);
     color: var(--warning);
   }
   .icon-button.edit:hover,
   .rename[open] > summary.icon-button.edit {
     border-color: var(--warning);
-    background: #e7b75f1f;
+    background: color-mix(in srgb, var(--warning) 12%, transparent);
     color: var(--warning);
   }
   .icon-button.danger {
-    border-color: #f0857a55;
+    border-color: color-mix(in srgb, var(--critical) 33%, transparent);
     color: var(--critical);
   }
   .icon-button.danger:hover {
     border-color: var(--critical);
-    background: #f0857a1f;
+    background: color-mix(in srgb, var(--critical) 12%, transparent);
     color: var(--critical);
   }
   .rename > summary {
@@ -1498,10 +1483,10 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
      green = ready, amber = missing or blocking, cyan = can be resolved (train, inject), gray = no data */
   .doctrine,
   .funds {
-    --part-hull: #9085e9;
-    --part-fitted: #3987e5;
-    --part-drones: #199e70;
-    --part-cargo: #c98500;
+    --part-hull: var(--cat-6);
+    --part-fitted: var(--cat-1);
+    --part-drones: var(--cat-3);
+    --part-cargo: var(--cat-4);
   }
   .fit-meta {
     display: flex;
@@ -1770,8 +1755,18 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     }
     .new-doctrine .secondary-button,
     .plan-form .secondary-button,
-    .fit-form .secondary-button {
+    .fit-form .secondary-button,
+    .rename-form .secondary-button,
+    .rename-form input[type='text'],
+    .add-fit summary {
       min-height: 40px;
+    }
+    /* Text disclosures («Cambiar plan», «Ver cuentas», «Ver las 3 skills») keep their inline layout and grow to
+       40 px with padding; the negative margin gives back part of it so the rhythm around them barely moves */
+    .plan-change summary,
+    .sums summary {
+      padding-block: 11px;
+      margin-block: -5px;
     }
     .icon-button {
       width: 40px;
@@ -1846,7 +1841,8 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
       color: var(--text-muted);
     }
     .skills summary {
-      padding-block: 8px;
+      padding-block: 11px;
+      margin-block: -5px;
     }
   }
 </style>

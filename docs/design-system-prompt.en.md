@@ -65,8 +65,9 @@ Use them as CSS variables with these names.
 | `--expenses` | `#e8604c` | Expenses |
 | `--inventory` | `#9a7cf0` | Assets |
 | `--balance` | `#6b8799` | Balance, neutral next to assets |
+| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Categorical palette for breakdowns (donuts and their legend table, the parts of a fit's cost): fixed order, slice i always gets `--cat-((i mod 7) + 1)` |
 
-Contrast-checked against `--panel`. Do not reuse them for buttons, borders or interface text, and do not use the interface accents as series.
+Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also for colour-vision-deficiency separation). Do not reuse them for buttons, borders or interface text, and do not use the interface accents as series. Translucent tints of a token (a border, a hover fill) are derived with `color-mix(in srgb, var(--token) N%, transparent)`, never a copied hex.
 
 ### Shape and spacing
 
