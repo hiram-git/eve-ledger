@@ -1,7 +1,7 @@
 ---
 // Diverging columns per day: income upward, expenses downward, a single axis
 import type { Summary } from '../lib/api';
-import { isk, iskFull, shortDate } from '../lib/format';
+import { isk, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 interface Props {
@@ -15,7 +15,6 @@ const { daily, firstDate, lastDate } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
-const full = (v: number) => iskFull(v, lang);
 const date = (iso: string) => shortDate(iso, lang);
 // Signed expense, without «−0» on days with no expenses
 const out = (v: number) => (v ? -v : 0);
@@ -33,9 +32,14 @@ function niceStep(range: number, count = 4) {
 }
 
 // The axis also covers the net dot (now it's always between the two bars; before, in a pilot's view, it
-// included transfers with your other pilots and a day that received 6 B left the dot outside the chart)
-const maxIn = Math.max(0, ...daily.map((d) => Math.max(d.income, d.net)));
-const maxOut = Math.max(0, ...daily.map((d) => Math.max(d.expenses, -d.net)));
+// included transfers with your other pilots and a day that received 6 B left the dot outside the chart).
+// It leaves out the PLEX component (the cost of the accounts, kept apart from the game result): one 4 B PLEX
+// purchase put the axis at −5 B and flattened a month of 300 M days to 13 px. The bars keep their meaning; a day
+// that doesn't fit is drawn clipped at the edge, hatched, with its PLEX figure as a label (the full figures stay
+// in the tooltip and in the table)
+const acc = (d: (typeof daily)[number]) => d.accounts ?? 0;
+const maxIn = Math.max(0, ...daily.map((d) => Math.max(d.income - Math.max(acc(d), 0), d.net - acc(d))));
+const maxOut = Math.max(0, ...daily.map((d) => Math.max(d.expenses - Math.max(-acc(d), 0), -(d.net - acc(d)))));
 const step = niceStep(maxIn + maxOut, 8);
 const top = Math.max(step, Math.ceil(maxIn / step) * step);
 const bottom = Math.ceil(maxOut / step) * step;
@@ -68,8 +72,15 @@ const short = (v: number, o: { sign?: boolean } = {}) => `${fmt(v, o)} ISK`;
 const wholeIsk = new Intl.NumberFormat(lang, { maximumFractionDigits: 0 });
 const plain = (v: number) => wholeIsk.format(v).replace('-', '−');
 // PLEX (account cost, separate from the game result): the part of the bar that is PLEX is hatched
-const hasPlex = daily.some((d) => Math.abs(d.accounts ?? 0) >= 0.5);
-const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part) / whole) * 100);
+const hasPlex = daily.some((d) => Math.abs(acc(d)) >= 0.5);
+// Bars clipped at the axis (only a PLEX day can exceed it): what is drawn, and how much of that is PLEX
+const shownIn = (d: (typeof daily)[number]) => Math.min(d.income, top);
+const shownOut = (d: (typeof daily)[number]) => Math.min(d.expenses, bottom);
+const clippedIn = (d: (typeof daily)[number]) => d.income > top;
+const clippedOut = (d: (typeof daily)[number]) => d.expenses > bottom;
+const plexShare = (shown: number, nonPlex: number) => Math.min(100, Math.max(0, ((shown - nonPlex) / shown) * 100));
+// Where the clipped bar's label hangs, so it doesn't run off the plot on a phone
+const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.length > 0.8 ? 'end' : '');
 ---
 
 <div class="legend" aria-hidden="true">
@@ -122,7 +133,8 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
             tabindex={i === entry ? 0 : -1}
             aria-label={
               m.chartDay(date(d.date), short(d.income), short(out(d.expenses)), short(d.net, { sign: true })) +
-              (Math.abs(d.accounts ?? 0) >= 0.5 ? m.chartDayPlex(short(d.accounts, { sign: true })) : '')
+              (Math.abs(acc(d)) >= 0.5 ? m.chartDayPlex(short(d.accounts, { sign: true })) : '') +
+              (clippedIn(d) || clippedOut(d) ? m.chartDayClipped : '')
             }
             data-date={date(d.date)}
             data-income={short(d.income)}
@@ -131,17 +143,26 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
             data-plex={Math.abs(d.accounts ?? 0) >= 0.5 ? short(d.accounts, { sign: true }) : undefined}
           >
             {d.income > 0 && (
-              <div class="bar income" style={`bottom:${zero}%;height:${pct(d.income)}%`}>
-                {d.accounts > 0 && <i class="plex-part top" style={`height:${plexShare(d.accounts, d.income)}%`} />}
+              <div class:list={['bar', 'income', { clipped: clippedIn(d) }]} style={`bottom:${zero}%;height:${pct(shownIn(d))}%`}>
+                {acc(d) > 0 && <i class="plex-part top" style={`height:${plexShare(shownIn(d), d.income - acc(d))}%`} />}
               </div>
             )}
             {d.expenses > 0 && (
-              <div class="bar expenses" style={`top:${100 - zero}%;height:${pct(d.expenses)}%`}>
-                {d.accounts < 0 && <i class="plex-part bottom" style={`height:${plexShare(d.accounts, d.expenses)}%`} />}
+              <div class:list={['bar', 'expenses', { clipped: clippedOut(d) }]} style={`top:${100 - zero}%;height:${pct(shownOut(d))}%`}>
+                {acc(d) < 0 && <i class="plex-part bottom" style={`height:${plexShare(shownOut(d), d.expenses + acc(d))}%`} />}
               </div>
             )}
-            {/* Day's net: a neutral dot on the axis; the bar alone doesn't say whether the day closed positive or negative */}
-            {hasActivity(d) && <i class="net-mark" aria-hidden="true" style={`bottom:${pct(d.net + bottom)}%`} />}
+            {/* A bar clipped at the axis says what it is and how much: the figure that didn't fit */}
+            {(clippedIn(d) || clippedOut(d)) && (
+              <span class:list={['clip-label', clippedIn(d) ? 'top' : 'bottom', labelSide(i)]} aria-hidden="true">
+                {m.chartPlexTip} {fmt(d.accounts, { sign: true })}
+              </span>
+            )}
+            {/* Day's net: a neutral dot on the axis; the bar alone doesn't say whether the day closed positive or negative
+                (not on a clipped day: its net is off the axis too, and the label takes its place) */}
+            {hasActivity(d) && !clippedIn(d) && !clippedOut(d) && (
+              <i class="net-mark" aria-hidden="true" style={`bottom:${pct(d.net + bottom)}%`} />
+            )}
             {/* Day with no entries: a short tick on the axis; days before the history are hatched */}
             {!hasActivity(d) && <i class="zero-mark" aria-hidden="true" style={`bottom:${zero}%`} />}
           </div>
@@ -237,7 +258,27 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
         for (const c of cols) c.tabIndex = c === col ? 0 : -1;
       });
     }
+    // Touch: a column is 4–8 px wide on a phone, so a tap anywhere on the plot picks the nearest day with data
+    // (the whole plot is the target; the pointer events above keep working for mouse and pen)
+    chart.querySelector<HTMLElement>('.cols')?.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' || cols.length === 0) return;
+      chart.dataset.touch = '1'; // the keyboard hint stays hidden until a key is pressed
+      let nearest = cols[0];
+      let best = Infinity;
+      for (const col of cols) {
+        const r = col.getBoundingClientRect();
+        const d = Math.abs(e.clientX - (r.left + r.width / 2));
+        if (d < best) {
+          best = d;
+          nearest = col;
+        }
+      }
+      for (const c of cols) c.tabIndex = c === nearest ? 0 : -1;
+      nearest.focus();
+      show(nearest);
+    });
     chart.addEventListener('keydown', (e) => {
+      delete chart.dataset.touch;
       const i = cols.indexOf(document.activeElement as HTMLElement);
       if (i < 0) return;
       const step: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, PageUp: -7, PageDown: 7 };
@@ -342,7 +383,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   }
   .col:hover,
   .col:focus-visible {
-    background: linear-gradient(180deg, transparent, #61cce524 50%, transparent);
+    background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--cyan) 14%, transparent) 50%, transparent);
   }
   /* 2 px focus ring inside the column (no offset: the columns are adjacent) */
   .col:focus-visible {
@@ -393,7 +434,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     border-radius: 50%;
     background: var(--text);
     /* Ring in the panel color to separate it from the bar it crosses */
-    box-shadow: 0 0 0 2px #0f1822;
+    box-shadow: 0 0 0 2px var(--panel);
     pointer-events: none;
   }
   .bar {
@@ -416,7 +457,7 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     position: absolute;
     left: 0;
     right: 0;
-    background: repeating-linear-gradient(135deg, #0f1822 0 2px, transparent 2px 5px);
+    background: repeating-linear-gradient(135deg, var(--panel) 0 2px, transparent 2px 5px);
   }
   .plex-part.bottom {
     bottom: 0;
@@ -427,7 +468,39 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
     border-radius: 4px 4px 0 0;
   }
   :global(.key.plex) {
-    background: repeating-linear-gradient(135deg, #0f1822 0 2px, transparent 2px 5px), var(--expenses);
+    background: repeating-linear-gradient(135deg, var(--panel) 0 2px, transparent 2px 5px), var(--expenses);
+  }
+  /* Clipped at the axis: a square end and, over the bar, the figure that didn't fit */
+  .bar.clipped {
+    border-radius: 0;
+  }
+  .clip-label {
+    position: absolute;
+    left: 50%;
+    z-index: 1;
+    transform: translateX(-50%);
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--panel);
+    font: 12px var(--mono);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .clip-label.top {
+    top: 4px;
+  }
+  .clip-label.bottom {
+    bottom: 4px;
+  }
+  .clip-label.start {
+    left: 0;
+    transform: none;
+  }
+  .clip-label.end {
+    right: 0;
+    left: auto;
+    transform: none;
   }
   .x-axis {
     grid-column: 2;
@@ -486,7 +559,8 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   .tooltip[hidden] {
     display: none;
   }
-  /* The keyboard hint is only visible while the chart has focus */
+  /* The keyboard hint is only visible while the chart has focus, and not after a tap (a tap focuses the day too, and the
+     hint showed on a phone; :focus-visible doesn't tell a programmatic focus after a touch from a keyboard one) */
   .hint {
     grid-column: 2;
     margin: 8px 0 0;
@@ -496,6 +570,9 @@ const plexShare = (part: number, whole: number) => Math.min(100, (Math.abs(part)
   }
   .chart:focus-within .hint {
     visibility: visible;
+  }
+  .chart[data-touch] .hint {
+    visibility: hidden;
   }
   .table-view {
     margin-top: 4px;

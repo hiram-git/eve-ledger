@@ -1,7 +1,7 @@
 import { and, between, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { db } from '../db/client';
-import { assets, killmails, names, walletJournal, walletTransactions } from '../db/schema';
+import { assets, killmails, loyaltyOffers, loyaltyPoints, names, walletJournal, walletTransactions } from '../db/schema';
 import { EsiError, esiPost } from '../lib/esi';
 
 type EsiName = { id: number; name: string; category: string };
@@ -87,6 +87,9 @@ export async function resolvePendingNames(): Promise<number> {
     ...(await missingIds(killmails.solarSystemId, killmails, SYSTEM_RANGE)),
     // Corporations that took tax (Descuentos, in Indicadores)
     ...(await missingIds(walletJournal.taxReceiverId, walletJournal)),
+    // Corporations with loyalty points (Paragon = EverMarks is told apart by name) and what their stores sell
+    ...(await missingIds(loyaltyPoints.corporationId, loyaltyPoints)),
+    ...(await missingIds(loyaltyOffers.typeId, loyaltyOffers)),
   ];
   return resolveNames(ids);
 }

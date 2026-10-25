@@ -78,7 +78,7 @@ try {
     getSyncStatus(),
     // Without inventory, neither the inventory nor the map (which draws it) is requested
     withInv ? optional(getInventory(pilotId)) : undefined,
-    withInv ? optional(getMap(pilotId)) : undefined,
+    optional(getMap(pilotId)),
     optional(getPilots()),
     // The Omega line under the balance: only in the consolidated view (it's a goal for all accounts)
     pilotId ? undefined : optional(getIndicators()),
@@ -95,8 +95,11 @@ const selected = pilotId ? summary?.characters.find((c) => c.id === pilotId) : u
 const noPilots = !!summary && summary.characters.length === 0;
 const waiting = !!summary && summary.characters.length > 0 && !pilotId && !summary.coverage.firstEntryAt;
 const dashboard = !!summary && summary.characters.length > 0 && !waiting;
-// Consolidated net = sum of the per-pilot nets (trading is folded per pilot, but the net is additive)
-const allNet = summary?.characters.reduce((n, c) => n + c.net, 0) ?? 0;
+// The pilot strip shows each wallet's balance (user's decision, 0.1.19: the period net is already in the Net card
+// and in the pilots table); «Todos» is the sum of the balances, what Net worth calls «Saldo de los wallets».
+// chipBalance: the balance of the last sync (null: no sync yet, the chip shows «—»)
+const allBalance = summary?.characters.reduce((n, c) => n + (c.balance ?? 0), 0) ?? 0;
+const chipBalance = (c: Summary['characters'][number]) => (c.lastSyncAt && c.balance !== null ? c.balance : null);
 
 const synced = q.get('synced');
 const syncErrors = q.get('syncErrors');
@@ -176,7 +179,17 @@ const selectedBroken = !!selectedState && selectedState.kind !== 'ok';
 // Filtered pilot with no sync at all: there's no data, and a «0 ISK» would read as data. Its own empty state
 const pilotEmpty = !!selected && !selected.lastSyncAt;
 // Its action is already in the empty state: the health line doesn't repeat it
-const healthShown = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id) : healthItems;
+const healthVisible = pilotEmpty ? healthItems.filter((h) => h.id !== selected!.id) : healthItems;
+// Pilots with the same cause and action share one line («6 pilotos: falló el sync de wallet → Revisar» instead of six
+// identical lines; a grouped «Sincronizar» syncs every pilot, like the header button). Relink keeps one line per pilot:
+// its login hint names them one by one
+type HealthLine = (typeof healthItems)[number] & { names: string[] };
+const healthShown = healthVisible.reduce<HealthLine[]>((lines, h) => {
+  const line = h.action === 'review' || h.action === 'sync' ? lines.find((l) => l.cause === h.cause && l.action === h.action) : undefined;
+  if (line) line.names.push(h.name);
+  else lines.push({ ...h, names: [h.name] });
+  return lines;
+}, []);
 // Consolidated: how much of the net comes from pilots with stale or broken data. A single line that quantifies
 // (the net doesn't change color; who and why is in the health line)
 const staleNetPilots = !selected
@@ -211,6 +224,10 @@ const firstHistory = summary?.coverage.firstEntryAt ? date(summary.coverage.firs
 // otherwise it moves down next to the inventory and Net worth becomes a compact strip
 const showMap = withInv && !!geo && geo.nodes.some((n) => n.earnedToday > 0);
 const mapBelow = withInv && !!geo && !showMap && geo.nodes.length > 0;
+// Where you earned today, whatever the inventory preference (user's decision after a UI review: the only
+// datum with motion disappeared with «Wallets»): with wallets only, a mini-map of today's systems in the «Hoy» column;
+// with «+ inventario» the Net worth card carries the full map
+const todayMap = !withInv && !!geo && geo.nodes.some((n) => n.earnedToday > 0) ? geo : undefined;
 // Age of the inventory prices, as freshness: they refresh during a sync if older than 1 h
 const pricesOld =
   !!inventory?.pricesUpdatedAt && Date.now() - new Date(inventory.pricesUpdatedAt).getTime() > staleAfterMs + 3_600_000;
@@ -225,8 +242,15 @@ const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
 const partialHistory = summary && summary.coverage.firstEntryAt && summary.coverage.coveredDays < days;
 
 // Sign of the net as semantic state (green/red + arrow), not decoration
+// Pilot initials for the portrait placeholder («Aria Vex» → «AV»)
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('');
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
-const delta = summary && summary.previous.complete ? summary.totals.net - summary.previous.net : undefined;
 // Game result: the wallet net without PLEX (the cost of the accounts, kept apart: user's decision) and
 // minus the value of lost ships that didn't come back (window closed) or is still to be replaced (estimated).
 // Replacement, courier and insurance are already in the net (PvP)
@@ -236,6 +260,12 @@ const accountsNet = summary?.byActivity.find((a) => a.activity === 'accounts')?.
 const hasAccounts = Math.abs(accountsNet) >= 0.5;
 const showResult = !!summary && ((!!losses && notBack + toReplace >= 0.5) || hasAccounts);
 const headline = summary ? summary.totals.net - (showResult ? accountsNet + notBack + toReplace : 0) : 0;
+// The previous period's result takes out the same things, so the comparison is of the headline figure (before it
+// compared the wallet net under a «Resultado» headline: the green figure and the red arrow spoke of different numbers)
+const previousHeadline = summary
+  ? summary.previous.net - (showResult ? summary.previous.accounts + summary.previous.lossesNotBack + summary.previous.lossesToReplace : 0)
+  : 0;
+const delta = summary && summary.previous.complete ? headline - previousHeadline : undefined;
 // The card's activities are gameplay ones: PLEX goes on its own line at the foot
 const cardActivities = summary?.byActivity.filter((a) => a.activity !== 'accounts') ?? [];
 // Moved with your other pilots: not in any net. In a pilot's view, in both directions (what they received
@@ -397,7 +427,6 @@ const worthNote =
         {
           PERIODS.map((p) => (
             <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'true' : undefined}>
-              <Icon name="clock" />
               {m.days(p)}
             </a>
           ))
@@ -488,35 +517,35 @@ const worthNote =
                   <a
                     href={href(days)}
                     aria-current={!pilotId ? 'true' : undefined}
-                    title={m.allPilotsTitle(fullNet(allNet), days)}
-                    aria-label={m.chipLabel(m.allPilots, fmt(allNet, { sign: true }), null)}
+                    title={m.allPilotsTitle(full(allBalance))}
+                    aria-label={m.chipLabel(m.allPilots, fmt(allBalance), null)}
                   >
                     <span class="pilot-name">{m.allPilots}</span>
-                    <span class:list={['pilot-net', { pos: allNet > 0, neg: allNet < 0 }]}>{fmt(allNet, { sign: true })}</span>
+                    <span class="pilot-balance">{fmt(allBalance)}</span>
                   </a>
                 </li>
-                {summary.characters.map((c) => (
-                  <li>
-                    <a
-                      href={href(days, c.id)}
-                      aria-current={c.id === pilotId ? 'true' : undefined}
-                      class:list={{ stale: isStale(c.lastSyncAt) }}
-                      title={m.pilotNetTitle(c.name, fullNet(c.net), days) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
-                      aria-label={m.chipLabel(
-                        c.name,
-                        c.lastSyncAt ? fmt(c.net, { sign: true }) : null,
-                        isStale(c.lastSyncAt) ? rel(c.lastSyncAt) : null,
-                      )}
-                    >
-                      {isStale(c.lastSyncAt) && <i class="stale-dot" aria-hidden="true" />}
-                      <span class="pilot-name">{c.name}</span>
-                      <span class:list={['pilot-net', { pos: c.net > 0, neg: c.net < 0 }]}>
-                        {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
-                      </span>
-                      {isStale(c.lastSyncAt) && c.lastSyncAt && <span class="chip-age" aria-hidden="true">{rel(c.lastSyncAt)}</span>}
-                    </a>
-                  </li>
-                ))}
+                {summary.characters.map((c) => {
+                  const balance = chipBalance(c);
+                  // The amber dot follows the health line (broken sync, no first sync, missing permission), not only the
+                  // age of the data; the gray balance and the age stay for old data only
+                  const issue = needsAttention(c);
+                  return (
+                    <li>
+                      <a
+                        href={href(days, c.id)}
+                        aria-current={c.id === pilotId ? 'true' : undefined}
+                        class:list={{ stale: isStale(c.lastSyncAt) }}
+                        title={m.pilotBalanceTitle(c.name, balance === null ? null : full(balance)) + (isStale(c.lastSyncAt) ? m.noSyncSince(rel(c.lastSyncAt)) : '')}
+                        aria-label={m.chipLabel(c.name, balance === null ? null : fmt(balance), isStale(c.lastSyncAt) ? rel(c.lastSyncAt) : null)}
+                      >
+                        {issue && <i class="stale-dot" aria-hidden="true" />}
+                        <span class="pilot-name">{c.name}</span>
+                        <span class="pilot-balance">{balance === null ? '—' : fmt(balance)}</span>
+                        {isStale(c.lastSyncAt) && c.lastSyncAt && <span class="chip-age" aria-hidden="true">{rel(c.lastSyncAt)}</span>}
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             </nav>
 
@@ -529,7 +558,7 @@ const worthNote =
                 const want = active.parentElement!.offsetLeft - strip.offsetLeft - all.offsetWidth;
                 const max = strip.scrollWidth - strip.clientWidth;
                 // If the active chip is one of the last, the row can't scroll it next to «Todos» and the previous one
-                // would peek half-hidden under «Todos» (reading «40 M» without its sign): extend the end of the row
+                // would peek half-hidden under «Todos» (reading «40 M» out of «1,40 B»): extend the end of the row
                 if (want > max) strip.style.paddingRight = `${parseFloat(getComputedStyle(strip).paddingRight) + want - max}px`;
                 strip.scrollLeft = want;
               }
@@ -542,7 +571,10 @@ const worthNote =
                   <ul class="health-full">
                     {healthShown.map((h) => (
                       <li>
-                        <span class="health-name">{h.name}:</span> {h.cause}
+                        <span class="health-name" title={h.names.length > 1 ? h.names.join(' · ') : undefined}>
+                          {h.names.length > 1 ? m.healthPilots(h.names.length) : h.name}:
+                        </span>{' '}
+                        {h.cause}
                         {h.action === 'relink' && (
                           <>
                             {' → '}
@@ -552,15 +584,19 @@ const worthNote =
                         {h.action === 'review' && (
                           <>
                             {' → '}
-                            <a class="inline-action" href="/pilotos">{m.healthReview}</a>
+                            <a class="inline-action" href="/pilotos" title={m.healthReviewOf(h.names.join(', '))} aria-label={m.healthReviewOf(h.names.join(', '))}>
+                              {m.healthReview}
+                            </a>
                           </>
                         )}
                         {h.action === 'sync' && (
                           <form method="post" action="/sync" class="sync-form inline">
                             <input type="hidden" name="back" value={href(days, pilotId)} />
-                            <input type="hidden" name="character" value={h.id} />
+                            {h.names.length === 1 && <input type="hidden" name="character" value={h.id} />}
                             {' → '}
-                            <button type="submit" class="inline-action" title={m.syncOneTitle(h.name)}>{m.syncOne}</button>
+                            <button type="submit" class="inline-action" title={h.names.length > 1 ? m.syncAllTitle : m.syncOneTitle(h.name)}>
+                              {m.syncOne}
+                            </button>
                           </form>
                         )}
                       </li>
@@ -599,7 +635,7 @@ const worthNote =
 
             {!pilotEmpty && (
             <section class:list={['glance', { solo: !showMap }]} aria-labelledby="glance-title">
-              <h2 id="glance-title" class="sr-only">{showResult ? m.result : m.net} · {withInv ? m.netWorth : m.walletsOnly}</h2>
+              <h2 id="glance-title" class="sr-only">{showResult ? m.result : m.net}{withInv && ` · ${m.netWorth}`}</h2>
               <div class:list={['panel', 'stat', 'hero-stat', { stale: selectedBroken }]}>
                 <div class="hero-body">
                   <div class="headline">
@@ -622,44 +658,77 @@ const worthNote =
                         <span class="sr-only">{headline > 0 ? m.gain : headline < 0 ? m.loss : m.even} ({fullNet(headline)})</span>
                       </span>
                       {showResult && (
-                        /* Where it comes from: the wallet net (what the activities, «Hoy» and the chart measure) minus
-                           the value of the ships that didn't come back; the estimate, in gray */
-                        <p class="versus result-note">
-                          {selected ? m.resultWalletPilot : m.resultWallet}{' '}
-                          <span class="num" title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</span>
-                          {hasAccounts && (
-                            <>
-                              {' '}
-                              {m.resultAccounts(accountsNet < 0 ? '+' : '−', nbsp(fmt(Math.abs(accountsNet))))}
-                            </>
-                          )}
-                          {notBack >= 0.5 && (
-                            <>
-                              {' '}
-                              {m.resultNotBack(nbsp(fmt(notBack)))}
-                            </>
-                          )}
-                          {toReplace >= 0.5 && (
-                            <span class="estimate">
-                              {' '}
-                              {m.resultToReplace(nbsp(fmt(toReplace)))}
-                            </span>
-                          )}
-                        </p>
+                        /* Where it comes from, as the equation Indicators uses (operator in its column, figures aligned):
+                           the wallet net (what the activities, «Hoy» and the chart measure), the PLEX kept apart, the ships
+                           that didn't come back and, in gray, the estimate. Before it was a four-term sentence on three lines */
+                        <table class="equation hero-eq">
+                          <caption class="sr-only">{m.resultBreakdown}</caption>
+                          <tbody>
+                            <tr>
+                              <th scope="row">{selected ? m.resultWalletPilot : m.resultWallet}</th>
+                              <td class="op" aria-hidden="true"></td>
+                              <td title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</td>
+                            </tr>
+                            {hasAccounts && (
+                              /* The label says why the sign: PLEX bought left the wallet and comes back to the result
+                                 (a UI review found that «PLEX (cuentas, aparte) + 4,09 B» read as paying more). The count and
+                                 the Omega link, which were a second PLEX line at the card's foot with the opposite sign, go here */
+                              <tr>
+                                <th scope="row">
+                                  {accountsNet < 0 ? m.resultAccountsBought : m.resultAccountsSold}
+                                  <span class="row-meta">
+                                    {[
+                                      summary.accounts.plexBought ? m.plexBought(count(summary.accounts.plexBought)) : null,
+                                      summary.accounts.plexSold ? m.plexSold(count(summary.accounts.plexSold)) : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                    {!selected && (
+                                      <>
+                                        {' · '}
+                                        <a class="inline-action" href="/indicadores">{m.accountsOmegaLink}</a>
+                                      </>
+                                    )}
+                                  </span>
+                                </th>
+                                <td class="op">{accountsNet < 0 ? '+' : '−'}</td>
+                                <td title={full(Math.abs(accountsNet))}>{fmt(Math.abs(accountsNet))}</td>
+                              </tr>
+                            )}
+                            {notBack >= 0.5 && (
+                              <tr>
+                                <th scope="row">{m.resultNotBackRow}</th>
+                                <td class="op">−</td>
+                                <td title={full(notBack)}>{fmt(notBack)}</td>
+                              </tr>
+                            )}
+                            {toReplace >= 0.5 && (
+                              <tr class="estimate">
+                                <th scope="row">{m.resultToReplaceRow}</th>
+                                <td class="op">−</td>
+                                <td title={full(toReplace)}>{`~\u2009${fmt(toReplace)}`}</td>
+                              </tr>
+                            )}
+                            <tr class="total">
+                              <th scope="row">{m.result}</th>
+                              <td class="op">=</td>
+                              <td title={fullNet(headline)}>{fmt(headline, { sign: true })}</td>
+                            </tr>
+                          </tbody>
+                        </table>
                       )}
                       {
                         delta !== undefined ? (
                           <p class="versus compare">
-                            {/* The comparison is of the wallet net (there's no result for the previous period) */}
-                            {showResult && <span class="compare-of">{selected ? m.resultCompareOfPilot : m.resultCompareOf} </span>}
+                            {/* Of the headline figure: the previous period's result takes out the same things (PLEX, ships) */}
                             {delta === 0 ? (
                               m.versusSame(days)
                             ) : (
                               <span class:list={['delta', sign(delta)]}>
                                 <Icon name={delta > 0 ? 'up' : 'down'} />
                                 {delta > 0
-                                  ? m.versusMore(fmt(delta), days, fmt(summary.previous.net, { sign: true }))
-                                  : m.versusLess(fmt(-delta), days, fmt(summary.previous.net, { sign: true }))}
+                                  ? m.versusMore(fmt(delta), days, fmt(previousHeadline, { sign: true }))
+                                  : m.versusLess(fmt(-delta), days, fmt(previousHeadline, { sign: true }))}
                               </span>
                             )}
                           </p>
@@ -673,7 +742,9 @@ const worthNote =
                           title={staleNetPilots.map((c) => `${c.name}: ${fmt(c.net, { sign: true })} (${rel(c.lastSyncAt)})`).join(' · ')}
                         >
                           <Icon name="alert" class="stale-icon" />
-                          {m.netStaleShare(fmt(staleNet, { sign: true }), nbsp(rel(staleNetOldest)))}
+                          {Math.abs(staleNet - summary.totals.net) < 0.5
+                            ? m.netStaleAll(nbsp(rel(staleNetOldest)))
+                            : m.netStaleShare(fmt(staleNet, { sign: true }), nbsp(rel(staleNetOldest)))}
                         </p>
                       )}
                     </div>
@@ -734,6 +805,10 @@ const worthNote =
                           )
                         )
                       }
+                      {todayMap && (
+                        /* Where you earned today: the systems with ISK today as a mini-map, whatever the inventory preference */
+                        <NewEdenMap map={todayMap} mode="gains" width={260} height={120} />
+                      )}
                     </div>
                   </div>
                   <div class="composition">
@@ -811,41 +886,48 @@ const worthNote =
                             <span class:list={['foot-losses-value', sign(lossesFirm)]} title={fullNet(lossesFirm)}>
                               {fmt(lossesFirm, { sign: true })}
                             </span>
-                            {lossesInNet !== 0 && Math.abs(lossesInNet - lossesFirm) >= 0.5 && (
-                              <span class="foot-losses-split">{m.actsInPvp(fmt(lossesInNet, { sign: true }))}</span>
-                            )}
-                            {toReplace >= 0.5 && <span class="foot-losses-pending">{m.actsPending(fmt(toReplace))}</span>}
                           </>
                         )}
                         <a class="inline-action" href="#perdidas">{nbsp(m.actsLossesLink)}</a>
                       </p>
                     )}
-                    {hasAccounts && (
-                      /* PLEX: the cost of the accounts, apart from the game result; Omega is in Indicators */
-                      <p class="foot-accounts">
-                        <span>{m.accountsLine}</span>
-                        <span class:list={['foot-losses-value', sign(accountsNet)]} title={fullNet(accountsNet)}>
-                          {fmt(accountsNet, { sign: true })}
-                        </span>
-                        <span class="foot-losses-split">
-                          {[
-                            summary.accounts.plexBought ? m.plexBought(count(summary.accounts.plexBought)) : null,
-                            summary.accounts.plexSold ? m.plexSold(count(summary.accounts.plexSold)) : null,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                        {!selected && (
-                          <a class="inline-action" href="/indicadores">
-                            {m.accountsOmegaLink}
-                          </a>
-                        )}
-                      </p>
-                    )}
                     {internalNote && <span class="sub at-end">{internalNote}</span>}
+                    {!withInv && (
+                      /* Wallets only: no net-worth card (it repeated the active chip's balance 200 px below it); its Omega
+                         line, its coverage note and the inventory toggle live here, at the card's foot */
+                      <div class="hero-tools">
+                        <div class="hero-tools-text">
+                          {omega && omega.missing !== null && (
+                            <p class="omega-line">
+                              {omega.missing > 0 ? m.omegaLine(fmt(omega.missing)) : m.omegaLineCovered}
+                              {' · '}
+                              <a class="inline-action" href="/indicadores">{m.indicators}</a>
+                            </p>
+                          )}
+                          {!selected && pilotList && (
+                            <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} walletOnly={true} />
+                          )}
+                          {worthNote && (
+                            <p class="worth-note">
+                              <Icon name="alert" class="stale-icon" />
+                              {worthNote}
+                            </p>
+                          )}
+                        </div>
+                        <form class="inv-toggle" method="get" action="/inv">
+                          <fieldset>
+                            <legend class="sr-only">{m.invToggle}</legend>
+                            <input type="hidden" name="back" value={invBack} />
+                            <button type="submit" name="to" value="0" aria-pressed="true">{m.invWallets}</button>
+                            <button type="submit" name="to" value="1" aria-pressed="false">{m.invPlus}</button>
+                          </fieldset>
+                        </form>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
+              {withInv && (
               <div class:list={['panel', 'stat', 'worth', { compact: !showMap, stale: selectedBroken }]}>
                 <div class="worth-head">
                   <div>
@@ -879,10 +961,13 @@ const worthNote =
                   </dl>
                   )}
                   {/* What counts toward net worth: wallets only (what pays for Omega) or + inventory. Remembered (cookie) */}
-                  <form class="inv-toggle" method="get" action="/inv" role="group" aria-label={m.invToggle}>
-                    <input type="hidden" name="back" value={invBack} />
-                    <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
-                    <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                  <form class="inv-toggle" method="get" action="/inv">
+                    <fieldset>
+                      <legend class="sr-only">{m.invToggle}</legend>
+                      <input type="hidden" name="back" value={invBack} />
+                      <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
+                      <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                    </fieldset>
                   </form>
                 </div>
                 {omega && omega.missing !== null && (
@@ -909,6 +994,7 @@ const worthNote =
                 )}
                 {showMap && geo && <NewEdenMap map={geo} />}
               </div>
+              )}
             </section>
             )}
 
@@ -985,14 +1071,9 @@ const worthNote =
                         <td>
                           <span class="who">
                             <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
-                            <img
-                              src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`}
-                              alt=""
-                              width="30"
-                              height="30"
-                              loading="lazy"
-                              onerror="this.style.visibility='hidden'"
-                            />
+                            <span class="portrait" data-initials={initials(c.name)} aria-hidden="true">
+                              <img src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`} alt="" width="30" height="30" loading="lazy" onerror="this.remove()" />
+                            </span>
                             {c.name}
                           </span>
                         </td>
@@ -1054,14 +1135,9 @@ const worthNote =
                       <div class="card-head">
                         <a class="who" href={href(days, c.id)} title={m.viewLedger(c.name)}>
                           <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
-                          <img
-                            src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`}
-                            alt=""
-                            width="28"
-                            height="28"
-                            loading="lazy"
-                            onerror="this.style.display='none'"
-                          />
+                          <span class="portrait small" data-initials={initials(c.name)} aria-hidden="true">
+                            <img src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`} alt="" width="28" height="28" loading="lazy" onerror="this.remove()" />
+                          </span>
                           {c.name}
                         </a>
                         <span class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
@@ -1201,7 +1277,9 @@ const worthNote =
                   select?.addEventListener('change', () => apply(select.value, first(select.value)));
                 }
               </script>
-              {/* Two short notes: what the Total is (in a pilot's view, that it's the consolidated total) and where balance and inventory come from */}
+              {/* Short notes that reconcile and give coverage: what the Total is (in a pilot's view, that it's the consolidated
+                  total), the wallet equation and where balance and inventory come from. The definitions («Neto = ingresos −
+                  gastos…») are gone: the user knows them, and the column titles carry them */}
               <div class="panel-note pilots-note">
                 <p>
                   {selected && !pilotEmpty ? (
@@ -1213,7 +1291,6 @@ const worthNote =
                     </>
                   )}
                 </p>
-                <p>{m.betweenPilotsNote}</p>
                 <p>
                   {m.reconcileNote}
                   {reconcileGaps.length > 0 && m.reconcileGap(reconcileGaps.map((c) => m.reconcileItem(c.name, fmt(gapOf(c), { sign: true }))).join(', '))}
@@ -1281,8 +1358,10 @@ const worthNote =
 <style>
   .glance {
     display: grid;
-    /* The net leads (~60 %); Net worth and the map support it */
+    /* The net leads (~60 %); Net worth and the map support it. Each card is as tall as its content: stretched to the
+       Net card's height, Net worth ended in 270 px of empty panel under the map */
     grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    align-items: start;
     gap: 16px;
   }
   /* Period net and «Hoy» as a pair of big figures: a container so it depends on the card's width */
@@ -1331,6 +1410,13 @@ const worthNote =
   }
   .fig.today .value {
     font-size: 22px;
+  }
+  /* Today's mini-map (wallets only): under the figure, never wider than the column it explains */
+  .fig.today :global(.new-eden) {
+    flex-basis: 100%;
+    width: 100%;
+    max-width: 300px;
+    margin-top: 8px;
   }
   /* «Hoy» with no entries: a huge zero looks like a bug; it's dimmed and kept small */
   .fig.today .value.zero {
@@ -1404,18 +1490,35 @@ const worthNote =
     background: var(--critical);
     border-radius: 3px 0 0 3px;
   }
-  /* Where the result comes from: wallet net − what didn't come back − the estimate (in gray) */
-  .result-note {
+  /* Where the result comes from: the shared equation table, compact in the card; the estimate row in gray */
+  .hero-eq {
+    max-width: 36rem;
+    margin-top: 8px;
+  }
+  .hero-eq th,
+  .hero-eq td {
+    padding: 4px 0;
+    border-top: 0;
     font-size: 13px;
-    color: var(--text-secondary);
   }
-  /* The figure inside the sentence uses the sentence's typeface (the monospace one left a wide gap) */
-  .result-note .num {
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+  /* Air before the divider of «Hoy»: the table measured exactly its column and a fallback font cut the last glyph */
+  .hero-eq td:last-child {
+    padding-right: 10px;
   }
-  .result-note .estimate,
-  .compare-of {
+  .hero-eq .row-meta {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .hero-eq tr.total th,
+  .hero-eq tr.total td {
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    color: var(--text);
+  }
+  .hero-eq tr.estimate th,
+  .hero-eq tr.estimate td {
     color: var(--text-muted);
   }
   /* Card footer, full width: lost ships and internal transfers */
@@ -1453,17 +1556,56 @@ const worthNote =
   .foot-losses-value.estimate {
     color: var(--text-muted);
   }
-  /* PLEX, apart: same shape as the losses line, without its own rule (they share the footer's) */
-  .foot-accounts {
+  /* Wallets only: the Omega line, the coverage note and the inventory toggle at the card's foot (no net-worth card) */
+  .hero-tools {
+    /* Last in the foot: on a phone the internal-transfers note (order 4) would otherwise land after the toggle */
+    order: 5;
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0 8px;
-    font-size: 13px;
-    color: var(--text-secondary);
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px 16px;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
   }
-  .foot-losses + .foot-accounts {
-    margin-top: -4px;
+  .hero-tools-text {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+  }
+  .hero-tools .omega-line,
+  .hero-tools .worth-note,
+  .hero-tools :global(.coverage-note) {
+    margin: 0;
+  }
+  /* Pilot portrait: the initials sit underneath and show when CCP's image doesn't load (before, an empty bordered box) */
+  .portrait {
+    position: relative;
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    background: var(--panel-2);
+    font: 500 11px var(--mono);
+    color: var(--text-muted);
+  }
+  .portrait::before {
+    content: attr(data-initials);
+  }
+  .portrait img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .portrait.small {
+    width: 28px;
+    height: 28px;
   }
   .hero-foot > :first-child:not(.foot-losses):not(.sub) {
     margin-top: 8px;
@@ -1751,7 +1893,7 @@ const worthNote =
   }
   .worth :global(.coverage-note),
   .worth-note {
-    flex-basis: 100%;
+    width: 100%;
     margin-top: 10px;
   }
   .worth-note {
@@ -1813,7 +1955,7 @@ const worthNote =
   .map-fold > summary:hover::before {
     border-color: var(--cyan);
   }
-  /* Filtered pilot broken or stale: their net is dimmed, as in the chips (stale data doesn't compete with real data) */
+  /* Filtered pilot broken or stale: their net is dimmed, like the balance in the chips (stale data doesn't compete with real data) */
   .hero-stat.stale .value.signed.pos,
   .hero-stat.stale .value.signed.neg,
   .hero-stat.stale .act-net {
@@ -1890,7 +2032,7 @@ const worthNote =
   .pilot-strip a[aria-current='true'],
   .pilot-strip a.stale[aria-current='true'] {
     border-color: var(--cyan-dim);
-    background: #61cce514;
+    background: color-mix(in srgb, var(--cyan) 8%, transparent);
     color: var(--text);
   }
   .pilot-strip a[aria-current='true'] .pilot-name {
@@ -1977,7 +2119,7 @@ const worthNote =
       border-bottom: 1px solid var(--line);
     }
     .pilot-cards li.selected {
-      background: #61cce50d;
+      background: var(--hover);
       box-shadow: inset 2px 0 var(--cyan);
     }
     .card-head {
@@ -1995,10 +2137,6 @@ const worthNote =
       padding: 0;
       font-weight: 500;
       color: var(--text);
-    }
-    .card-head img {
-      border-radius: 4px;
-      border: 1px solid var(--line-strong);
     }
     .pilot-cards .last-sync {
       font-size: 13px;
@@ -2065,7 +2203,7 @@ const worthNote =
     color: var(--critical);
   }
   tr.selected td {
-    background: #61cce50d;
+    background: var(--hover);
   }
   tr.selected td:first-child {
     box-shadow: inset 2px 0 var(--cyan);
@@ -2087,9 +2225,8 @@ const worthNote =
   .pilot-strip a.stale {
     border-color: var(--line);
   }
-  /* Net from stale data: dimmed, so it doesn't compete with the real net */
-  .pilot-strip a.stale .pilot-net.pos,
-  .pilot-strip a.stale .pilot-net.neg {
+  /* Balance from stale data: dimmed, so it doesn't compete with current data */
+  .pilot-strip a.stale .pilot-balance {
     color: var(--text-secondary);
   }
   .chip-age {
@@ -2111,11 +2248,17 @@ const worthNote =
     margin-right: 6px;
     vertical-align: -2px;
   }
-  /* Net worth toggle: a discreet segmented control on the card itself, state in cyan */
+  /* Net worth toggle: a discreet segmented control on the card itself, state in cyan. The group is a fieldset with
+     its legend for screen readers (role="group" is not allowed on a form) */
   .inv-toggle {
-    display: inline-flex;
+    display: flex;
     align-self: center;
     margin-left: auto;
+  }
+  .inv-toggle fieldset {
+    display: inline-flex;
+    min-width: 0;
+    margin: 0;
     padding: 2px;
     border: 1px solid var(--line);
     border-radius: 6px;
@@ -2196,15 +2339,10 @@ const worthNote =
     height: 14px;
     color: var(--cyan-dim);
   }
-  .pilot-net {
+  /* A balance, not a net: no sign and no green/red */
+  .pilot-balance {
     font: 500 13px var(--mono);
     color: var(--text);
-  }
-  .pilot-net.pos {
-    color: var(--positive);
-  }
-  .pilot-net.neg {
-    color: var(--critical);
   }
   .ratio {
     display: flex;

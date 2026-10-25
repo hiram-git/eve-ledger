@@ -3,7 +3,7 @@ import { sql, type SQL } from 'drizzle-orm';
 // Activity of each journal ref_type: answers «where does the ISK come from?» in game terms,
 // not ESI terms. Anything not in any list counts as «otros» (other: skills, clones, donations, PI…).
 // Logistics: what you pay (or get paid) for moving things with couriers.
-// Accounts (user's decision, sixteenth critique): buying or selling PLEX on the market is the cost of the
+// Accounts (user's decision after reviewing real data): buying or selling PLEX on the market is the cost of the
 // accounts (Omega), neither trading nor gameplay; it is kept apart from the result and from the Omega rate
 export const ACTIVITIES = ['pve', 'pvp', 'trading', 'logistics', 'other', 'accounts'] as const;
 export type Activity = (typeof ACTIVITIES)[number];

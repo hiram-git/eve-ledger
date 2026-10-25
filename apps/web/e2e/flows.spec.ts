@@ -135,6 +135,20 @@ test('el saldo es el del wallet de ESI y Balances concilia lo que el journal aú
   await expect(page.getByText(/va por delante del journal en Aria Vex/).first()).toBeAttached();
 });
 
+test('los chips de pilotos muestran el saldo del wallet, no el neto del período', async ({ page, request }) => {
+  const summary = await (await request.get(`${API_URL}/summary?days=30`)).json();
+  const aria = summary.characters.find((c: { id: number }) => c.id === PILOTS.aria.id);
+  const full = (v: number) => `${new Intl.NumberFormat('es', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)} ISK`;
+  await page.goto('/?days=30');
+  const chip = page.locator('.pilot-strip a', { hasText: PILOTS.aria.name });
+  await expect(chip).toHaveAttribute('title', `${PILOTS.aria.name}: saldo del wallet ${full(aria.balance)}`);
+  await expect(chip).toHaveAttribute('aria-label', /^Aria Vex, saldo /);
+  // «Todos» is the sum of the wallets, and a pilot without a sync shows «—»
+  const all = summary.characters.reduce((n: number, c: { balance: number | null }) => n + (c.balance ?? 0), 0);
+  await expect(page.locator('.pilot-strip a').first()).toHaveAttribute('title', `Todos tus pilotos: saldo de los wallets ${full(all)}`);
+  await expect(page.locator('.pilot-strip a', { hasText: PILOTS.nyx.name }).locator('.pilot-balance')).toHaveText('—');
+});
+
 test('Descuentos: impuesto de corporación exacto y penalización de incursión estimada', async ({ page, request }) => {
   const { deductions: d } = await (await request.get(`${API_URL}/indicators`)).json();
   expect(d.byCorp[0].name).toBe('School of Applied Knowledge');
@@ -177,6 +191,9 @@ test('Doctrinas: renombrar una doctrina y plegarla; el pliegue se recuerda', asy
     await fold.locator('> summary').click();
     await expect(fold).toHaveJSProperty('open', false);
     await expect(page.locator(`#doctrina-${id} .add-fit`)).toBeHidden();
+    // Rename and delete live in the heading row: still there with the doctrine folded
+    await expect(page.locator(`#doctrina-${id} .doctrine-actions details.rename > summary`)).toBeVisible();
+    await expect(page.locator(`#doctrina-${id} .doctrine-actions .delete-form button`)).toBeVisible();
     await page.reload();
     await expect(page.locator(`#doctrina-${id} details.doctrine-fold`)).toHaveJSProperty('open', false);
     await expect(page.locator(`#doctrina-${id}`).getByRole('heading', { level: 2, name: 'Beehive' })).toBeVisible();
@@ -211,6 +228,25 @@ test('Doctrinas: la vista compacta pliega los fits a una línea y se recuerda', 
   await page.getByRole('button', { name: 'Vista compacta' }).click();
   await expect(page.getByRole('button', { name: 'Vista compacta' })).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#fit-1 details.fit-fold')).toHaveJSProperty('open', true);
+});
+
+test('Puntos de lealtad: LP por corporación valorados al mejor cambio y EverMarks aparte', async ({ page, request }) => {
+  const { loyalty } = await (await request.get(`${API_URL}/indicators`)).json();
+  expect(loyalty.corps.map((c: { name: string; points: number }) => [c.name, c.points])).toEqual([['Sisters of EVE', 270_000], ['Federation Navy', 60_000]]);
+  expect(loyalty.corps[0].iskPerLp).toBeCloseTo((8_000_000 - 2_400_000) / 24_000, 0);
+  expect(loyalty.corps[1].value).toBeNull();
+  expect(loyalty.evermarks.points).toBe(16_500);
+  expect(loyalty.change).toBe(40_000);
+  await page.goto('/indicadores');
+  const card = page.locator('section[aria-labelledby="lp-title"]');
+  // 270 000 LP × 233,33 ISK/LP = 63,0 M, estimated; the LP figure and the EverMarks are exact
+  await expect(card.locator('.answer-value')).toContainText('63,0 M');
+  await expect(card.locator('.answer-sub')).toContainText('330.000 LP');
+  await expect(card.locator('.lp-change')).toContainText('+40.000 LP en 30 días');
+  await expect(card.locator('table.lp tbody tr').first()).toContainText('Sisters of EVE');
+  await expect(card.locator('.lp-evermarks')).toContainText('16.500');
+  // Nyx has the scope but no sync yet: the card says so
+  await expect(card.locator('.price-meta')).toContainText(PILOTS.nyx.name);
 });
 
 test('el pie enlaza el aviso legal con el texto original de CCP', async ({ page }) => {

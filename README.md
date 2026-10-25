@@ -21,6 +21,7 @@
   - Your lost ships measured in hours of ratting.
   - Market fees and taxes.
   - Deductions from what you earn: the corporation tax on bounties, ESS and missions (exact, from the journal) and the bounty penalty in incursion systems (an estimate).
+  - Loyalty points by corporation and what they are worth at the best exchange of each LP store (an estimate), with EverMarks apart.
 - **Balances.** Your numbers presented as books: a balance sheet, an income statement and a wallet reconciliation that adds up to the ISK.
 - **Your history, kept.** ESI only serves about 30 days of wallet history, so EVE Ledger stores everything it syncs.
   - It runs in the system tray and can start when you sign in, syncing every hour.
@@ -38,6 +39,7 @@
   - `esi-contracts.read_character_contracts.v1`
   - `esi-skills.read_skills.v1`
   - `esi-universe.read_structures.v1` (optional: shows the names of the citadels where you keep items or trade)
+  - `esi-characters.read_loyalty.v1` (optional: loyalty points by corporation, EverMarks and what they are worth)
 
   You can revoke access at any time from your EVE account's third-party applications page.
 - **Login without secrets.** The login uses EVE SSO with PKCE: there is no client secret to steal, and you don't have to register anything at developers.eveonline.com. Access and refresh tokens are stored encrypted (AES-GCM) with a key generated on your computer.

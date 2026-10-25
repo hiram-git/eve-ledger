@@ -62,17 +62,7 @@ const summary = arcs.map((a) => `${a.s.label} ${pct.format(a.share)}`).join(', '
 </svg>
 
 <style is:global>
-  /* Categorical palette for breakdowns (validated in dark mode on #111c27: lightness band, chroma, CVD
-     separation ≥ 8.4 between neighbors, contrast ≥ 3:1). Fixed order; never for UI nor for income/expenses */
-  :root {
-    --cat-1: #3987e5;
-    --cat-2: #d95926;
-    --cat-3: #199e70;
-    --cat-4: #c98500;
-    --cat-5: #d55181;
-    --cat-6: #9085e9;
-    --cat-7: #e66767;
-  }
+  /* The categorical palette (--cat-1…7) lives in theme.css: the tables beside the donut and Doctrinas use it too */
   .donut {
     display: block;
     width: 100%;

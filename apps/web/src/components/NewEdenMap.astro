@@ -7,8 +7,12 @@ import { getLang, t } from '../lib/i18n';
 
 interface Props {
   map: GeoMap;
+  // «gains»: only the systems where ISK was earned today, sized by today's ISK (the Net card's «Hoy» column, wallets only)
+  mode?: 'all' | 'gains';
+  width?: number;
+  height?: number;
 }
-const { map } = Astro.props;
+const { map, mode = 'all', width = 440, height = 160 } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
@@ -16,11 +20,11 @@ const full = (v: number) => iskFull(v, lang);
 
 
 // The viewBox is almost the same size as the card on desktop (~430 px): 12 px labels come out at ~11.5 px
-const W = 440;
-const H = 160;
-const PAD = 40; // margin so the labels aren't cut off
+const W = width;
+const H = height;
+const PAD = mode === 'gains' ? 24 : 40; // margin so the labels aren't cut off
 
-const nodes = map.nodes;
+const nodes = mode === 'gains' ? map.nodes.filter((n) => n.earnedToday > 0) : map.nodes;
 const xs = nodes.map((n) => n.x);
 const zs = nodes.map((n) => n.z);
 const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
@@ -34,13 +38,18 @@ const px = (x: number) => W / 2 + (x - cx) * scale;
 const py = (z: number) => H / 2 - (z - cz) * scale;
 
 const maxInv = Math.max(1, ...nodes.map((n) => n.inventory));
-const radius = (v: number) => (v > 0 ? 3 + 11 * Math.sqrt(v / maxInv) : 2.5);
+const maxEarn = Math.max(1, ...nodes.map((n) => n.earnedToday));
+const radius = (n: GeoMap['nodes'][number]) =>
+  mode === 'gains' ? 3 + 9 * Math.sqrt(n.earnedToday / maxEarn) : n.inventory > 0 ? 3 + 11 * Math.sqrt(n.inventory / maxInv) : 2.5;
 
 // Labels only for what matters: the 4 systems with the most inventory and the ones that gave ISK today
-const labelled = new Set([
-  ...nodes.filter((n) => n.inventory > 0).slice(0, 4).map((n) => n.systemId),
-  ...nodes.filter((n) => n.earnedToday > 0).map((n) => n.systemId),
-]);
+const labelled =
+  mode === 'gains'
+    ? new Set(nodes.map((n) => n.systemId))
+    : new Set([
+        ...nodes.filter((n) => n.inventory > 0).slice(0, 4).map((n) => n.systemId),
+        ...nodes.filter((n) => n.earnedToday > 0).map((n) => n.systemId),
+      ]);
 
 type Box = { x1: number; y1: number; x2: number; y2: number };
 const hit = (a: Box, b: Box) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
@@ -49,13 +58,13 @@ const taken: Box[] = [];
 const placed = nodes.map((n) => {
   const x = px(n.x);
   const y = py(n.z);
-  const r = radius(n.inventory);
-  const lines = [n.inventory > 0 ? fmt(n.inventory) : null, n.earnedToday > 0 ? m.mapToday(fmt(n.earnedToday)) : null].filter(
+  const r = radius(n);
+  const lines = [mode === 'all' && n.inventory > 0 ? fmt(n.inventory) : null, n.earnedToday > 0 ? m.mapToday(fmt(n.earnedToday)) : null].filter(
     Boolean,
   ) as string[];
   const title = [
     `${n.name} (${n.security.toFixed(1)})`,
-    n.inventory > 0 ? m.mapInventoryLine(full(n.inventory)) : null,
+    mode === 'all' && n.inventory > 0 ? m.mapInventoryLine(full(n.inventory)) : null,
     n.earnedToday > 0 ? m.mapTodayLine(full(n.earnedToday)) : null,
   ]
     .filter(Boolean)
@@ -95,10 +104,10 @@ for (const n of order) {
 
 const invCount = nodes.filter((n) => n.inventory > 0).length;
 const earnCount = nodes.filter((n) => n.earnedToday > 0).length;
-const summary = m.mapSummary(invCount, earnCount);
+const summary = mode === 'gains' ? m.mapSummaryToday(earnCount) : m.mapSummary(invCount, earnCount);
 ---
 
-<figure class="new-eden">
+<figure class:list={['new-eden', mode]}>
   {
     nodes.length === 0 ? (
       <p class="empty">{m.mapEmpty}</p>
@@ -120,7 +129,7 @@ const summary = m.mapSummary(invCount, earnCount);
                   <circle class="earned" cx={n.x} cy={n.y} r={n.r + 5} />
                 </>
               )}
-              <circle class:list={['dot', { held: n.inventory > 0 }]} cx={n.x} cy={n.y} r={n.r} />
+              <circle class:list={['dot', { held: mode === 'all' && n.inventory > 0 }]} cx={n.x} cy={n.y} r={n.r} />
               {labels.has(n.systemId) && (
                 <text x={labels.get(n.systemId)!.tx} y={labels.get(n.systemId)!.ty} text-anchor={labels.get(n.systemId)!.anchor}>
                   <tspan class="name">{n.name}</tspan>
@@ -139,8 +148,14 @@ const summary = m.mapSummary(invCount, earnCount);
             <li>
               <span class="n-name">{n.name}</span>
               <span class="n-val">
-                {n.inventory > 0 ? `${fmt(n.inventory)} ISK` : m.mapNoInventory}
-                {n.earnedToday > 0 && <span class="gain">, {m.mapToday(fmt(n.earnedToday))}</span>}
+                {mode === 'gains' ? (
+                  <span class="gain">{m.mapToday(fmt(n.earnedToday))}</span>
+                ) : (
+                  <>
+                    {n.inventory > 0 ? `${fmt(n.inventory)} ISK` : m.mapNoInventory}
+                    {n.earnedToday > 0 && <span class="gain">, {m.mapToday(fmt(n.earnedToday))}</span>}
+                  </>
+                )}
               </span>
             </li>
           ))}
@@ -149,10 +164,10 @@ const summary = m.mapSummary(invCount, earnCount);
     )
   }
   <figcaption>
-    <span class="legend-key"><i class="held" />{m.mapLegendInventory}</span>
-    {earnCount > 0 && <span class="legend-key"><i class="earned" />{m.mapLegendToday}</span>}
+    {mode === 'all' && <span class="legend-key"><i class="held" />{m.mapLegendInventory}</span>}
+    {earnCount > 0 && <span class="legend-key"><i class="earned" />{mode === 'gains' ? m.mapLegendTodaySize : m.mapLegendToday}</span>}
     {
-      map.unplaced.value > 0 && (
+      mode === 'all' && map.unplaced.value > 0 && (
         <span class="unplaced" title={m.mapUnplacedTitle}>
           {m.mapUnplaced(fmt(map.unplaced.value), map.unplaced.locations)}
         </span>
@@ -164,6 +179,16 @@ const summary = m.mapSummary(invCount, earnCount);
 <style>
   .new-eden {
     margin: 14px 0 0;
+  }
+  /* Today's mini-map in the Net card: smaller and without the inventory legend */
+  .new-eden.gains {
+    margin-top: 0;
+  }
+  .new-eden.gains svg {
+    max-height: 150px;
+  }
+  .new-eden.gains figcaption {
+    margin-top: 6px;
   }
   svg {
     display: block;

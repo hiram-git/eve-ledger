@@ -10,6 +10,7 @@ target_fingerprint: "sha256:0d1b5a8799df0d6f6ad483ab60ecb5f35ce3c88314833838dd1c
 target_path: /home/user/eve-ledger/apps/web/src/pages/index.astro
 timestamp: 2026-10-02T06-11-40Z
 slug: apps-web-src-pages-index-astro
+closed: true
 ---
 Method: dual-agent (A: subagente de revisión de diseño · B: subagente de detector y navegador)
 

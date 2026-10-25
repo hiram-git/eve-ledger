@@ -145,9 +145,10 @@ const coverage = [
   .filter(Boolean)
   .join(' ');
 const notes = coverage ? [coverage] : [];
-// Donuts: which pilot and which ship the cost went to (what each loss cost you, with the estimate still to replace; a
-// loss the insurance left positive counts as 0). Largest to smallest, 6 + «Otros». By pilot only in the consolidated view
-const costOf = (l: Loss) => Math.max(0, -l.cost);
+// Donuts: which pilot and which ship the firm cost went to (without the estimate still to replace, so the centre is the
+// headline «Te costaron»: before it read 435 M next to −385 M; a loss the insurance left positive counts as 0).
+// Largest to smallest, 6 + «Otros». By pilot only in the consolidated view
+const costOf = (l: Loss) => Math.max(0, -(l.cost + (l.state === 'pending' ? l.toReplace : 0)));
 const sumBy = (key: (l: Loss) => string) => {
   const acc = new Map<string, { label: string; value: number; count: number }>();
   for (const l of losses.losses) {
@@ -168,8 +169,7 @@ const foldCount = (items: { label: string; value: number; count: number }[], oth
 };
 const pilotSlices = byPilot.length > 1 ? foldCount(byPilot, m.otherPilots) : [];
 const shipSlices = byShip.length > 1 ? foldCount(byShip, m.otherShips) : [];
-const costTotal = losses.losses.reduce((n, l) => n + costOf(l), 0);
-const shareCaption = (label: string) => (tot.toReplace >= 0.5 ? `${label} (${m.shareCostEstimate})` : label);
+const shareCaption = (label: string) => label;
 // View of a pilot who lost nothing but paid for someone else's replacement (the Jita alt): there's a sum too
 const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
 ---
@@ -218,6 +218,11 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
             </p>
           )}
           {ownLine && <p class="head-note">{ownLine}</p>}
+          {/* How much of the cost is already in the net, under PvP (insurance, replacement, courier): it was in the Net card's
+              foot, as a third figure next to the headline */}
+          {!pilotName && !onlyEstimate && Math.abs(tot.walletEffect) >= 0.5 && Math.abs(tot.walletEffect - firm) >= 0.5 && (
+            <p class="head-note">{m.lossesInNet(fmt(tot.walletEffect, { sign: true }))}</p>
+          )}
         </div>
         <table class="breakdown" aria-labelledby="losses-cost">
           <tbody>
@@ -263,7 +268,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
             .filter((f) => f.slices.length > 0)
             .map((f) => (
               <figure>
-                <Donut slices={f.slices} label={shareCaption(f.label)} format={fmt} lang={lang} center={fmt(costTotal)} centerSub="ISK" />
+                <Donut slices={f.slices} label={shareCaption(f.label)} format={fmt} lang={lang} center={fmt(headValue, { sign: true })} centerSub="ISK" />
                 <table class="mini">
                   <caption class="sr-only">{shareCaption(f.label)}</caption>
                   <thead>
@@ -384,16 +389,21 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
           )}
         </table>
       )}
-      <div class="panel-note losses-note">
-        {notes.map((n) => (
-          <p>{n}</p>
-        ))}
-        <p>
-          {m.lossesNote}
-          {tot.unpricedTypes > 0 && m.lossesUnpriced(tot.unpricedTypes)}
-          {noContracts && !sameMissing && <> {m.lossesNoContracts(noContracts)}</>}
-        </p>
-      </div>
+      {/* Coverage only (who is left out, losses before the history, premiums, unpriced types): the lesson on what a loss
+          costs is gone, the figures and the row texts say it */}
+      {(notes.length > 0 || tot.unpricedTypes > 0 || (noContracts && !sameMissing)) && (
+        <div class="panel-note losses-note">
+          {notes.map((n) => (
+            <p>{n}</p>
+          ))}
+          {(tot.unpricedTypes > 0 || (noContracts && !sameMissing)) && (
+            <p>
+              {tot.unpricedTypes > 0 && m.lossesUnpriced(tot.unpricedTypes).trim()}
+              {noContracts && !sameMissing && <> {m.lossesNoContracts(noContracts)}</>}
+            </p>
+          )}
+        </div>
+      )}
     </section>
   )
 }

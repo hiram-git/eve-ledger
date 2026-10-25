@@ -59,7 +59,8 @@ export type Summary = {
   // internal: in a single pilot's view, what was moved with your other pilots that day (not in net nor in income/expenses)
   daily: (Flow & { date: string; accounts: number; internal: number })[];
   today: Flow;
-  previous: Flow & { complete: boolean };
+  // accounts, lossesNotBack, lossesToReplace: what the Net card takes out of the previous period's result too
+  previous: Flow & { complete: boolean; accounts: number; lossesNotBack: number; lossesToReplace: number };
   coverage: { firstEntryAt: string | null; coveredDays: number };
   market: { items: MarketItem[]; totals: { sold: number; bought: number; net: number; items: number } };
 };
@@ -322,6 +323,35 @@ export type Indicators = {
     incursionsSince: string | null;
     iskPerHour: number | null;
     grossPerHour: number | null;
+  };
+  // Loyalty points: LP by corporation, valued (estimate) at the best exchange of its LP store; EverMarks (Paragon) apart
+  loyalty: {
+    days: number;
+    // Pilots with the optional scope (synced: a loyalty sync finished) and those without it
+    pilots: { characterId: number; name: string; synced: boolean }[];
+    missingScope: { characterId: number; name: string }[];
+    corps: {
+      corporationId: number;
+      name: string | null;
+      npc: boolean;
+      points: number;
+      byPilot: { characterId: number; name: string; points: number }[];
+      iskPerLp: number | null;
+      value: number | null;
+      offer: { typeId: number; name: string | null; quantity: number; lpCost: number; iskCost: number; required: number } | null;
+      storeRead: boolean;
+      // Change over the period (earned minus spent); null without any log entry
+      change: number | null;
+    }[];
+    evermarks: { points: number; byPilot: { characterId: number; name: string; points: number }[]; change: number | null } | null;
+    points: number;
+    value: number;
+    valuedCorps: number;
+    unvaluedCorps: number;
+    storesPending: number;
+    change: number | null;
+    historySince: string | null;
+    changePartial: boolean;
   };
 };
 export const getIndicators = () => call<Indicators>('/indicators');

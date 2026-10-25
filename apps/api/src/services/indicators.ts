@@ -4,6 +4,7 @@ import { assets, characters, marketPrices, names, systems, walletJournal } from 
 import { PVE_EXTRA_KINDS, refKindOf } from '../lib/activities';
 import { env } from '../lib/env';
 import { deductionsIndicator } from './deductions';
+import { loyaltyIndicator } from './loyalty';
 import { shipLosses } from './losses';
 import { PLEX_TYPE_ID, getQuote } from './quotes';
 import { activity, dailyNetRate, isInternal, lastBalance } from './summary';
@@ -307,5 +308,6 @@ export async function getIndicators() {
     fees: await feesIndicator(),
     deductions: await deductionsIndicator(ratting),
     days: await daysIndicator(),
+    loyalty: await loyaltyIndicator(),
   };
 }

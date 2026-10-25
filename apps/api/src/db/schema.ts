@@ -92,7 +92,7 @@ export const names = sqliteTable('names', {
 export const syncLog = sqliteTable('sync_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   characterId: integer('character_id').notNull(),
-  kind: text('kind').notNull().default('journal'), // journal | transactions | assets | killmails | contracts | skills
+  kind: text('kind').notNull().default('journal'), // journal | transactions | assets | killmails | contracts | skills | loyalty
   startedAt: ts('started_at').notNull(),
   finishedAt: ts('finished_at'),
   rowsInserted: integer('rows_inserted').default(0),
@@ -334,4 +334,56 @@ export const fitPlans = sqliteTable('fit_plans', {
   name: text('name').notNull(),
   skills: text('skills', { mode: 'json' }).$type<RequiredSkill[]>().notNull(),
   createdAt: ts('created_at').notNull().$defaultFn(() => new Date()),
+});
+
+// Loyalty points of each pilot by corporation (GET /characters/{id}/loyalty/points, optional scope
+// esi-characters.read_loyalty.v1): a snapshot replaced on every sync. EverMarks are the LP of the NPC corporation
+// Paragon, told apart by the name ESI gives it (resolved into `names` like any other corporation)
+export const loyaltyPoints = sqliteTable(
+  'loyalty_points',
+  {
+    characterId: integer('character_id').notNull(),
+    corporationId: integer('corporation_id').notNull(),
+    points: integer('points').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.characterId, t.corporationId] })],
+);
+
+// Every change of a pilot's LP with a corporation, as seen on sync (ESI keeps no LP history): the change over
+// a period (earned minus spent) is read from here, from the first sync on
+export const loyaltyLog = sqliteTable(
+  'loyalty_log',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    characterId: integer('character_id').notNull(),
+    corporationId: integer('corporation_id').notNull(),
+    at: ts('at').notNull(),
+    points: integer('points').notNull(),
+  },
+  (t) => [index('loyalty_log_idx').on(t.characterId, t.corporationId, t.at)],
+);
+
+// LP store of each corporation your pilots have LP with (GET /loyalty/stores/{id}/offers, public, cached daily
+// by ESI): what the LP buys, to value them at the best exchange. loyalty_stores says when each store was read
+export type LoyaltyRequired = { typeId: number; quantity: number };
+export const loyaltyOffers = sqliteTable(
+  'loyalty_offers',
+  {
+    corporationId: integer('corporation_id').notNull(),
+    offerId: integer('offer_id').notNull(),
+    typeId: integer('type_id').notNull(),
+    quantity: integer('quantity').notNull(),
+    lpCost: integer('lp_cost').notNull(),
+    iskCost: real('isk_cost').notNull(),
+    requiredItems: text('required_items', { mode: 'json' }).$type<LoyaltyRequired[]>().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.corporationId, t.offerId] })],
+);
+
+export const loyaltyStores = sqliteTable('loyalty_stores', {
+  corporationId: integer('corporation_id').primaryKey(),
+  offers: integer('offers').notNull(),
+  status: text('status').notNull(), // ok | missing (404: that corporation has no store) | error
+  checkedAt: ts('checked_at').notNull(),
 });
