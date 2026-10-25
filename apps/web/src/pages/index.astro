@@ -13,7 +13,7 @@ import BarList, { type BarRow } from '../components/BarList.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import ShipLosses from '../components/ShipLosses.astro';
 import Donut from '../components/Donut.astro';
-import { fold } from '../lib/shares';
+import { fold, pilotColors } from '../lib/shares';
 import {
   ApiError,
   getIndicators,
@@ -356,14 +356,27 @@ const totalLabel = selected ? m.pilotsTotalAll : m.pilotsTotal(summary?.characte
 // Pies of the pilots table: who the income comes from and who spends (gross, without what's moved between pilots).
 // The color follows the pilot (their position in the list), also in their row's swatch; with more than 7, «Otros»
 const pilotRows = summary?.characters ?? [];
-const pilotColor = (i: number) => `var(--cat-${(pilotRows.length <= 7 ? i : Math.min(i, 6)) + 1})`;
-// The same colour for a pilot in the lost ships' donuts (by their place in this list, not by their rank there)
-const colorOfPilot = (id: number) => {
-  const i = pilotRows.findIndex((c) => c.id === id);
-  return i < 0 ? 'var(--line-strong)' : pilotColor(i);
-};
-const pilotIncomeSlices = fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? c.income : 0 })), m.otherPilots);
-const pilotExpensesSlices = fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? c.expenses : 0 })), m.otherPilots);
+// The same colour for a pilot in every donut (the lost ships' too, and Indicators'): its place in this list
+const colorOfPilot = pilotColors(pilotRows);
+const pilotColor = (i: number) => colorOfPilot(pilotRows[i].id);
+// With PLEX, each pilot's slice splits into its game part and its PLEX part, hatched in its own colour (the accounts'
+// cost, apart from the game: it read as three quarters of the expenses being one pilot's spending)
+type PilotRow = (typeof pilotRows)[number];
+const pilotSlices = (value: (c: PilotRow) => number, plex: (c: PilotRow) => number) =>
+  pilotRows.length > 7
+    ? fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? value(c) : 0 })), m.otherPilots)
+    : pilotRows.flatMap((c, i) =>
+        c.lastSyncAt
+          ? [
+              { label: c.name, value: value(c) - plex(c), color: pilotColor(i) },
+              { label: `${c.name} · PLEX`, value: plex(c), color: pilotColor(i), hatch: true },
+            ]
+          : [],
+      );
+const pilotIncomeSlices = pilotSlices((c) => c.income, (c) => c.plexIncome);
+const pilotExpensesSlices = pilotSlices((c) => c.expenses, (c) => c.plexExpenses);
+const plexIncomeAll = pilotRows.reduce((n, c) => n + c.plexIncome, 0);
+const plexExpensesAll = pilotRows.reduce((n, c) => n + c.plexExpenses, 0);
 // Columns that sort the table (and the cards on mobile): the data-* key of each row and its label
 const sortCols = [
   { key: 'name', label: m.pilot, cls: '' },
@@ -421,6 +434,15 @@ const worthNote =
   pilots={summary?.characters.length}
   pilotIssues={(pilotList ?? []).filter((p) => hasIssue(p, pilotStates.get(p.id)!)).length}
 >
+  {/* 28 Tabs from the top to the chart: jumps to each section, right after «Saltar al contenido» */}
+  {dashboard && summary && (
+    <Fragment slot="skip">
+      {!pilotEmpty && <a class="skip-link" href="#flujo">{m.skipToChart}</a>}
+      {!pilotEmpty && <a class="skip-link" href="#por-actividad">{m.skipToActivity}</a>}
+      {!pilotEmpty && losses && <a class="skip-link" href="#perdidas">{m.skipToLosses}</a>}
+      <a class="skip-link" href="#pilotos">{m.skipToPilots}</a>
+    </Fragment>
+  )}
     {dashboard && (
     <nav class="main-nav shell" aria-label={m.period} slot="nav">
       <div class="nav-tabs">
@@ -687,12 +709,6 @@ const worthNote =
                                     ]
                                       .filter(Boolean)
                                       .join(' · ')}
-                                    {!selected && (
-                                      <>
-                                        {' · '}
-                                        <a class="inline-action" href="/indicadores">{m.accountsOmegaLink}</a>
-                                      </>
-                                    )}
                                   </span>
                                 </th>
                                 <td class="op">{accountsNet < 0 ? '+' : '−'}</td>
@@ -836,7 +852,7 @@ const worthNote =
                               </li>
                             ))}
                           </ul>
-                          <p class="acts-note">{m.actsNote}</p>
+                          {cardActivities.some((a) => a.activity === 'trading') && <p class="acts-note">{m.actsNote}</p>}
                           <a class="acts-link" href="#por-actividad">
                             {m.activityDetailLink}
                             <i class="chev" aria-hidden="true" />
@@ -846,59 +862,62 @@ const worthNote =
                     }
                   </div>
                   <div class="hero-foot">
-                    {losses && losses.totals.count > 0 && (
-                      /* What the lost ships cost, full width (not a sixth activity): the firm part
-                         with its sign, how much of it is already in the net (PvP) and the estimate in gray */
-                      <p class="foot-losses">
-                        <span>{m.actsLosses}</span>
-                        {lossesOnlyEstimate ? (
-                          /* Nothing firm yet (insurance in, replacement still to buy): the figure is the estimate, in gray */
-                          <span class="foot-losses-value estimate" title={fullNet(lossesHead)}>
-                            {approx(fmt(lossesHead, { sign: true }))}
-                            <span class="sr-only"> ({m.lossEstimate})</span>
-                          </span>
-                        ) : (
-                          /* Never green: insurance that covered more than the replacement isn't a gain from losing ships */
-                          <span class:list={['foot-losses-value', sign(Math.min(lossesHead, 0))]} title={fullNet(lossesHead)}>
-                            {fmt(lossesHead, { sign: true })}
-                          </span>
+                    {/* One row at the card's foot: lost ships and (wallets only) the Omega line, with the inventory toggle
+                        always here, in both states (it used to jump ~350 px up to the net-worth card when pressed) */}
+                    <div class="hero-tools">
+                      <div class="hero-tools-text">
+                        {losses && losses.totals.count > 0 && (
+                          /* What the lost ships cost, full width (not a sixth activity): the firm part
+                             with its sign, how much of it is already in the net (PvP) and the estimate in gray */
+                          <p class="foot-losses">
+                            <span>{m.actsLosses}</span>
+                            {lossesOnlyEstimate ? (
+                              /* Nothing firm yet (insurance in, replacement still to buy): the figure is the estimate, in gray */
+                              <span class="foot-losses-value estimate" title={fullNet(lossesHead)}>
+                                {approx(fmt(lossesHead, { sign: true }))}
+                                <span class="sr-only"> ({m.lossEstimate})</span>
+                              </span>
+                            ) : (
+                              /* Never green: insurance that covered more than the replacement isn't a gain from losing ships */
+                              <span class:list={['foot-losses-value', sign(Math.min(lossesHead, 0))]} title={fullNet(lossesHead)}>
+                                {fmt(lossesHead, { sign: true })}
+                              </span>
+                            )}
+                            <a class="inline-action" href="#perdidas">{nbsp(m.actsLossesLink)}</a>
+                          </p>
                         )}
-                        <a class="inline-action" href="#perdidas">{nbsp(m.actsLossesLink)}</a>
-                      </p>
-                    )}
-                    {internalNote && <span class="sub at-end">{internalNote}</span>}
-                    {!withInv && (
-                      /* Wallets only: no net-worth card (it repeated the active chip's balance 200 px below it); its Omega
-                         line, its coverage note and the inventory toggle live here, at the card's foot */
-                      <div class="hero-tools">
-                        <div class="hero-tools-text">
-                          {omega && omega.missing !== null && (
-                            <p class="omega-line">
-                              {omega.missing > 0 ? m.omegaLine(fmt(omega.missing)) : m.omegaLineCovered}
-                              {' · '}
-                              <a class="inline-action" href="/indicadores">{m.indicators}</a>
-                            </p>
-                          )}
-                          {!selected && pilotList && (
-                            <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} walletOnly={true} />
-                          )}
-                          {worthNote && (
-                            <p class="worth-note">
-                              <Icon name="alert" class="stale-icon" />
-                              {worthNote}
-                            </p>
-                          )}
-                        </div>
-                        <form class="inv-toggle" method="get" action="/inv">
-                          <fieldset>
-                            <legend class="sr-only">{m.invToggle}</legend>
-                            <input type="hidden" name="back" value={invBack} />
-                            <button type="submit" name="to" value="0" aria-pressed="true">{m.invWallets}</button>
-                            <button type="submit" name="to" value="1" aria-pressed="false">{m.invPlus}</button>
-                          </fieldset>
-                        </form>
+                        {/* Moved with your other pilots: only in a pilot's view (in the consolidated view it cancels out) */}
+                        {selected && internalNote && <span class="sub">{internalNote}</span>}
+                        {!withInv && (
+                          <>
+                            {omega && omega.missing !== null && (
+                              <p class="omega-line">
+                                {omega.missing > 0 ? m.omegaLine(fmt(omega.missing)) : m.omegaLineCovered}
+                                {' · '}
+                                <a class="inline-action" href="/indicadores">{m.indicators}</a>
+                              </p>
+                            )}
+                            {!selected && pilotList && (
+                              <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} walletOnly={true} />
+                            )}
+                            {worthNote && (
+                              <p class="worth-note">
+                                <Icon name="alert" class="stale-icon" />
+                                {worthNote}
+                              </p>
+                            )}
+                          </>
+                        )}
                       </div>
-                    )}
+                      <form class="inv-toggle" method="get" action="/inv">
+                        <fieldset>
+                          <legend class="sr-only">{m.invToggle}</legend>
+                          <input type="hidden" name="back" value={invBack} />
+                          <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
+                          <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                        </fieldset>
+                      </form>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -933,15 +952,6 @@ const worthNote =
                       </dd>
                     </div>
                   </dl>
-                  {/* What counts toward net worth: wallets only (what pays for Omega) or + inventory. Remembered (cookie) */}
-                  <form class="inv-toggle" method="get" action="/inv">
-                    <fieldset>
-                      <legend class="sr-only">{m.invToggle}</legend>
-                      <input type="hidden" name="back" value={invBack} />
-                      <button type="submit" name="to" value="0" aria-pressed="false">{m.invWallets}</button>
-                      <button type="submit" name="to" value="1" aria-pressed="true">{m.invPlus}</button>
-                    </fieldset>
-                  </form>
                 </div>
                 {omega && omega.missing !== null && (
                   <p class="omega-line">
@@ -971,7 +981,7 @@ const worthNote =
             )}
 
             {!pilotEmpty && (
-            <section class:list={['panel', { 'chart-stale': selectedBroken }]}>
+            <section id="flujo" class:list={['panel', { 'chart-stale': selectedBroken }]}>
               <div class="panel-heading">
                 <h2>{m.dailyFlow}</h2>
                 <span class="meta">{m.eveTimeUtc}</span>
@@ -994,22 +1004,108 @@ const worthNote =
                   {m.managePilots}
                 </a>
               </div>
-              {(pilotTotals.income > 0 || pilotTotals.expenses > 0) && (
-                <div class="panel-body shares pilot-shares">
-                  {pilotTotals.income > 0 && (
-                    <figure class="caption-only">
-                      <Donut slices={pilotIncomeSlices} label={m.shareIncomePilot} format={fmt} lang={lang} center={fmt(pilotTotals.income)} centerSub="ISK" />
-                      <figcaption>{m.shareIncomePilot}</figcaption>
-                    </figure>
-                  )}
-                  {pilotTotals.expenses > 0 && (
-                    <figure class="caption-only">
-                      <Donut slices={pilotExpensesSlices} label={m.shareExpensesPilot} format={fmt} lang={lang} center={fmt(pilotTotals.expenses)} centerSub="ISK" />
-                      <figcaption>{m.shareExpensesPilot}</figcaption>
-                    </figure>
-                  )}
+              {/* Wide enough, the donuts form a column beside the table they share (they sat over ~900 px of nothing) */}
+              <div class="beside">
+                {(pilotTotals.income > 0 || pilotTotals.expenses > 0) && (
+                  <div class="panel-body shares pilot-shares">
+                    {pilotTotals.income > 0 && (
+                      <figure class="caption-only">
+                        <Donut slices={pilotIncomeSlices} label={m.shareIncomePilot} format={fmt} lang={lang} center={fmt(pilotTotals.income)} centerSub="ISK" />
+                        <figcaption>
+                          {m.shareIncomePilot}
+                          {plexIncomeAll >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(pilotTotals.income - plexIncomeAll))}</span>}
+                        </figcaption>
+                      </figure>
+                    )}
+                    {pilotTotals.expenses > 0 && (
+                      <figure class="caption-only">
+                        <Donut slices={pilotExpensesSlices} label={m.shareExpensesPilot} format={fmt} lang={lang} center={fmt(pilotTotals.expenses)} centerSub="ISK" />
+                        <figcaption>
+                          {m.shareExpensesPilot}
+                          {plexExpensesAll >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(pilotTotals.expenses - plexExpensesAll))}</span>}
+                        </figcaption>
+                      </figure>
+                    )}
+                  </div>
+                )}
+                <div class="scroll pilots-table" role="group" aria-label={m.pilots}>
+                  <table class="pilots">
+                    <thead>
+                      <tr>
+                        {/* Opening balance + (income − expenses + between your pilots = net) = balance; from the period to «now»
+                            (balance, inventory, last sync) after a rule. Each header sorts the table */}
+                        {sortCols.map((col) => (
+                          <th class={col.cls || undefined} aria-sort="none">
+                            <button type="button" class="sort-button" data-sort={col.key} title={m.sortByCol(col.label)}>
+                              {col.label}
+                            </button>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.characters.map((c, i) => (
+                        <tr class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined} {...rowData(c)}>
+                          <td>
+                            <span class="who">
+                              <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
+                              <span class="portrait" data-initials={initials(c.name)} aria-hidden="true">
+                                <img src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`} alt="" width="30" height="30" loading="lazy" onerror="this.remove()" />
+                              </span>
+                              {c.name}
+                            </span>
+                          </td>
+                          <td
+                            class="opening"
+                            title={
+                              c.openingBalance === null || !c.openingAt
+                                ? undefined
+                                : `${full(c.openingBalance)} · ${c.openingPartial ? m.openingPartialTitle(longDate(c.openingAt, lang)) : m.openingTitle(longDate(c.openingAt, lang))}`
+                            }
+                          >
+                            {c.openingBalance === null ? '—' : fmt(c.openingBalance)}
+                          </td>
+                          <td title={c.lastSyncAt ? full(c.income) : undefined}>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
+                          <td title={c.lastSyncAt ? full(out(c.expenses)) : undefined}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</td>
+                          <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
+                            {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
+                          </td>
+                          <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
+                            {c.lastSyncAt ? betweenText(between(c)) : '—'}
+                          </td>
+                          <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
+                            {c.balance === null ? '—' : fmt(c.balance)}
+                          </td>
+                          {withInv && (
+                            <td title={inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory}>
+                              {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
+                            </td>
+                          )}
+                          <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
+                            {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
+                            {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th scope="row">{totalLabel}</th>
+                        <td class="opening" title={full(pilotTotals.opening)}>{fmt(pilotTotals.opening)}</td>
+                        <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
+                        <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
+                        <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
+                          {fmt(pilotTotals.net, { sign: true })}
+                        </td>
+                        <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
+                        <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
+                        {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-              )}
+              </div>
               {/* Mobile: the cards have no sorting header; a select does the same */}
               <div class="cards-sort">
                 <label class="sort-select">
@@ -1021,83 +1117,6 @@ const worthNote =
                     ))}
                   </select>
                 </label>
-              </div>
-              <div class="scroll pilots-table" role="group" aria-label={m.pilots}>
-                <table class="pilots">
-                  <thead>
-                    <tr>
-                      {/* Opening balance + (income − expenses + between your pilots = net) = balance; from the period to «now»
-                          (balance, inventory, last sync) after a rule. Each header sorts the table */}
-                      {sortCols.map((col) => (
-                        <th class={col.cls || undefined} aria-sort="none">
-                          <button type="button" class="sort-button" data-sort={col.key} title={m.sortByCol(col.label)}>
-                            {col.label}
-                          </button>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.characters.map((c, i) => (
-                      <tr class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined} {...rowData(c)}>
-                        <td>
-                          <span class="who">
-                            <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
-                            <span class="portrait" data-initials={initials(c.name)} aria-hidden="true">
-                              <img src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`} alt="" width="30" height="30" loading="lazy" onerror="this.remove()" />
-                            </span>
-                            {c.name}
-                          </span>
-                        </td>
-                        <td
-                          class="opening"
-                          title={
-                            c.openingBalance === null || !c.openingAt
-                              ? undefined
-                              : `${full(c.openingBalance)} · ${c.openingPartial ? m.openingPartialTitle(longDate(c.openingAt, lang)) : m.openingTitle(longDate(c.openingAt, lang))}`
-                          }
-                        >
-                          {c.openingBalance === null ? '—' : fmt(c.openingBalance)}
-                        </td>
-                        <td title={c.lastSyncAt ? full(c.income) : undefined}>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
-                        <td title={c.lastSyncAt ? full(out(c.expenses)) : undefined}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</td>
-                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
-                          {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
-                        </td>
-                        <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
-                          {c.lastSyncAt ? betweenText(between(c)) : '—'}
-                        </td>
-                        <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
-                          {c.balance === null ? '—' : fmt(c.balance)}
-                        </td>
-                        {withInv && (
-                          <td title={inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory}>
-                            {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
-                          </td>
-                        )}
-                        <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
-                          {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
-                          {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <th scope="row">{totalLabel}</th>
-                      <td class="opening" title={full(pilotTotals.opening)}>{fmt(pilotTotals.opening)}</td>
-                      <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
-                      <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
-                      <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
-                        {fmt(pilotTotals.net, { sign: true })}
-                      </td>
-                      <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
-                      <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
-                      {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
               </div>
               {/* Mobile: one card per pilot with name, net and last sync; the 7-column table is hidden */}
               <ul class="pilot-cards">
@@ -1503,9 +1522,7 @@ const worthNote =
     flex-wrap: wrap;
     align-items: baseline;
     gap: 0 8px;
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px solid var(--line);
+    margin: 0;
     font-size: 13px;
     color: var(--text-secondary);
   }
@@ -1522,10 +1539,8 @@ const worthNote =
   .foot-losses-value.estimate {
     color: var(--text-muted);
   }
-  /* Wallets only: the Omega line, the coverage note and the inventory toggle at the card's foot (no net-worth card) */
+  /* The card's foot, one row: lost ships, the Omega line (wallets only) and the inventory toggle at the right */
   .hero-tools {
-    /* Last in the foot: on a phone the internal-transfers note (order 4) would otherwise land after the toggle */
-    order: 5;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
@@ -1536,14 +1551,22 @@ const worthNote =
     border-top: 1px solid var(--line);
   }
   .hero-tools-text {
-    display: grid;
-    gap: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 28px;
     min-width: 0;
   }
   .hero-tools .omega-line,
   .hero-tools .worth-note,
   .hero-tools :global(.coverage-note) {
     margin: 0;
+  }
+  /* The notes that quantify take their own line under the row */
+  .hero-tools .worth-note,
+  .hero-tools :global(.coverage-note),
+  .hero-tools-text .sub {
+    flex-basis: 100%;
   }
   /* Pilot portrait: the initials sit underneath and show when CCP's image doesn't load (before, an empty bordered box) */
   .portrait {
@@ -1572,11 +1595,6 @@ const worthNote =
   .portrait.small {
     width: 28px;
     height: 28px;
-  }
-  .hero-foot > :first-child:not(.foot-losses):not(.sub) {
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px solid var(--line);
   }
   .acts-link {
     display: inline-flex;
@@ -2022,6 +2040,12 @@ const worthNote =
   }
   .pilot-shares {
     border-bottom: 1px solid var(--line);
+  }
+  /* Beside the rows (wide screens, .beside in theme.css): the rule is on the right, not below */
+  @media (min-width: 1100px) {
+    .pilot-shares {
+      border-bottom: 0;
+    }
   }
   .cards-sort {
     display: none;

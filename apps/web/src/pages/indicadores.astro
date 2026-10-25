@@ -4,7 +4,7 @@
 import Base from '../layouts/Base.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import Donut from '../components/Donut.astro';
-import { fold } from '../lib/shares';
+import { fold, pilotColors } from '../lib/shares';
 import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
 import { countIssues, staleAfter } from '../lib/pilot-state';
 import { ago, approx, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
@@ -64,10 +64,13 @@ const fmtSigned = (v: number) => isk(v, { lang, sign: true });
 const fullSigned = (v: number) => iskFull(v, lang, true);
 const otherPilots = m.otherPilots;
 // Ratting ISK by pilot (everything that adds to the pilot: bounties, ESS, escalations and loot)
+// Each pilot in its colour, as in the Summary's donuts (its place among the pilots by balance), not by its rank here
+const colorOf = pilotColors((o?.balances ?? []).map((b) => ({ id: b.characterId, balance: b.balance })));
+// «Otros» in grey: it isn't anyone
 const pilotSlices = fold(
-  (r?.byPilot ?? []).map((p) => ({ label: p.name, value: p.isk, hours: p.hours, iskPerHour: p.iskPerHour })),
+  (r?.byPilot ?? []).map((p) => ({ label: p.name, value: p.isk, hours: p.hours, iskPerHour: p.iskPerHour, color: colorOf(p.characterId) })),
   otherPilots,
-);
+).map((s) => ({ ...s, color: 'color' in s ? s.color : 'var(--line-strong)' }));
 // Bounties by system: the top 6, the rest grouped, and those that don't say the system
 const systemSlices = [
   ...(r?.bySystem ?? []).map((sys) => ({ label: sys.name ?? `#${sys.systemId}`, sec: sys.security, value: sys.isk, hours: sys.hours, iskPerHour: sys.iskPerHour, incursion: incursionSystems.has(sys.systemId) })),
@@ -80,10 +83,10 @@ const pilotName = new Map(pilots.map((p) => [p.id, p.name]));
 const balanceSlices = fold(
   (o?.balances ?? [])
     .filter((b) => (b.balance ?? 0) > 0)
-    .map((b) => ({ label: pilotName.get(b.characterId) ?? `#${b.characterId}`, value: b.balance ?? 0 }))
+    .map((b) => ({ label: pilotName.get(b.characterId) ?? `#${b.characterId}`, value: b.balance ?? 0, color: colorOf(b.characterId) }))
     .sort((a, b) => b.value - a.value),
   otherPilots,
-);
+).map((s) => ({ ...s, color: 'color' in s ? s.color : 'var(--line-strong)' }));
 const balanceTotal = balanceSlices.reduce((n, b) => n + b.value, 0);
 // Loyalty points: LP by corporation (largest first; from the seventh on, «Otras N corporaciones»), valued at the
 // best exchange of each store (estimate, grey); EverMarks (Paragon) apart, they can't become ISK
@@ -284,10 +287,10 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                         </tr>
                       </thead>
                       <tbody>
-                        {pilotSlices.map((p, i) => (
+                        {pilotSlices.map((p) => (
                           <tr>
                             <th scope="row">
-                              <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                              <i class="swatch" style={`background: ${p.color}`} aria-hidden="true" />
                               {p.label}
                             </th>
                             <td>{'hours' in p && typeof p.hours === 'number' ? hours(p.hours) : '—'}</td>
@@ -620,10 +623,10 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       </tr>
                     </thead>
                     <tbody>
-                      {balanceSlices.map((b, i) => (
+                      {balanceSlices.map((b) => (
                         <tr>
                           <th scope="row">
-                            <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                            <i class="swatch" style={`background: ${b.color}`} aria-hidden="true" />
                             {b.label}
                           </th>
                           <td title={full(b.value)}>{fmt(b.value)}</td>

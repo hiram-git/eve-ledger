@@ -267,7 +267,14 @@ export async function getSummary(days: number, characterId?: number) {
   }
 
   const byCharacter = await db
-    .select({ characterId: walletJournal.characterId, income, expenses })
+    .select({
+      characterId: walletJournal.characterId,
+      income,
+      expenses,
+      // The PLEX part of each one's income and expenses (the accounts' cost, apart from the game): hatched in the donuts
+      plexIncome: sql<number>`coalesce(sum(case when ${activity} = 'accounts' and ${walletJournal.amount} > 0 then ${walletJournal.amount} end), 0)`,
+      plexExpenses: sql<number>`coalesce(sum(case when ${activity} = 'accounts' and ${walletJournal.amount} < 0 then -${walletJournal.amount} end), 0)`,
+    })
     .from(walletJournal)
     .where(allPilots)
     .groupBy(walletJournal.characterId);
@@ -399,6 +406,8 @@ export async function getSummary(days: number, characterId?: number) {
         expenses,
         internalReceived,
         internalSent,
+        plexIncome: agg?.plexIncome ?? 0,
+        plexExpenses: agg?.plexExpenses ?? 0,
         // A pilot's net is what was earned in game (user's decision): the sum of the pilots is the consolidated total.
         // What changed its wallet also adds what was moved with your other pilots (opening balance + walletChange = balance)
         net: income - expenses,

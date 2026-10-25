@@ -65,7 +65,7 @@ Use them as CSS variables with these names.
 | `--expenses` | `#e8604c` | Expenses |
 | `--inventory` | `#9a7cf0` | Assets |
 | `--balance` | `#6b8799` | Balance, neutral next to assets |
-| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Categorical palette for breakdowns (donuts and their legend table, the parts of a fit's cost): fixed order, slice i always gets `--cat-((i mod 7) + 1)` |
+| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Categorical palette for pilots (donuts and their legend table; in Doctrines, the parts of a fit's cost): each pilot its fixed `--cat-N` by its place among the pilots by balance |
 
 Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also for colour-vision-deficiency separation). Do not reuse them for buttons, borders or interface text, and do not use the interface accents as series. Translucent tints of a token (a border, a hover fill) are derived with `color-mix(in srgb, var(--token) N%, transparent)`, never a copied hex.
 
@@ -136,7 +136,7 @@ Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also 
 - The axis uses one unit and the same decimals (`0 · 500 M · 1,0 B`); labels are skipped depending on the available width.
 - Days with no history are hatched with the label "No history" (days with no sync likewise, labelled "No sync"). A day with no transactions leaves a short mark on the axis, distinct from the hatching.
 - The part of a bar that is not gameplay (PLEX / accounts) is hatched, with a legend; in a donut its slice is grey and hatched, with "X without PLEX" under it. Hatching always means "accounts, not gameplay".
-- An entity that crosses panels (a pilot) keeps the same colour in every donut: the one of its place in the pilot list, not its rank in each breakdown. What doesn't cross panels (ships) uses one grey tone that gets lighter; "Others" uses the strong line colour.
+- The categorical palette belongs to pilots alone, the one entity that crosses panels: each pilot keeps the same colour in every donut on every page (its place among the pilots sorted by balance, not its rank in each breakdown). Activities use neutral tones by their fixed order (so PvE isn't mistaken for the income blue); ships, one grey tone that gets lighter; "Others", the strong line colour. Hatching marks PLEX and sits on its owner's colour (grey for activities, the pilot's in its donuts, red in the chart).
 - Accessibility: the chart is a list (`role="list"` and `listitem`) with a single Tab stop (← → Home End), an `aria-label` per day, a tooltip with abbreviated figures and a full table under "View as table".
 
 ## 9. Motion

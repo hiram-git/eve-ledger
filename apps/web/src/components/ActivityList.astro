@@ -1,6 +1,6 @@
 ---
-// Breakdown by activity (PvE, PvP, trading as margin, other). The at-a-glance view with each one's net lives in
-// the Neto card: here only what lies behind it, by ESI entry type, without repeating bars or nets.
+// Breakdown by activity (PvE, PvP, trading, logistics, other, PLEX): gross income and expenses, each one's net (the
+// figure the Net card links from) and, unfolded, what lies behind it by ESI entry type.
 import { ACTIVITIES, type Activity, type Summary } from '../lib/api';
 import Donut from './Donut.astro';
 import { isk, iskFull, refTypeLabel } from '../lib/format';
@@ -23,9 +23,12 @@ const rows = activities;
 const sign = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 // The color follows the activity's position in the fixed order, not in the incoming list (the API omits
 // activities with no entries: without this, Trading took PvP's color for a pilot who did no PvP)
-// PLEX / accounts is kept apart from the game result: grey and hatched, as in the daily chart (it was the purple slot
-// of the palette, next to Inventory's purple)
-const color = (a: Activity) => (a === 'accounts' ? 'var(--text-muted)' : `var(--cat-${ACTIVITIES.indexOf(a) + 1})`);
+// Activities in neutral tones, lighter to darker in the fixed order: the categorical palette belongs to the pilots, the
+// one entity that crosses panels (PvE in blue sat next to the chart's income blue and was also a pilot's colour).
+// PLEX / accounts, kept apart from the game result, is hatched, as in the daily chart
+const TONES = [90, 76, 62, 50, 40];
+const color = (a: Activity) =>
+  a === 'accounts' ? 'var(--text-muted)' : `color-mix(in srgb, var(--text) ${TONES[ACTIVITIES.indexOf(a)]}%, var(--panel))`;
 const swatch = (a: Activity) =>
   a === 'accounts' ? `background: repeating-linear-gradient(135deg, var(--panel) 0 2px, transparent 2px 5px), ${color(a)}` : `background: ${color(a)}`;
 // Donuts: where income comes from and where expenses go (gross), by activity
@@ -51,89 +54,100 @@ const plexExpenses = byKey.get('accounts')?.expenses ?? 0;
       <p class="empty panel-body">{m.noData}</p>
     ) : (
       <>
-        {(totalIncome > 0 || totalExpenses > 0) && (
-          <div class="panel-body shares">
-            {totalIncome > 0 && (
-              <figure class="caption-only">
-                <Donut slices={incomeSlices} label={m.shareIncomeActivity} format={fmt} lang={lang} center={fmt(totalIncome)} centerSub="ISK" />
-                <figcaption>
-                  {m.shareIncomeActivity}
-                  {plexIncome >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(totalIncome - plexIncome))}</span>}
-                </figcaption>
-              </figure>
-            )}
-            {totalExpenses > 0 && (
-              <figure class="caption-only">
-                <Donut slices={expensesSlices} label={m.shareExpensesActivity} format={fmt} lang={lang} center={fmt(totalExpenses)} centerSub="ISK" />
-                <figcaption>
-                  {m.shareExpensesActivity}
-                  {plexExpenses >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(totalExpenses - plexExpenses))}</span>}
-                </figcaption>
-              </figure>
-            )}
+        <div class="beside">
+          {/* With a single activity a donut says nothing (a full ring): the rows are enough */}
+          {rows.length > 1 && (totalIncome > 0 || totalExpenses > 0) && (
+            <div class="panel-body shares">
+              {totalIncome > 0 && (
+                <figure class="caption-only">
+                  <Donut slices={incomeSlices} label={m.shareIncomeActivity} format={fmt} lang={lang} center={fmt(totalIncome)} centerSub="ISK" />
+                  <figcaption>
+                    {m.shareIncomeActivity}
+                    {plexIncome >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(totalIncome - plexIncome))}</span>}
+                  </figcaption>
+                </figure>
+              )}
+              {totalExpenses > 0 && (
+                <figure class="caption-only">
+                  <Donut slices={expensesSlices} label={m.shareExpensesActivity} format={fmt} lang={lang} center={fmt(totalExpenses)} centerSub="ISK" />
+                  <figcaption>
+                    {m.shareExpensesActivity}
+                    {plexExpenses >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(totalExpenses - plexExpenses))}</span>}
+                  </figcaption>
+                </figure>
+              )}
+            </div>
+          )}
+          <div class="acts-rows">
+            {/* Column header of the list (the rows are <details>, not a table) */}
+            <div class="cols" aria-hidden="true">
+              <span />
+              <span>{m.income}</span>
+              <span>{m.expenses}</span>
+              <span>{m.net}</span>
+            </div>
+            <ul>
+              {rows.map((a) => (
+                <li>
+                  <details>
+                    <summary>
+                      <span class="name">
+                        <i class="swatch" style={swatch(a.activity)} aria-hidden="true" />
+                        {m.activityName[a.activity]}
+                      </span>
+                      <span class="hint">{m.activityHint[a.activity]}</span>
+                      <span class="cell inc" title={`${m.income} ${full(a.income)}`}>
+                        <span class="sr-only">{m.income} </span>
+                        <span class="amount">{a.income ? fmt(a.income) : '—'}</span>
+                        {a.income > 0 && (
+                          <span class="share">
+                            <span class="sr-only">{m.shareOfIncome(shareOf(a.income, totalIncome, lang))}</span>
+                            <span aria-hidden="true">{shareOf(a.income, totalIncome, lang)}</span>
+                          </span>
+                        )}
+                      </span>
+                      <span class="cell exp" title={`${m.expenses} ${full(out(a.expenses))}`}>
+                        <span class="sr-only">{m.expenses} </span>
+                        <span class="amount">{a.expenses ? fmt(out(a.expenses)) : '—'}</span>
+                        {a.expenses > 0 && (
+                          <span class="share">
+                            <span class="sr-only">{m.shareOfExpenses(shareOf(a.expenses, totalExpenses, lang))}</span>
+                            <span aria-hidden="true">{shareOf(a.expenses, totalExpenses, lang)}</span>
+                          </span>
+                        )}
+                      </span>
+                      {/* The net the Net card shows for this activity: the panel is its detail, so it carries it */}
+                      <span class:list={['cell', 'net', sign(a.net)]} title={`${m.net} ${iskFull(a.net, lang, true)}`}>
+                        <span class="sr-only">{m.net} </span>
+                        <span class="amount">{fmt(a.net, { sign: true })}</span>
+                      </span>
+                    </summary>
+                    <table aria-label={m.activityDetail(m.activityName[a.activity])}>
+                      <thead>
+                        <tr>
+                          <th>{m.entryType}</th>
+                          <th>{m.income}</th>
+                          <th>{m.expenses}</th>
+                          <th>{m.net}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {a.refTypes.map((r) => (
+                          <tr>
+                            <td title={m.entries(r.count)}>{refTypeLabel(r.refType, lang)}</td>
+                            <td title={full(r.income)}>{r.income ? fmt(r.income) : '—'}</td>
+                            <td title={full(out(r.expenses))}>{r.expenses ? fmt(out(r.expenses)) : '—'}</td>
+                            <td class:list={[sign(r.net)]} title={`${m.income} ${full(r.income)} · ${m.expenses} ${full(out(r.expenses))}`}>{fmt(r.net, { sign: true })}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
+                </li>
+              ))}
+            </ul>
           </div>
-        )}
-        {/* Column header of the list (the rows are <details>, not a table) */}
-        <div class="cols" aria-hidden="true">
-          <span />
-          <span>{m.income}</span>
-          <span>{m.expenses}</span>
         </div>
-        <ul>
-          {rows.map((a) => (
-            <li>
-              <details>
-                <summary>
-                  <span class="name">
-                    <i class="swatch" style={swatch(a.activity)} aria-hidden="true" />
-                    {m.activityName[a.activity]}
-                  </span>
-                  <span class="hint">{m.activityHint[a.activity]}</span>
-                  <span class="cell inc" title={`${m.income} ${full(a.income)}`}>
-                    <span class="sr-only">{m.income} </span>
-                    <span class="amount">{a.income ? fmt(a.income) : '—'}</span>
-                    {a.income > 0 && (
-                      <span class="share">
-                        <span class="sr-only">{m.shareOfIncome(shareOf(a.income, totalIncome, lang))}</span>
-                        <span aria-hidden="true">{shareOf(a.income, totalIncome, lang)}</span>
-                      </span>
-                    )}
-                  </span>
-                  <span class="cell exp" title={`${m.expenses} ${full(out(a.expenses))}`}>
-                    <span class="sr-only">{m.expenses} </span>
-                    <span class="amount">{a.expenses ? fmt(out(a.expenses)) : '—'}</span>
-                    {a.expenses > 0 && (
-                      <span class="share">
-                        <span class="sr-only">{m.shareOfExpenses(shareOf(a.expenses, totalExpenses, lang))}</span>
-                        <span aria-hidden="true">{shareOf(a.expenses, totalExpenses, lang)}</span>
-                      </span>
-                    )}
-                  </span>
-                </summary>
-                <table aria-label={m.activityDetail(m.activityName[a.activity])}>
-                  <thead>
-                    <tr>
-                      <th>{m.entryType}</th>
-                      <th>{m.income}</th>
-                      <th>{m.expenses}</th>
-                      <th>{m.net}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {a.refTypes.map((r) => (
-                      <tr>
-                        <td title={m.entries(r.count)}>{refTypeLabel(r.refType, lang)}</td>
-                        <td title={full(r.income)}>{r.income ? fmt(r.income) : '—'}</td>
-                        <td title={full(out(r.expenses))}>{r.expenses ? fmt(out(r.expenses)) : '—'}</td>
-                        <td class:list={[sign(r.net)]} title={`${m.income} ${full(r.income)} · ${m.expenses} ${full(out(r.expenses))}`}>{fmt(r.net, { sign: true })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </details>
-            </li>
-          ))}
-        </ul>
       </>
     )
   }
@@ -145,6 +159,12 @@ const plexExpenses = byKey.get('accounts')?.expenses ?? 0;
   }
   .shares {
     border-bottom: 1px solid var(--line);
+  }
+  /* Beside the rows (wide screens, .beside in theme.css): the rule is on the right, not below */
+  @media (min-width: 1100px) {
+    .shares {
+      border-bottom: 0;
+    }
   }
   ul {
     list-style: none;
@@ -158,14 +178,14 @@ const plexExpenses = byKey.get('accounts')?.expenses ?? 0;
   .cols,
   summary {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 7.5rem 7.5rem;
+    grid-template-columns: minmax(0, 1fr) 7.5rem 7.5rem 7.5rem;
     align-items: center;
     gap: 2px 20px;
   }
   summary {
     grid-template-areas:
-      'name inc exp'
-      'hint inc exp';
+      'name inc exp net'
+      'hint inc exp net';
   }
   .name {
     grid-area: name;
@@ -178,6 +198,16 @@ const plexExpenses = byKey.get('accounts')?.expenses ?? 0;
   }
   .cell.exp {
     grid-area: exp;
+  }
+  .cell.net {
+    grid-area: net;
+    align-self: start;
+  }
+  .cell.net.pos {
+    color: var(--positive);
+  }
+  .cell.net.neg {
+    color: var(--critical);
   }
   .cols {
     padding: 10px 22px 8px 40px;
@@ -275,13 +305,13 @@ const plexExpenses = byKey.get('accounts')?.expenses ?? 0;
     /* On mobile the hint moves to its own full-width line */
     .cols,
     summary {
-      grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem;
-      gap: 4px 12px;
+      grid-template-columns: minmax(0, 1fr) 4.4rem 4.4rem 4.6rem;
+      gap: 4px 8px;
     }
     summary {
       grid-template-areas:
-        'name inc exp'
-        'hint hint hint';
+        'name inc exp net'
+        'hint hint hint hint';
     }
     .cols {
       padding: 10px 16px 8px 34px;

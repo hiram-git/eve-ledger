@@ -73,6 +73,8 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   </head>
   <body data-reload={backPath} data-last-run={status?.lastRun?.finishedAt ?? ''} data-now={m.now} data-syncing={m.syncing}>
     <a class="skip-link" href="#contenido">{m.skipToContent}</a>
+    {/* More jumps for long pages (the Summary: chart, activities, ships, pilots), also visible only with focus */}
+    <slot name="skip" />
     <header class="utility shell">
       <a class="micro-brand" href="/" aria-label="EVE Ledger">
         <span class="brand-square" aria-hidden="true">E</span>

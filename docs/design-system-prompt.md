@@ -67,7 +67,7 @@ Eres diseñador de producto y front-end. Vas a diseñar para **EVE Ledger** sigu
 | `--expenses` | `#e8604c` | Gastos |
 | `--inventory` | `#9a7cf0` | Inventario |
 | `--balance` | `#6b8799` | Saldo, neutro junto al inventario |
-| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Paleta categórica de los repartos (tortas y su tabla-leyenda, partes del coste de un fit): orden fijo, la porción i siempre lleva `--cat-((i mod 7) + 1)` |
+| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Paleta categórica de los pilotos (tortas y su tabla-leyenda; en Doctrinas, partes del coste de un fit): cada piloto su `--cat-N` fijo por su puesto entre los pilotos por saldo |
 
 Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, también en separación para daltonismo). No los reutilices como colores de botones, bordes o texto de interfaz, y no uses los acentos de interfaz como series. Los tintes translúcidos de un token (borde o relleno al pasar) se derivan con `color-mix(in srgb, var(--token) N%, transparent)`, no con un hex copiado.
 
@@ -138,7 +138,7 @@ Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, 
 - El eje usa una sola unidad y los mismos decimales (`0 · 500 M · 1,0 B`); las etiquetas se omiten según el ancho.
 - Los días sin historial van rayados con la etiqueta «Sin historial» (los días sin sync, igual, con «Sin sync»). Un día sin movimientos deja una marca corta en el eje, distinta del rayado.
 - La parte de una barra que no es juego (PLEX / cuentas) va rayada, con leyenda; en una torta, su porción va gris y rayada, con «X sin PLEX» bajo ella. El rayado significa siempre «cuentas, no juego».
-- Una entidad que cruza paneles (un piloto) lleva el mismo color en todas las tortas: el de su posición en la lista de pilotos, no su puesto en cada reparto. Lo que no cruza (naves) va en un solo tono gris que se aclara; «Otros», en el color de línea fuerte.
+- La paleta categórica es solo de los pilotos, la única entidad que cruza paneles: cada piloto lleva el mismo color en todas las tortas de todas las páginas (su puesto entre los pilotos ordenados por saldo, no su puesto en cada reparto). Las actividades van en tonos neutros por su orden fijo (así PvE no se confunde con el azul de ingresos); las naves, en un solo gris que se aclara; «Otros», en el color de línea fuerte. El rayado marca el PLEX y va sobre el color de su dueño (gris en actividades, el del piloto en sus tortas, rojo en el gráfico).
 - Accesibilidad: el gráfico es una lista (`role="list"` y `listitem`) con una sola parada de Tab (← → Inicio Fin), `aria-label` por día, tooltip con cifras abreviadas y una tabla completa en «Ver como tabla».
 
 ## 9. Movimiento

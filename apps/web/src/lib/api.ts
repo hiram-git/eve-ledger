@@ -50,6 +50,9 @@ export type Summary = {
     internalReceived: number;
     internalSent: number;
     walletChange: number;
+    // The PLEX part of income and expenses (the accounts' cost): hatched in the pilots' donuts
+    plexIncome: number;
+    plexExpenses: number;
   })[];
   // Gross per activity (totals is gross too); the trading net is its margin
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];

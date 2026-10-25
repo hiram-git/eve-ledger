@@ -300,6 +300,13 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
         </div>
       )}
       {tot.count > 0 && (
+        /* The row per ship, folded: headline, breakdown and donuts say how much and where; the rows, why (1040 px of
+           panel on every visit before) */
+        <details class="loss-fold">
+          <summary>
+            {m.lossesShowAll(tot.count)}
+            <i class="chev" aria-hidden="true" />
+          </summary>
         <table class="loss-table" aria-labelledby="losses-title">
           <thead>
             <tr>
@@ -391,6 +398,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
             </tbody>
           )}
         </table>
+        </details>
       )}
       {/* Coverage only (who is left out, losses before the history, premiums, unpriced types): the lesson on what a loss
           costs is gone, the figures and the row texts say it */}
@@ -545,6 +553,35 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
   }
   .shares {
     border-top: 1px solid var(--line);
+  }
+  .loss-fold > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 22px;
+    font-size: 13px;
+    color: var(--cyan);
+    cursor: pointer;
+    list-style: none;
+  }
+  .loss-fold > summary::-webkit-details-marker {
+    display: none;
+  }
+  .loss-fold .chev {
+    width: 7px;
+    height: 7px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg) translateY(-2px);
+  }
+  .loss-fold[open] .chev {
+    transform: rotate(-135deg) translateY(-2px);
+  }
+  @media (max-width: 600px) {
+    .loss-fold > summary {
+      padding: 0 16px;
+    }
   }
   .loss-table {
     width: 100%;

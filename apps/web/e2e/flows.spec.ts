@@ -311,3 +311,20 @@ test('las cifras abreviadas suben de unidad al redondear', async () => {
   expect(isk(9_996_000)).toBe('10,0 M');
   expect(isk(-1_050_000, { sign: true })).toBe('−1,05 M');
 });
+
+test('el detalle por actividad trae el neto de cada fila y el PLEX va aparte en las tortas de pilotos', async ({ page, request }) => {
+  const summary = await (await request.get(`${API_URL}/summary?days=30`)).json();
+  const trading = summary.byActivity.find((a: { activity: string }) => a.activity === 'trading');
+  const aria = summary.characters.find((c: { id: number }) => c.id === PILOTS.aria.id);
+  // The seed: Aria bought PLEX in the period
+  expect(aria.plexExpenses).toBeGreaterThan(0);
+  await page.goto('/?days=30');
+  const row = page.locator('#por-actividad summary', { hasText: 'Trading' });
+  await expect(row.locator('.cell.net')).toHaveAttribute('title', new RegExp(`${trading.net > 0 ? '\\+' : '−'}`));
+  // «X sin PLEX» under both expenses donuts (by activity and by pilot)
+  await expect(page.locator('.no-plex')).toHaveCount(2);
+  // A jump to each section right after «Saltar al contenido»
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(page.locator(':focus')).toHaveText('Saltar al gráfico');
+});
