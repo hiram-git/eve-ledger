@@ -7,7 +7,7 @@ import Donut from '../components/Donut.astro';
 import { fold } from '../lib/shares';
 import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
 import { countIssues, staleAfter } from '../lib/pilot-state';
-import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { ago, approx, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 const lang = getLang(Astro);
@@ -376,7 +376,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       </span>
                     ) : (
                       <span class="answer-value est" title={full(ded.incursion)}>
-                        ~{'\u2009'}{fmt(ded.incursion)}<span class="unit"> ISK</span>
+                        {approx(fmt(ded.incursion))}<span class="unit"> ISK</span>
                       </span>
                     )}
                     {ded.tax > 0 && ded.incursion > 0 && <span class="answer-sub est">{m.dedIncursionSub(fmt(ded.incursion))}</span>}
@@ -424,7 +424,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                               <span class="sec">{sec(x.security)} · {m.dedTicks(qty.format(x.ticks))}</span>
                             </th>
                             <td>−{pct.format(ded.penalty)}</td>
-                            <td title={full(x.lost)}>~{'\u2009'}{fmt(x.lost)}</td>
+                            <td title={full(x.lost)}>{approx(fmt(x.lost))}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -455,7 +455,12 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                   {rep.count > 0 ? (
                     <p class="answer">
                       <span class="answer-label">{m.replAnswerLabel(rep.days)}</span>
-                      {rep.costHours !== null ? (
+                      {rep.cost >= 0 ? (
+                        /* Insurance in and nothing replaced yet: nothing firm cost you (the estimate is in Naves perdidas) */
+                        <span class="answer-value">
+                          {hours(0)}<span class="unit"> {m.replAnswerUnit}</span>
+                        </span>
+                      ) : rep.costHours !== null ? (
                         <span class="answer-value">
                           {hours(rep.costHours)}<span class="unit"> {m.replAnswerUnit}</span>
                         </span>
@@ -465,7 +470,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       {rep.costHours !== null && rep.iskPerHour !== null && (
                         <span class="answer-sub">{m.replSub(fmt(-rep.cost), fmt(rep.iskPerHour))}</span>
                       )}
-                      {rep.costHours === null && <span class="answer-sub">{m.replNoRate}</span>}
+                      {rep.cost < 0 && rep.iskPerHour === null && <span class="answer-sub">{m.replNoRate}</span>}
                     </p>
                   ) : (
                     <p class="eta">{m.replNoLosses(rep.days)}</p>
@@ -654,7 +659,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       <>
                         <span class="answer-label">{m.lpValueLabel}</span>
                         <span class="answer-value est" title={full(lp.value)}>
-                          ~{'\u2009'}{fmt(lp.value)}<span class="unit"> ISK</span>
+                          {approx(fmt(lp.value))}<span class="unit"> ISK</span>
                         </span>
                         <span class="answer-sub">{m.lpSub(qty.format(lp.points), lpWithPoints)}</span>
                       </>
@@ -695,7 +700,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                                 <td title={c && c.change !== null ? lpChangeText(c.change, true) : undefined}>{qty.format(b.value)}</td>
                                 <td title={c ? lpOfferTitle(c) : undefined}>{c && c.iskPerLp !== null ? qty.format(Math.round(c.iskPerLp)) : '—'}</td>
                                 <td class="est" title={c && c.value !== null ? full(c.value) : c ? lpOfferTitle(c) : undefined}>
-                                  {c && c.value !== null ? `~\u2009${fmt(c.value)}` : '—'}
+                                  {c && c.value !== null ? approx(fmt(c.value)) : '—'}
                                 </td>
                               </tr>
                             );

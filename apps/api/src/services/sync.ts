@@ -1,5 +1,5 @@
-import { and, eq, isNull } from 'drizzle-orm';
-import { db } from '../db/client';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { db, rawDb } from '../db/client';
 import { characters, syncLog, walletJournal, walletTransactions } from '../db/schema';
 import { esiGet } from '../lib/esi';
 import { ASSETS_SCOPE, fetchAssets } from './assets';
@@ -144,6 +144,12 @@ const transactionRow = (characterId: number, t: EsiTransaction): typeof walletTr
 });
 
 async function fetchJournal(characterId: number, r: StepResult) {
+  // Only while some stored entry still lacks the tax: otherwise it was thousands of no-op UPDATEs every sync
+  const [untaxed] = await db
+    .select({ id: walletJournal.journalId })
+    .from(walletJournal)
+    .where(and(eq(walletJournal.characterId, characterId), isNull(walletJournal.tax)))
+    .limit(1);
   let totalPages = 1;
   for (let page = 1; page <= totalPages; page++) {
     const { data, headers } = await esiGet<EsiJournalEntry[]>(
@@ -155,13 +161,21 @@ async function fetchJournal(characterId: number, r: StepResult) {
     r.pages = page;
     r.fetched += data.length;
     r.inserted += insertChunked(walletJournal, data.map((e) => journalRow(characterId, e)));
-    fillTax(characterId, data);
+    if (untaxed) fillTax(characterId, data);
   }
 }
 
 // No X-Pages: go backwards with from_id while full pages keep arriving.
-// If a page brings nothing new, everything before it is already stored and we stop
+// If a page brings nothing new, everything before it is already stored and we stop, unless the previous transactions
+// step failed: a page cut short then left a hole behind fully stored newer pages, and stopping would call it complete
 async function fetchTransactions(characterId: number, r: StepResult) {
+  const [previous] = await db
+    .select({ error: syncLog.error })
+    .from(syncLog)
+    .where(and(eq(syncLog.characterId, characterId), eq(syncLog.kind, 'transactions'), isNotNull(syncLog.finishedAt)))
+    .orderBy(desc(syncLog.id))
+    .limit(1);
+  const resume = !!previous?.error;
   let fromId: number | undefined;
   for (let page = 1; page <= TX_MAX_PAGES; page++) {
     const query = fromId ? `?from_id=${fromId}` : '';
@@ -172,7 +186,7 @@ async function fetchTransactions(characterId: number, r: StepResult) {
     const inserted = insertChunked(walletTransactions, data.map((t) => transactionRow(characterId, t)));
     r.inserted += inserted;
 
-    if (data.length < TX_PAGE_SIZE || inserted === 0) break;
+    if (data.length < TX_PAGE_SIZE || (inserted === 0 && !resume)) break;
     const oldest = Math.min(...data.map((t) => t.transaction_id));
     if (fromId !== undefined && oldest >= fromId) break;
     fromId = oldest;
@@ -326,9 +340,24 @@ export function syncAll(): Promise<SyncResult[]> {
     const all = await db.select({ id: characters.id }).from(characters);
     const results: SyncResult[] = [];
     for (const { id } of all) results.push(await syncCharacter(id));
+    pruneSyncLog();
     return results;
   })().finally(() => {
     round = null;
   });
   return round;
+}
+
+// sync_log gets a row per step and pilot every round (~370k a year with 6 pilots, carried by every backup). Older than
+// 90 days goes, except the last row of each pilot and step (its state, the scheduler's pace) and each pilot's first good
+// loyalty sync (where its LP record starts)
+const SYNC_LOG_DAYS = 90;
+export function pruneSyncLog(now = Date.now()) {
+  rawDb()
+    .query(
+      `delete from sync_log where finished_at < ?
+         and id not in (select max(id) from sync_log group by character_id, kind)
+         and id not in (select min(id) from sync_log where kind = 'loyalty' and error is null and finished_at is not null group by character_id)`,
+    )
+    .run(Math.floor(now / 1000) - SYNC_LOG_DAYS * 86_400);
 }

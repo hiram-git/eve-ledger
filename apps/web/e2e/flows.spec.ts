@@ -282,3 +282,32 @@ test('el Resultado de juego del Resumen es el mismo que el de Balances', async (
     expect(books, query).toBe(headline);
   }
 });
+
+test('una pérdida asegurada que aún falta reponer no sale como ganancia', async ({ page, request }) => {
+  const losses = await (await request.get(`${API_URL}/losses?days=30&characterId=${PILOTS.aria.id}`)).json();
+  // The seed: Aria's Rifter, insured half an hour later and not replaced yet
+  expect(losses.totals.insurance).toBeGreaterThan(0);
+  expect(losses.totals.firmCost).toBeGreaterThan(0);
+  expect(losses.totals.toReplace).toBeGreaterThan(0);
+  await page.goto(`/?days=30&pilot=${PILOTS.aria.id}`);
+  // Panel and the Net card's foot: the estimate in grey with «~», not «+400 k» in green
+  const head = page.locator('#perdidas .effect .value');
+  await expect(head).toHaveClass(/estimate/);
+  await expect(head).toContainText('~');
+  await expect(head).not.toContainText('+');
+  const foot = page.locator('.foot-losses-value');
+  await expect(foot).toHaveClass(/estimate/);
+  await expect(page.locator('.foot-losses-value.pos, #perdidas .effect .value.pos')).toHaveCount(0);
+});
+
+test('la web rechaza un Host que no sea de esta máquina (DNS rebinding)', async ({ request }) => {
+  expect((await request.get(`${WEB_URL}/`, { headers: { host: 'evil.example' } })).status()).toBe(403);
+  expect((await request.get(`${WEB_URL}/`)).status()).toBe(200);
+});
+
+test('las cifras abreviadas suben de unidad al redondear', async () => {
+  const { isk } = await import('../src/lib/format');
+  expect(isk(999_960_000)).toBe('1,00 B');
+  expect(isk(9_996_000)).toBe('10,0 M');
+  expect(isk(-1_050_000, { sign: true })).toBe('−1,05 M');
+});

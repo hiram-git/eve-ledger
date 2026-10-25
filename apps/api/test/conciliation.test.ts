@@ -225,3 +225,14 @@ test('el período anterior trae su PLEX y sus naves para comparar el mismo Resul
   // Yesterday's loss belongs to this period, not the previous one
   expect(sum.previous.lossesToReplace).toBe(0);
 });
+
+test('un piloto sin movimientos en el journal pero con wallet concilia con su saldo', async () => {
+  await journal([{ id: 801, char: A, date: yesterday(10), ref: 'bounty_prizes', amount: 500, balance: 500, first: NPC }]);
+  // B hasn't moved ISK in the ~30 days ESI keeps: no journal at all, only its ESI wallet
+  await db.update(s.characters).set({ walletBalance: 100_000_000, walletAt: new Date() }).where(inArray(s.characters.id, [B]));
+  const sum = await expectReconciles();
+  const b = sum.characters.find((c) => c.id === B)!;
+  expect(b.openingBalance).toBe(100_000_000);
+  expect(b.journalBalance).toBe(100_000_000);
+  expect(b.openingPartial).toBe(false);
+});

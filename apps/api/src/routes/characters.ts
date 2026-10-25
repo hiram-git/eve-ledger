@@ -1,9 +1,8 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { desc } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, syncLog } from '../db/schema';
 import { env } from '../lib/env';
-import { esiGet } from '../lib/esi';
 import { OPTIONAL_SCOPES, SCOPES } from '../lib/sso';
 
 // Linked characters with their status: missing permissions and the last sync error (if after the last success)
@@ -48,13 +47,4 @@ export const characterRoutes = new Elysia({ prefix: '/characters' })
     const accept = request.headers.get('accept') ?? '';
     if (accept.includes('text/html')) return redirect(`${env.webUrl}/pilotos`);
     return listCharacters();
-  })
-  // End-to-end check: token refresh + authenticated ESI call
-  .get(
-    '/:id/wallet',
-    async ({ params }) => {
-      const { data } = await esiGet<number>(`/characters/${params.id}/wallet`, params.id);
-      return { characterId: params.id, balance: data };
-    },
-    { params: t.Object({ id: t.Numeric() }) },
-  );
+  });

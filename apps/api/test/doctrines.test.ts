@@ -164,6 +164,12 @@ test('lee un plan de EVEMon comprimido o en XML, con el nivel más alto de cada 
     { skillId: 3329, level: 2 },
   ]);
   expect(() => parseEmp(new TextEncoder().encode('hola'))).toThrow('not_a_plan');
+  // A small gzip that inflates to tens of MB stops at the limit while inflating, and so does a plan with thousands of skills
+  const started = performance.now();
+  expect(() => parseEmp(Bun.gzipSync(new Uint8Array(50_000_000)))).toThrow('too_big');
+  expect(performance.now() - started).toBeLessThan(2000);
+  const many = Array.from({ length: 700 }, (_, i) => `<entry skillID="${100000 + i}" level="1"/>`).join('');
+  expect(() => parseEmp(new TextEncoder().encode(`<plan name="x">${many}</plan>`))).toThrow('too_big');
 });
 
 test('SP por nivel, prerrequisitos en cadena y tiempo de entrenamiento', () => {
@@ -217,7 +223,8 @@ test('importa un fit y un plan, y dice qué piloto vuela qué', async () => {
   await expect(addFit(id, '[Nave Inventada, X]\nDamage Control II')).rejects.toBeInstanceOf(DoctrineError);
   const plan = Bun.gzipSync(
     new TextEncoder().encode(
-      '<plan name="Rifter óptimo"><entry skillID="3329" level="4"/><entry skillID="3327" level="4"/></plan>',
+      // 99999999 doesn't exist (404) and 587 is a ship: neither is stored, or every sync would ask ESI again
+      '<plan name="Rifter óptimo"><entry skillID="3329" level="4"/><entry skillID="3327" level="4"/><entry skillID="99999999" level="1"/><entry skillID="587" level="1"/></plan>',
     ),
   );
   expect(await setPlan(fit.id, plan, 'rifter.emp')).toEqual({ name: 'Rifter óptimo', skills: 2 });

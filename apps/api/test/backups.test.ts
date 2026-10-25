@@ -1,7 +1,7 @@
 // Backups: created with VACUUM INTO, pruned by kind, checked before restoring, and restoring
 // changes the contents of the open database without restarting (also from a backup made by an older version)
 import { afterAll, beforeEach, expect, test } from 'bun:test';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -65,6 +65,27 @@ test('cada tipo se recorta por separado: 10 manuales, la diaria no la borra', as
   const list = backups.listBackups();
   expect(list.filter((b) => b.kind === 'manual')).toHaveLength(10);
   expect(list.map((b) => b.name)).toContain(auto.name);
+});
+
+test('restaurar la copia «restore» más antigua no la borra al guardar lo que había', async () => {
+  await pilot(X, 1);
+  for (let i = 0; i < 5; i++) backups.createBackup('restore');
+  const oldest = backups.listBackups().filter((b) => b.kind === 'restore').at(-1)!;
+  backups.restoreBackup(oldest.name);
+  expect(existsSync(join(backups.BACKUP_DIR, oldest.name))).toBe(true);
+});
+
+test('los temporales de una copia cortada a medias se borran pasada una hora', async () => {
+  await pilot(X, 1);
+  backups.createBackup('manual');
+  const old = join(backups.BACKUP_DIR, 'ledger-20260101-000000-auto.db.tmp');
+  const fresh = join(backups.BACKUP_DIR, 'upload-20260101-000000-1.tmp');
+  writeFileSync(old, 'x');
+  writeFileSync(fresh, 'x');
+  utimesSync(old, new Date(Date.now() - 2 * 3_600_000), new Date(Date.now() - 2 * 3_600_000));
+  backups.createBackup('manual');
+  expect(existsSync(old)).toBe(false);
+  expect(existsSync(fresh)).toBe(true);
 });
 
 test('la diaria se hace una vez y no se repite hasta pasadas 20 h', async () => {

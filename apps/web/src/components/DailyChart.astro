@@ -54,7 +54,8 @@ for (let v = -bottom; v <= top + step / 2; v += step) ticks.push(Math.round(v));
 // Axis labels in a single unit and with the same decimals (before, «50,0 M», «150 M» and «0» were mixed)
 const axisMax = Math.max(top, bottom);
 const [unit, suffix] = axisMax >= 1e9 ? [1e9, ' B'] : axisMax >= 1e6 ? [1e6, ' M'] : axisMax >= 1e3 ? [1e3, ' k'] : [1, ''];
-const axisDigits = Number.isInteger(step / unit) ? 0 : 1;
+// 2 decimals when the step needs them (0,25 B steps used to print «0,3 · 0,5 · 0,8 B» on lines at 0,25 / 0,75)
+const axisDigits = Number.isInteger(step / unit) ? 0 : Number.isInteger(Math.round((step / unit) * 1e6) / 1e5) ? 1 : 2;
 const axisNum = new Intl.NumberFormat(lang, { minimumFractionDigits: axisDigits, maximumFractionDigits: axisDigits });
 const axisLabel = (v: number) => (v === 0 ? '0' : `${v < 0 ? '−' : ''}${axisNum.format(Math.abs(v) / unit)}${suffix}`);
 
@@ -187,7 +188,7 @@ const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.l
 
 <details class="table-view">
   <summary>{m.asTable}</summary>
-  <div class="scroll" role="group" aria-label={m.dailyFlow}>
+  <div class="scroll" role="group" aria-label={m.dailyFlow} tabindex="0">
     <table>
       <caption class="sr-only">{m.dailyFlow}</caption>
       <thead>

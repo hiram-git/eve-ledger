@@ -65,13 +65,19 @@ export function backupPath(name: string): string {
   return join(BACKUP_DIR, name);
 }
 
-function prune(kind: BackupKind) {
-  for (const old of listBackups().filter((b) => b.kind === kind).slice(KEEP[kind])) {
+// `except`: the backup about to be restored (restoring the oldest "restore" one pruned it before it was read)
+function prune(kind: BackupKind, except?: string) {
+  for (const old of listBackups().filter((b) => b.kind === kind && join(BACKUP_DIR, b.name) !== except).slice(KEEP[kind])) {
     rmSync(join(BACKUP_DIR, old.name), { force: true });
+  }
+  // Leftovers of a backup or upload cut short (the app killed halfway): an hour old, nothing is still writing them
+  for (const f of readdirSync(BACKUP_DIR)) {
+    const path = join(BACKUP_DIR, f);
+    if (f.endsWith('.tmp') && Date.now() - statSync(path).mtimeMs > 3_600_000) rmSync(path, { force: true });
   }
 }
 
-export function createBackup(kind: BackupKind): Backup {
+export function createBackup(kind: BackupKind, except?: string): Backup {
   mkdirSync(BACKUP_DIR, { recursive: true });
   // Two backups in the same second (a manual one right after the daily one): the name carries the type, but if that
   // matches too, wait for the next second in the name
@@ -86,7 +92,7 @@ export function createBackup(kind: BackupKind): Backup {
   rmSync(tmp, { force: true });
   rawDb().query('VACUUM INTO ?').run(tmp);
   renameSync(tmp, join(BACKUP_DIR, name));
-  prune(kind);
+  prune(kind, except);
   console.log(`[backup] ${name}`);
   return parse(name)!;
 }
@@ -178,7 +184,7 @@ export function restoreFromFile(file: string): { info: BackupInfo; safety: Backu
   // Restoring is synchronous from start to end: no sync can start halfway; only one already running blocks it
   if (syncBusy()) throw new BackupError('busy');
   const info = inspectBackup(file);
-  const safety = hasData() ? createBackup('restore') : null;
+  const safety = hasData() ? createBackup('restore', file) : null;
   replaceDatabase(file);
   console.log(`[backup] restaurada (${info.pilots} pilotos, ${info.entries} movimientos)`);
   return { info, safety };

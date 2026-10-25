@@ -130,8 +130,13 @@ fn save_config(app: AppHandle, config: Config) -> Result<Vec<&'static str>, Stri
 
 #[tauri::command]
 fn retry(app: AppHandle) {
-    if let Some(cfg) = load_config(&app) {
-        launch(&app, cfg);
+    relaunch(&app);
+}
+
+/// Starts the API and the web again with the saved configuration (also after an update that failed to install)
+pub(crate) fn relaunch(app: &AppHandle) {
+    if let Some(cfg) = load_config(app) {
+        launch(app, cfg);
     }
 }
 

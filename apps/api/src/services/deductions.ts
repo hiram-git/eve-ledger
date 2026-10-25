@@ -1,9 +1,10 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/client';
-import { esiChecks, incursionSystems, names, systems, walletJournal } from '../db/schema';
+import { esiChecks, incursionSystems, names, walletJournal } from '../db/schema';
 import { BOUNTY_REFS, ESS_REF, isNpcCorp } from '../lib/activities';
 import { esiGet } from '../lib/esi';
 import { periodFrom } from '../lib/period';
+import { systemInfo } from './geo';
 
 // Deductions (user's decision): what you earn in PvE that never reaches the wallet.
 // - Corporation tax: exact. ESI gives it on every entry (`tax`, `tax_receiver_id`) and `amount` already comes
@@ -129,18 +130,13 @@ export async function deductionsIndicator(ratting: Ratting, days = 30) {
     )
     .groupBy(walletJournal.contextId);
   const sysIds = hit.map((h) => h.systemId).filter((id): id is number => id !== null);
-  const sysRows = sysIds.length
-    ? await db.select({ id: systems.id, name: systems.name, security: systems.security }).from(systems).where(inArray(systems.id, sysIds))
-    : [];
-  const sysNames = sysIds.length ? await db.select({ id: names.id, name: names.name }).from(names).where(inArray(names.id, sysIds)) : [];
-  const sysById = new Map(sysRows.map((s) => [s.id, s]));
-  const sysName = new Map(sysNames.map((n) => [n.id, n.name]));
+  const sysById = await systemInfo(sysIds);
   const factor = INCURSION_BOUNTY_PENALTY / (1 - INCURSION_BOUNTY_PENALTY);
   const bySystem = hit
     .filter((h) => h.systemId !== null)
     .map((h) => ({
       systemId: h.systemId as number,
-      name: sysById.get(h.systemId as number)?.name ?? sysName.get(h.systemId as number) ?? null,
+      name: sysById.get(h.systemId as number)?.name ?? null,
       security: sysById.get(h.systemId as number)?.security ?? null,
       ticks: h.ticks,
       paid: h.paid,

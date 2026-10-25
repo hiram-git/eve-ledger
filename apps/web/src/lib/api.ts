@@ -102,6 +102,7 @@ export type SyncStatus = {
   running: boolean;
   nextRunAt: string | null;
   lastRun: { startedAt: string; finishedAt: string; inserted: number; errors: number; characters: number } | null;
+  lastSyncAt: string | null;
 };
 
 export class ApiError extends Error {
@@ -211,6 +212,17 @@ export const gameResult = (summary: Summary, losses?: Losses | null) =>
   (summary.byActivity.find((a) => a.activity === 'accounts')?.net ?? 0) -
   (losses?.totals.unreplaced ?? 0) -
   (losses?.totals.toReplace ?? 0);
+
+// Capsules (and the Genolution one) can't be insured: «sin seguro» only where there could have been insurance
+export const CAPSULES = new Set([670, 33328]);
+
+// Headline of the lost ships (panel, the Net card's foot): the firm cost. Insurance arrives within the hour and the
+// replacement days later: until then the firm part is positive, and it read «te costaron +400 k» in green. While
+// something is still to replace and nothing firm costs yet, the figure is the estimate (firm − to replace), in grey
+export function lossesHeadline(t: Losses['totals']) {
+  const estimate = t.toReplace >= 0.5 && t.firmCost > -0.5;
+  return { value: estimate ? t.cost : t.firmCost, estimate };
+}
 
 export const getLosses = (days: number, characterId?: number) =>
   call<Losses>(`/losses?days=${days}${characterId ? `&characterId=${characterId}` : ''}`);

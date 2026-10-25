@@ -4,7 +4,6 @@
 // statement for the period (income and expenses by activity and entry type, wallet result, adjustments to the
 // game result) with the wallet reconciliation (opening balance + change = current balance)
 import Base from '../layouts/Base.astro';
-import Icon from '../components/Icon.astro';
 import {
   getIndicators,
   gameResult,
@@ -21,7 +20,7 @@ import {
   type SyncStatus,
 } from '../lib/api';
 import { countIssues } from '../lib/pilot-state';
-import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { ago, approx, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { shareOf } from '../lib/shares';
 
@@ -127,7 +126,6 @@ const partialAt = recRows
         <div class="nav-tabs">
           {PERIODS.map((p) => (
             <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'true' : undefined}>
-              <Icon name="clock" />
               {m.days(p)}
             </a>
           ))}
@@ -284,7 +282,7 @@ const partialAt = recRows
                     <tr class="estimate">
                       <th scope="row">{m.bsToReplace}</th>
                       <td class="op" aria-hidden="true" />
-                      <td title={full(toReplace)}>~{fmt(toReplace)}</td>
+                      <td title={full(toReplace)}>{approx(fmt(toReplace))}</td>
                     </tr>
                   )}
                   {(selected || !o) && toReplace === 0 && (
@@ -447,7 +445,7 @@ const partialAt = recRows
                             <span aria-hidden="true">−</span>
                             <span class="sr-only">{m.opMinus}</span>
                           </td>
-                          <td title={full(toReplace)}>~{fmt(toReplace)}</td>
+                          <td title={full(toReplace)}>{approx(fmt(toReplace))}</td>
                           <td class="share" />
                         </tr>
                       )}
@@ -458,7 +456,7 @@ const partialAt = recRows
                           <span class="sr-only">{m.opEquals}</span>
                         </td>
                         <td class:list={[toReplace > 0 ? 'estimate' : sign(result)]} title={fullNet(result)}>
-                          {toReplace > 0 ? `~ ${fmt(result, { sign: true })}` : fmt(result, { sign: true })}
+                          {toReplace > 0 ? approx(fmt(result, { sign: true })) : fmt(result, { sign: true })}
                         </td>
                         <td class="share" />
                       </tr>

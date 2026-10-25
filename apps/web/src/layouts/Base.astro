@@ -31,6 +31,7 @@ for (const k of ['synced', 'syncErrors', 'syncFailed', 'linked', 'error', 'detai
   back.searchParams.delete(k);
 const backPath = back.pathname + back.search;
 
+const lastAt = status?.lastRun?.finishedAt ?? status?.lastSyncAt ?? null;
 const cron = !status
   ? undefined
   : !status.enabled
@@ -47,9 +48,10 @@ const cron = !status
         : {
             cls: '',
             text: m.cronEvery(status.intervalMin) + (status.nextRunAt ? m.cronNext(until(status.nextRunAt, lang)) : ''),
-            // On a phone: how long ago the last round ran (kept live by the script), or the interval while there is none
-            short: status.lastRun ? ago(status.lastRun.finishedAt, lang) : m.cronShort(status.intervalMin),
-            agoAt: status.lastRun?.finishedAt,
+            // On a phone: how long ago the last round ran (kept live by the script) or, after a restart and until the first
+            // round, the last good sync of any pilot; the interval only with neither
+            short: lastAt ? ago(lastAt, lang) : m.cronShort(status.intervalMin),
+            agoAt: lastAt ?? undefined,
           };
 const cronTitle = status?.lastRun
   ? m.cronLast(ago(status.lastRun.finishedAt, lang), status.lastRun.inserted) +
@@ -197,7 +199,8 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   const notice = document.querySelector<HTMLElement>('.update-notice')!;
   notice.querySelector('button')!.addEventListener('click', () => location.replace(document.body.dataset.reload!));
   let fresh = false;
-  const safeToReload = () => scrollY < 80 && !document.querySelector('details[open]');
+  // Doctrines and fits are open folds by default, and their folding is remembered: they don't block a reload
+  const safeToReload = () => scrollY < 80 && !document.querySelector('details[open]:not(.doctrine-fold):not(.fit-fold)');
   setInterval(async () => {
     if (document.hidden) return;
     try {

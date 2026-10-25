@@ -113,6 +113,11 @@ pub fn install(app: &AppHandle, restart: bool) {
     log(app, &format!("instalando la versión {}", update.version));
     if let Err(e) = update.restart_after_install(restart).install(&bytes) {
         log(app, &format!("no se pudo instalar: {e}"));
+        // «Reiniciar ahora» failed (the admin prompt cancelled, no write access): the app keeps running, so do the
+        // services; on exit there's nothing to start again
+        if restart {
+            crate::relaunch(app);
+        }
         return;
     }
     if restart {

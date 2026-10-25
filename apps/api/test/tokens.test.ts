@@ -17,6 +17,7 @@ Bun.env.EVE_CALLBACK_URL ||= 'http://127.0.0.1/auth/callback';
 const valid = new Set<string>();
 let n = 0;
 let verifyFails = false;
+let verifyDelay = 0;
 const calls: string[] = [];
 // Keeps the module's other exports: bun test shares one module registry, and later files import routes that use them
 const realSso = { ...(await import(`${API}/lib/sso.ts`)) };
@@ -31,6 +32,7 @@ mock.module(`${API}/lib/sso.ts`, () => ({
     return { access_token: `at${n}`, refresh_token: next, expires_in: 1199, token_type: 'Bearer' };
   },
   verifyAccessToken: async () => {
+    if (verifyDelay) await Bun.sleep(verifyDelay);
     if (verifyFails) throw new Error('JWKS: sin red');
     return { characterId: 1, name: 'Piloto', ownerHash: 'own', scopes: [] };
   },
@@ -44,7 +46,7 @@ const { eq } = await import('drizzle-orm');
 runMigrations();
 
 async function reset(rt: string) {
-  valid.clear(); valid.add(rt); calls.length = 0; verifyFails = false;
+  valid.clear(); valid.add(rt); calls.length = 0; verifyFails = false; verifyDelay = 0;
   await db.delete(characters);
   await db.insert(characters).values({ id: 1, name: 'Piloto', ownerHash: 'own', scopes: '', authMethod: 'pkce', refreshToken: await encrypt(rt), accessToken: null, tokenExpiresAt: null });
 }
@@ -83,4 +85,17 @@ test('revincular durante la renovación no pisa los tokens nuevos', async () => 
   await db.update(characters).set({ refreshToken: await encrypt('rtNEW'), accessToken: await encrypt('atNEW'), tokenExpiresAt: new Date(Date.now() + 1_000_000) }).where(eq(characters.id, 1));
   expect(await p).toBe('atNEW');
   expect(await storedRefresh()).toBe('rtNEW');
+});
+
+test('revincular mientras se valida el token nuevo no deja guardado el access token viejo', async () => {
+  await reset('rtD');
+  verifyDelay = 60;
+  const p = getAccessToken(1);
+  // After the refresh (30 ms) and during the validation, the login callback stores the relink's tokens
+  await Bun.sleep(45);
+  await db.update(characters).set({ refreshToken: await encrypt('rtNEW2'), accessToken: await encrypt('atNEW2'), tokenExpiresAt: new Date(Date.now() + 1_000_000) }).where(eq(characters.id, 1));
+  await p;
+  const row = (await db.query.characters.findFirst({ where: eq(characters.id, 1) }))!;
+  expect(await decrypt(row.accessToken!)).toBe('atNEW2');
+  expect(await getAccessToken(1)).toBe('atNEW2');
 });

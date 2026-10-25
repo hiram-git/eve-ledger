@@ -137,7 +137,8 @@ Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, 
 - Barras diarias de ingresos y gastos en sus colores de serie, con un punto por día para el neto (verde/rojo).
 - El eje usa una sola unidad y los mismos decimales (`0 · 500 M · 1,0 B`); las etiquetas se omiten según el ancho.
 - Los días sin historial van rayados con la etiqueta «Sin historial» (los días sin sync, igual, con «Sin sync»). Un día sin movimientos deja una marca corta en el eje, distinta del rayado.
-- La parte de una barra que no es juego (PLEX / cuentas) va rayada, con leyenda.
+- La parte de una barra que no es juego (PLEX / cuentas) va rayada, con leyenda; en una torta, su porción va gris y rayada, con «X sin PLEX» bajo ella. El rayado significa siempre «cuentas, no juego».
+- Una entidad que cruza paneles (un piloto) lleva el mismo color en todas las tortas: el de su posición en la lista de pilotos, no su puesto en cada reparto. Lo que no cruza (naves) va en un solo tono gris que se aclara; «Otros», en el color de línea fuerte.
 - Accesibilidad: el gráfico es una lista (`role="list"` y `listitem`) con una sola parada de Tab (← → Inicio Fin), `aria-label` por día, tooltip con cifras abreviadas y una tabla completa en «Ver como tabla».
 
 ## 9. Movimiento

@@ -85,10 +85,13 @@ function fakeEsi() {
   return { calls, fetch };
 }
 
+// Every token works, except in the test that says otherwise
+const ok = async () => true;
+
 test('resuelve el nombre y el sistema con el piloto que guarda algo allí; 404 y 403 quedan apuntados', async () => {
   expect((await pendingStructures()).sort()).toEqual([A, B, C, D].sort());
   const esi = fakeEsi();
-  const r = await resolvePendingStructures(esi.fetch);
+  const r = await resolvePendingStructures(esi.fetch, ok);
   expect(r).toEqual({ resolved: 2, forbidden: 1, missing: 1 });
   // A: first the owner (stores something there), and no need to try anyone else
   expect(esi.calls.filter(([id]) => id === A)).toEqual([[A, OWNER]]);
@@ -106,20 +109,28 @@ test('resuelve el nombre y el sistema con el piloto que guarda algo allí; 404 y
 });
 
 test('un 403 o un 404 no se repiten en el siguiente sync; un 403 de hace más de 7 días, sí', async () => {
-  await resolvePendingStructures(fakeEsi().fetch);
+  await resolvePendingStructures(fakeEsi().fetch, ok);
   const again = fakeEsi();
-  expect(await resolvePendingStructures(again.fetch)).toEqual({ resolved: 0, forbidden: 0, missing: 0 });
+  expect(await resolvePendingStructures(again.fetch, ok)).toEqual({ resolved: 0, forbidden: 0, missing: 0 });
   expect(again.calls).toEqual([]);
 
   await db.update(s.structureLookups).set({ checkedAt: new Date(Date.now() - 8 * 86_400_000) }).where(eq(s.structureLookups.id, C));
   const later = fakeEsi();
-  await resolvePendingStructures(later.fetch);
+  await resolvePendingStructures(later.fetch, ok);
   expect(new Set(later.calls.map(([id]) => id))).toEqual(new Set([C]));
 });
 
 test('sin ningún piloto con el permiso no llama a ESI', async () => {
   await db.update(s.characters).set({ scopes: 'esi-assets.read_assets.v1' }).where(inArray(s.characters.id, PILOTS));
   const esi = fakeEsi();
-  expect(await resolvePendingStructures(esi.fetch)).toEqual({ resolved: 0, forbidden: 0, missing: 0 });
+  expect(await resolvePendingStructures(esi.fetch, ok)).toEqual({ resolved: 0, forbidden: 0, missing: 0 });
   expect(esi.calls).toEqual([]);
+});
+
+test('un piloto con el token muerto no deja sin nombre las citadelas de los demás', async () => {
+  const esi = fakeEsi();
+  // OWNER can't renew its token: it is left out, and D still gets its name through OTHER
+  await resolvePendingStructures(esi.fetch, async (id) => id !== OWNER);
+  expect(esi.calls.some(([, c]) => c === OWNER)).toBe(false);
+  expect((await db.query.names.findFirst({ where: eq(s.names.id, D) }))?.name).toBe('Jita - Keepstar');
 });

@@ -1,9 +1,10 @@
 import { and, eq, gte, inArray, sql, sum } from 'drizzle-orm';
 import { db } from '../db/client';
-import { assets, characters, marketPrices, names, systems, walletJournal } from '../db/schema';
+import { assets, characters, marketPrices, walletJournal } from '../db/schema';
 import { BOUNTY_REFS, ESS_REF, PLEX_TYPE_ID, PVE_EXTRA_KINDS, refKindOf } from '../lib/activities';
 import { env } from '../lib/env';
 import { deductionsIndicator } from './deductions';
+import { systemInfo } from './geo';
 import { loyaltyIndicator } from './loyalty';
 import { shipLosses } from './losses';
 import { DAY_MS, periodFrom } from '../lib/period';
@@ -134,7 +135,8 @@ export async function rattingIndicator(days = 30) {
       const hours = (ticks * TICK_MINUTES) / 60;
       return { characterId: p.id, name: p.name, ticks, hours, isk, iskPerHour: hours ? isk / hours : null };
     })
-    .filter((p) => p.ticks > 0)
+    // Also a pilot with ISK but no bounty ticks (the alt that sells the ratter's loot): it's in the total, so in the slices
+    .filter((p) => p.isk > 0)
     .sort((a, b) => (b.iskPerHour ?? 0) - (a.iskPerHour ?? 0));
 
   // Per system: bounties only (the journal says the system with context_id_type = system_id)
@@ -147,16 +149,11 @@ export async function rattingIndicator(days = 30) {
     bySystemMap.set(r.contextId, s);
   }
   const ids = [...bySystemMap.keys()];
-  const sysRows = ids.length
-    ? await db.select({ id: systems.id, name: systems.name, security: systems.security }).from(systems).where(inArray(systems.id, ids))
-    : [];
-  const nameRows = ids.length ? await db.select({ id: names.id, name: names.name }).from(names).where(inArray(names.id, ids)) : [];
-  const sysById = new Map(sysRows.map((s) => [s.id, s]));
-  const nameById = new Map(nameRows.map((n) => [n.id, n.name]));
+  const sysById = await systemInfo(ids);
   const bySystem = [...bySystemMap.entries()]
     .map(([id, v]) => {
       const hours = (v.ticks * TICK_MINUTES) / 60;
-      return { systemId: id, name: sysById.get(id)?.name ?? nameById.get(id) ?? null, security: sysById.get(id)?.security ?? null, ticks: v.ticks, hours, isk: v.isk, iskPerHour: v.isk / hours };
+      return { systemId: id, name: sysById.get(id)?.name ?? null, security: sysById.get(id)?.security ?? null, ticks: v.ticks, hours, isk: v.isk, iskPerHour: v.isk / hours };
     })
     .sort((a, b) => b.hours - a.hours);
   // For the breakdown: the 6 systems with most hours; the rest, grouped; and bounties without a system (the journal does not say)

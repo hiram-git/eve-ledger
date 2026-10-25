@@ -135,7 +135,8 @@ Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also 
 - Daily income and expense bars in their series colours, with one dot per day for the net (green/red).
 - The axis uses one unit and the same decimals (`0 · 500 M · 1,0 B`); labels are skipped depending on the available width.
 - Days with no history are hatched with the label "No history" (days with no sync likewise, labelled "No sync"). A day with no transactions leaves a short mark on the axis, distinct from the hatching.
-- The part of a bar that is not gameplay (PLEX / accounts) is hatched, with a legend.
+- The part of a bar that is not gameplay (PLEX / accounts) is hatched, with a legend; in a donut its slice is grey and hatched, with "X without PLEX" under it. Hatching always means "accounts, not gameplay".
+- An entity that crosses panels (a pilot) keeps the same colour in every donut: the one of its place in the pilot list, not its rank in each breakdown. What doesn't cross panels (ships) uses one grey tone that gets lighter; "Others" uses the strong line colour.
 - Accessibility: the chart is a list (`role="list"` and `listitem`) with a single Tab stop (← → Home End), an `aria-label` per day, a tooltip with abbreviated figures and a full table under "View as table".
 
 ## 9. Motion

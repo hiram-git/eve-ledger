@@ -20,6 +20,9 @@ class FakeEsiError extends Error {
   }
 }
 let journalDelay = 0;
+// Market transactions of A, newest first, and whether the next page with from_id fails (an ESI 502)
+let trades: number[] = [];
+let failOlderPage = false;
 const day = new Date(Date.now() - 86_400_000).toISOString();
 mock.module(`${API}/lib/esi.ts`, () => ({
   EsiError: FakeEsiError,
@@ -34,6 +37,16 @@ mock.module(`${API}/lib/esi.ts`, () => ({
       return { data, headers };
     }
     if (/\/wallet$/.test(path)) return { data: 3_000_000, headers };
+    if (/wallet\/transactions/.test(path)) {
+      const from = Number(new URL(`http://esi${path}`).searchParams.get('from_id')) || Infinity;
+      if (from !== Infinity && failOlderPage) {
+        failOlderPage = false;
+        throw new FakeEsiError(502);
+      }
+      const page = (id === A ? trades : []).filter((t) => t <= from).slice(0, 2500);
+      const data = page.map((t) => ({ transaction_id: t, date: day, type_id: 34, quantity: 1, unit_price: 5, is_buy: true, location_id: 60003760, client_id: 1000125, journal_ref_id: 1 }));
+      return { data, headers };
+    }
     if (/contracts\/\d+\/items/.test(path)) throw new FakeEsiError(404);
     if (/\/contracts\?page/.test(path)) {
       if (id === B) throw new FakeEsiError(500);
@@ -51,6 +64,7 @@ const s = await import(`${API}/db/schema.ts`);
 runMigrations();
 const { syncCharacter, syncAll } = await import(`${API}/services/sync.ts`);
 const { characterRoutes } = await import(`${API}/routes/characters.ts`);
+const { eq } = await import('drizzle-orm');
 
 const ALL = 'esi-wallet.read_character_wallet.v1 esi-contracts.read_character_contracts.v1 esi-skills.read_skills.v1';
 const linkedAt = new Date(Date.now() - 10 * 86_400_000);
@@ -98,4 +112,50 @@ test('dos rondas a la vez (cron y «Sincronizar») son la misma ronda: nadie sal
   journalDelay = 0;
   expect(results.some((r) => r.error?.includes('Ya hay una sincronización'))).toBe(false);
   expect(journalRows(A).n).toBe(2);
+});
+
+test('el aviso de errores solo cuenta a quien sigue sin un sync bueno después de fallar en la ronda', async () => {
+  const { stillFailing } = await import(`${API}/services/scheduler.ts`);
+  const startedAt = new Date(Date.now() - 60_000);
+  const at = (s: number) => new Date(startedAt.getTime() + s * 1000);
+  // A failed in the round and synced fine 10 s later (the user, from the health line, while the round went on);
+  // B failed and nothing since; C was skipped because a manual sync of it was running, which went fine
+  await db.insert(s.syncLog).values([
+    { characterId: A, kind: 'journal', startedAt: at(1), finishedAt: at(2), error: 'ESI 502' },
+    { characterId: B, kind: 'journal', startedAt: at(3), finishedAt: at(4), error: 'ESI 502' },
+  ]);
+  await db.update(s.characters).set({ lastSyncAt: at(12) }).where(eq(s.characters.id, A));
+  await db.update(s.characters).set({ lastSyncAt: new Date(startedAt.getTime() - 3_600_000) }).where(eq(s.characters.id, B));
+  expect(stillFailing({ startedAt, failed: [A, B] })).toBe(1);
+  expect(stillFailing({ startedAt, failed: [] })).toBe(0);
+});
+
+test('si falla una página de transacciones, el siguiente sync rellena el hueco aunque no haya nada nuevo', async () => {
+  trades = Array.from({ length: 6000 }, (_, i) => 70_006_000 - i);
+  failOlderPage = true;
+  expect((await syncCharacter(A)).transactions?.error).toContain('502');
+  const stored = () => (rawDb().query('select count(*) n from wallet_transactions where character_id = ?').get(A) as { n: number }).n;
+  expect(stored()).toBe(2500);
+  // Nothing new since: the first page is all stored, but the previous step failed, so it keeps going back
+  expect((await syncCharacter(A)).transactions?.error).toBeUndefined();
+  expect(stored()).toBe(6000);
+  trades = [];
+});
+
+test('el registro de syncs se poda a 90 días sin perder el último de cada paso ni el primer sync de lealtad', async () => {
+  const { pruneSyncLog } = await import(`${API}/services/sync.ts`);
+  const old = (d: number) => new Date(Date.now() - d * 86_400_000);
+  const ids = (await db
+    .insert(s.syncLog)
+    .values([
+      { characterId: B, kind: 'loyalty', startedAt: old(200), finishedAt: old(200) }, // first good loyalty sync: stays
+      { characterId: B, kind: 'loyalty', startedAt: old(150), finishedAt: old(150) }, // goes
+      { characterId: B, kind: 'skills', startedAt: old(120), finishedAt: old(120), error: 'x' }, // goes
+      { characterId: B, kind: 'skills', startedAt: old(100), finishedAt: old(100) }, // last of its step: stays
+      { characterId: B, kind: 'loyalty', startedAt: old(10), finishedAt: old(10) }, // recent: stays
+    ])
+    .returning({ id: s.syncLog.id })).map((r) => r.id);
+  pruneSyncLog();
+  const left = (rawDb().query(`select id from sync_log where id in (${ids.join(',')})`).all() as { id: number }[]).map((r) => r.id);
+  expect(left).toEqual([ids[0], ids[3], ids[4]]);
 });

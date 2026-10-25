@@ -1,6 +1,6 @@
 import { and, eq, gte, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '../db/client';
-import { assets, killmails, marketPrices, stationSystems, systems, walletJournal } from '../db/schema';
+import { assets, killmails, marketPrices, names, stationSystems, systems, walletJournal } from '../db/schema';
 import { EsiError, esiGet } from '../lib/esi';
 import { periodFrom } from '../lib/period';
 import { unitPrice } from './inventory';
@@ -157,4 +157,15 @@ export async function getMap(characterId?: number) {
   }
 
   return { nodes: nodes.sort((a, b) => b.inventory - a.inventory), unplaced, pending, todayStart };
+}
+
+// Name and security of each system: from the map cache and, if it isn't there yet, the name from /universe/names
+export async function systemInfo(ids: number[]) {
+  const rows = ids.length
+    ? await db.select({ id: systems.id, name: systems.name, security: systems.security }).from(systems).where(inArray(systems.id, ids))
+    : [];
+  const nameRows = ids.length ? await db.select({ id: names.id, name: names.name }).from(names).where(inArray(names.id, ids)) : [];
+  const byId = new Map(rows.map((s) => [s.id, s]));
+  const nameById = new Map(nameRows.map((n) => [n.id, n.name]));
+  return new Map(ids.map((id) => [id, { name: byId.get(id)?.name ?? nameById.get(id) ?? null, security: byId.get(id)?.security ?? null }]));
 }

@@ -608,6 +608,12 @@ main {
 .shares figure.caption-only figcaption {
   text-align: center;
 }
+/* «1,42 B sin PLEX» under the donut of an activity breakdown with PLEX (its slice is hatched: kept apart) */
+.shares figcaption .no-plex {
+  display: block;
+  color: var(--text-muted);
+  font-family: var(--mono);
+}
 .shares .mini {
   align-self: start;
 }

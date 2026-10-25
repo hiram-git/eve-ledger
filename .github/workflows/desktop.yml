@@ -160,6 +160,11 @@ jobs:
           bun install --frozen-lockfile
           bun run prepare:server
 
+      # The app's own tests (ledger.env, ENC_KEY kept, Windows paths, the auth line): on each system, before building
+      - name: Pruebas de la app de escritorio
+        working-directory: apps/desktop/src-tauri
+        run: cargo test
+
       - name: Configuración del actualizador (clave pública y artefactos firmados)
         if: env.UPDATER == 'true'
         working-directory: apps/desktop

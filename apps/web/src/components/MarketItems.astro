@@ -8,9 +8,9 @@ export type ItemRow = { typeId: number; name: string | null; quantity: number; i
 interface Props {
   title: string;
   items: ItemRow[];
-  iskLabel?: string;
-  priceLabel?: string;
-  empty?: string;
+  iskLabel: string;
+  priceLabel: string;
+  empty: string;
   // Note under the table (how it is valued, e.g.)
   note?: string;
 }
@@ -18,7 +18,7 @@ const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
-const { title, items, iskLabel = m.isk, priceLabel = m.avgPrice, empty = m.noTransactions, note } = Astro.props;
+const { title, items, iskLabel, priceLabel, empty, note } = Astro.props;
 const qty = new Intl.NumberFormat(lang);
 ---
 

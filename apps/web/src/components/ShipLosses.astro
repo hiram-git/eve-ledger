@@ -5,9 +5,9 @@
 // The headline figure is the firm part (sum of the rows); what's still to replace with the window open is an
 // estimate at the average price and goes separately, in grey and with «~»: green/red only for what can no longer change.
 // In a pilot's view these are THEIR ships (whoever pays for them); their wallet goes as a secondary line
-import type { Losses } from '../lib/api';
+import { CAPSULES, lossesHeadline, type Losses } from '../lib/api';
 import Donut from './Donut.astro';
-import { isk, iskFull, remaining, shortDate, shortDateTime } from '../lib/format';
+import { approx, isk, iskFull, remaining, shortDate, shortDateTime } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { fold } from '../lib/shares';
 
@@ -16,8 +16,10 @@ interface Props {
   days: number;
   // Pilot view: their name (the row doesn't repeat who lost it)
   pilotName?: string;
+  // Each pilot's colour in the Pilots donuts and table: theirs here too (it went by rank in each donut)
+  pilotColor: (characterId: number) => string;
 }
-const { losses, days, pilotName } = Astro.props;
+const { losses, days, pilotName, pilotColor } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
@@ -51,8 +53,6 @@ const missingList = (l: Loss, estimate: boolean) => {
     ].filter((p): p is string => !!p),
   );
 };
-// Capsules can't be insured: «sin seguro» only where there could have been insurance
-const CAPSULES = new Set([670, 33328]);
 // The why of each row, in words that don't contradict each other: what was replaced (and with what), what's missing, the courier, the insurance
 const status = (l: Loss) => {
   const who = l.replacedBy?.name ?? '?';
@@ -115,11 +115,10 @@ const parts = [
 ].filter((p) => Math.abs(p.value) >= 0.5);
 const firm = tot.firmCost;
 const pending = tot.toReplace >= 0.5 ? tot.toReplace : 0;
-// All estimated (only losses with the window open and nothing replaced yet): the figure is the estimate, in grey
-const onlyEstimate = parts.length === 0 && pending > 0;
-const headValue = onlyEstimate ? -pending : firm;
+// Nothing firm costs yet (insurance in, replacement still to buy): the figure is the estimate, in grey
+const { value: headValue, estimate: onlyEstimate } = lossesHeadline(tot);
 // Estimated figures: «~» in front (with a thin space: «~−» read as «~~») and «estimado» for the screen reader
-const approx = (v: number) => `~\u2009${fmt(v, { sign: true })}`;
+const approxNet = (v: number) => approx(fmt(v, { sign: true }));
 // Pilot view: where the money went (their wallet, who paid for their ships, what they paid for others')
 const own = losses.ownWallet;
 const ownLine =
@@ -149,26 +148,31 @@ const notes = coverage ? [coverage] : [];
 // headline «Te costaron»: before it read 435 M next to −385 M; a loss the insurance left positive counts as 0).
 // Largest to smallest, 6 + «Otros». By pilot only in the consolidated view
 const costOf = (l: Loss) => Math.max(0, -(l.cost + (l.state === 'pending' ? l.toReplace : 0)));
-const sumBy = (key: (l: Loss) => string) => {
-  const acc = new Map<string, { label: string; value: number; count: number }>();
+type Share = { label: string; value: number; count: number; color?: string };
+const sumBy = (key: (l: Loss) => string, color?: (l: Loss) => string) => {
+  const acc = new Map<string, Share>();
   for (const l of losses.losses) {
     const k = key(l);
-    const cur = acc.get(k) ?? { label: k, value: 0, count: 0 };
+    const cur = acc.get(k) ?? { label: k, value: 0, count: 0, color: color?.(l) };
     cur.value += costOf(l);
     cur.count += 1;
     acc.set(k, cur);
   }
   return [...acc.values()].filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
 };
-const byPilot = pilotName ? [] : sumBy((l) => l.pilot ?? `#${l.characterId}`);
+const byPilot = pilotName ? [] : sumBy((l) => l.pilot ?? `#${l.characterId}`, (l) => pilotColor(l.characterId));
 const byShip = sumBy((l) => l.ship ?? `#${l.shipTypeId}`);
-const foldCount = (items: { label: string; value: number; count: number }[], other: (n: number) => string) => {
+// «Otros» in grey: it isn't anyone
+const foldCount = (items: Share[], other: (n: number) => string) => {
   const folded = fold(items, other);
   const rest = items.slice(folded.length - 1);
-  return folded.map((f) => ('count' in f ? f : { ...f, count: rest.reduce((n, r) => n + r.count, 0) })) as typeof items;
+  return folded.map((f) => ('count' in f ? f : { ...f, count: rest.reduce((n, r) => n + r.count, 0), color: 'var(--line-strong)' })) as Share[];
 };
 const pilotSlices = byPilot.length > 1 ? foldCount(byPilot, m.otherPilots) : [];
-const shipSlices = byShip.length > 1 ? foldCount(byShip, m.otherShips) : [];
+// Ships in one tone, lighter as they get smaller: the palette's colours stay for the pilots, the entity that crosses panels
+const shipSlices = (byShip.length > 1 ? foldCount(byShip, m.otherShips) : []).map((sh, i) =>
+  sh.color ? sh : { ...sh, color: `color-mix(in srgb, var(--text-secondary) ${Math.max(30, 100 - i * 14)}%, transparent)` },
+);
 // View of a pilot who lost nothing but paid for someone else's replacement (the Jita alt): there's a sum too
 const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
 ---
@@ -205,8 +209,8 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
         <div class="effect">
           {/* The answer to «how much did losing them cost me?»: the wallet part plus what didn't come back */}
           <h3 class="label" id="losses-cost">{pilotName ? m.lossesCostPilot(pilotName) : m.lossesCost}</h3>
-          <span class:list={['value', onlyEstimate ? 'estimate' : sign(headValue)]} title={fullNet(headValue)}>
-            {onlyEstimate ? approx(headValue) : fmt(headValue, { sign: true })}
+          <span class:list={['value', onlyEstimate ? 'estimate' : sign(Math.min(headValue, 0))]} title={fullNet(headValue)}>
+            {onlyEstimate ? approxNet(headValue) : fmt(headValue, { sign: true })}
             <small> ISK</small>
             {onlyEstimate && <span class="sr-only"> ({m.lossEstimate})</span>}
           </span>
@@ -252,7 +256,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                   <span aria-hidden="true">−</span>
                   <span class="sr-only">{m.opMinus}</span>
                 </td>
-                <td title={full(pending)}>~{fmt(pending)}</td>
+                <td title={full(pending)}>{approx(fmt(pending))}</td>
               </tr>
             )}
           </tbody>
@@ -281,7 +285,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                     {f.slices.map((p, i) => (
                       <tr>
                         <th scope="row">
-                          <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                          <i class="swatch" style={`background: ${p.color ?? `var(--cat-${(i % 7) + 1})`}`} aria-hidden="true" />
                           {p.label}
                         </th>
                         <td>{p.count}</td>
@@ -319,7 +323,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                       <span>{head.text}</span>
                       <span class="sr-only"> · </span>
                       <span class:list={['event-cost', head.estimate ? 'estimate' : sign(head.cost)]} title={fullNet(head.cost)}>
-                        {head.estimate ? approx(head.cost) : fmt(head.cost, { sign: true })}
+                        {head.estimate ? approxNet(head.cost) : fmt(head.cost, { sign: true })}
                         {head.estimate && <span class="sr-only"> ({m.lossEstimate})</span>}
                       </span>
                     </th>
@@ -360,7 +364,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                       class:list={{ empty: !l.toReplace, estimate: l.state === 'pending' }}
                       title={l.toReplace ? `${m.lossNotBackTitle}: ${full(-l.toReplace)}` : undefined}
                     >
-                      {l.toReplace ? (l.state === 'pending' ? approx(-l.toReplace) : fmt(-l.toReplace)) : '—'}
+                      {l.toReplace ? (l.state === 'pending' ? approxNet(-l.toReplace) : fmt(-l.toReplace)) : '—'}
                       {l.toReplace > 0 && l.state === 'pending' && <span class="sr-only"> ({m.lossEstimate})</span>}
                     </td>
                     {/* What it cost you (Wallet − No volvió): with its sign if firm; in grey with «~» while replacement is pending */}
@@ -369,7 +373,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                       class:list={['total', l.state === 'pending' ? 'estimate' : sign(l.cost)]}
                       title={`${m.lossCostTitle}: ${fullNet(l.cost)}`}
                     >
-                      {l.state === 'pending' ? approx(l.cost) : fmt(l.cost, { sign: true })}
+                      {l.state === 'pending' ? approxNet(l.cost) : fmt(l.cost, { sign: true })}
                       {l.state === 'pending' && <span class="sr-only"> ({m.lossEstimate})</span>}
                     </td>
                   </tr>

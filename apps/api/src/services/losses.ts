@@ -1,11 +1,10 @@
-import { and, asc, eq, gte, inArray, lt, min, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, min, sql } from 'drizzle-orm';
 import { db, rawDb } from '../db/client';
 import {
   characters,
   killmails,
   marketPrices,
   names,
-  systems,
   types,
   walletJournal,
   walletTransactions,
@@ -14,6 +13,7 @@ import {
 import { EsiError, esiGet } from '../lib/esi';
 import { DAY_MS, periodFrom } from '../lib/period';
 import { CONTRACTS_SCOPE, courierContracts } from './contracts';
+import { systemInfo } from './geo';
 
 export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
 
@@ -183,15 +183,7 @@ async function computeLosses(now: Date) {
     : [];
 
   // Systems: name and security from the map cache; if missing, the name from /universe/names
-  const systemIds = [...new Set(rows.map((r) => r.systemId))];
-  const systemRows = systemIds.length
-    ? await db.select({ id: systems.id, name: systems.name, security: systems.security }).from(systems).where(inArray(systems.id, systemIds))
-    : [];
-  const systemNameRows = systemIds.length
-    ? await db.select({ id: names.id, name: names.name }).from(names).where(inArray(names.id, systemIds))
-    : [];
-  const systemById = new Map(systemRows.map((s) => [s.id, s]));
-  const systemName = new Map(systemNameRows.map((s) => [s.id, s.name]));
+  const systemById = await systemInfo([...new Set(rows.map((r) => r.systemId))]);
 
   // ESI average prices for hull and fit
   const typeIds = [...new Set(rows.flatMap((r) => [r.shipTypeId, ...r.items.map((i) => i.typeId)]))];
@@ -243,7 +235,7 @@ async function computeLosses(now: Date) {
             sql`${walletJournal.amount} > 0`,
             inArray(walletJournal.characterId, victims),
             gte(walletJournal.date, firstLoss!),
-            lt(walletJournal.date, new Date(lastLoss!.getTime() + INSURANCE_WINDOW_MS)),
+            lte(walletJournal.date, new Date(lastLoss!.getTime() + INSURANCE_WINDOW_MS)),
           ),
         )
         .orderBy(asc(walletJournal.date))
@@ -449,7 +441,7 @@ async function computeLosses(now: Date) {
       shipTypeId: r.shipTypeId,
       ship: r.ship,
       systemId: r.systemId,
-      system: system?.name ?? systemName.get(r.systemId) ?? null,
+      system: system?.name ?? null,
       security: system?.security ?? null,
       attackers: r.attackers,
       shipValue,

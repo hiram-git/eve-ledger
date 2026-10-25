@@ -49,9 +49,9 @@ function trackLimits(res: Response) {
   if (res.status === 429) pauseFor(headerSeconds(h, 'retry-after') ?? 60, 'rate limit 429');
 }
 
+// Until the pause is over, also if another response made it longer while this call waited
 async function waitIfPaused() {
-  const ms = pausedUntil - Date.now();
-  if (ms > 0) await Bun.sleep(ms);
+  while (pausedUntil > Date.now()) await Bun.sleep(pausedUntil - Date.now());
 }
 
 type EsiResponse<T> = { data: T; headers: Headers };

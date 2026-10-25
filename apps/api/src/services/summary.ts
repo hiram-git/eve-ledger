@@ -376,6 +376,10 @@ export async function getSummary(days: number, characterId?: number) {
     chars.map(async (c) => {
       const last = await lastBalance(c.id);
       const opening = await openingBalance(c.id, from);
+      // A pilot with no journal at all (an alt that moved no ISK in the ~30 days ESI keeps) but with its ESI wallet:
+      // nothing moved, so that balance is its opening and its journal balance (before, both were null and the
+      // reconciliation of the Summary and Balances came short by its whole wallet)
+      const idle = last?.journalBalance == null && opening.balance == null && last?.balance != null;
       const agg = charMap.get(c.id);
       const internalReceived = internalByCharacter.get(c.id)?.received ?? 0;
       const internalSent = internalByCharacter.get(c.id)?.sent ?? 0;
@@ -387,10 +391,10 @@ export async function getSummary(days: number, characterId?: number) {
         lastSyncAt: c.lastSyncAt,
         balance: last?.balance ?? null,
         balanceAt: last?.date ?? null,
-        journalBalance: last?.journalBalance ?? null,
-        openingBalance: opening.balance,
+        journalBalance: idle ? last!.balance : (last?.journalBalance ?? null),
+        openingBalance: idle ? last!.balance : opening.balance,
         openingAt: opening.at,
-        openingPartial: opening.partial,
+        openingPartial: idle ? false : opening.partial,
         income,
         expenses,
         internalReceived,
