@@ -24,9 +24,11 @@ const { title, section, status, pilots, pilotIssues } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
 
-// After syncing, return to the same page (without the parameters of an earlier notice)
+// After syncing, return to the same page (without the parameters of an earlier notice). The automatic reloads
+// go here too (data-reload): reloading as is repeated a restore's or a new fit's notice
 const back = new URL(Astro.url);
-for (const k of ['synced', 'syncErrors', 'syncFailed', 'linked', 'error', 'detail']) back.searchParams.delete(k);
+for (const k of ['synced', 'syncErrors', 'syncFailed', 'linked', 'error', 'detail', 'ok', 'at', 'name', 'pilots', 'entries', 'ignored'])
+  back.searchParams.delete(k);
 const backPath = back.pathname + back.search;
 
 const cron = !status
@@ -67,7 +69,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>{title ? `${title} · EVE Ledger` : 'EVE Ledger'}</title>
   </head>
-  <body data-last-run={status?.lastRun?.finishedAt ?? ''} data-now={m.now} data-syncing={m.syncing}>
+  <body data-reload={backPath} data-last-run={status?.lastRun?.finishedAt ?? ''} data-now={m.now} data-syncing={m.syncing}>
     <a class="skip-link" href="#contenido">{m.skipToContent}</a>
     <header class="utility shell">
       <a class="micro-brand" href="/" aria-label="EVE Ledger">
@@ -193,7 +195,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
   // reload doesn't disrupt reading (scrolled to the top and no details open); otherwise a notice offers it
   const lastRunAt = document.body.dataset.lastRun || null;
   const notice = document.querySelector<HTMLElement>('.update-notice')!;
-  notice.querySelector('button')!.addEventListener('click', () => location.reload());
+  notice.querySelector('button')!.addEventListener('click', () => location.replace(document.body.dataset.reload!));
   let fresh = false;
   const safeToReload = () => scrollY < 80 && !document.querySelector('details[open]');
   setInterval(async () => {
@@ -204,7 +206,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       const s = (await res.json()) as { running: boolean; lastRunAt: string | null };
       if (!s.running && s.lastRunAt && s.lastRunAt !== lastRunAt) fresh = true;
       if (fresh) {
-        if (safeToReload()) location.reload();
+        if (safeToReload()) location.replace(document.body.dataset.reload!);
         else notice.hidden = false;
       }
     } catch {

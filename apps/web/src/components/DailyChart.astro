@@ -40,9 +40,10 @@ function niceStep(range: number, count = 4) {
 const acc = (d: (typeof daily)[number]) => d.accounts ?? 0;
 const maxIn = Math.max(0, ...daily.map((d) => Math.max(d.income - Math.max(acc(d), 0), d.net - acc(d))));
 const maxOut = Math.max(0, ...daily.map((d) => Math.max(d.expenses - Math.max(-acc(d), 0), -(d.net - acc(d)))));
-const step = niceStep(maxIn + maxOut, 8);
+// A period with only PLEX takes its scale from the PLEX, and a side with only PLEX keeps one step to draw it clipped
+const step = niceStep(maxIn + maxOut || Math.max(0, ...daily.map((d) => Math.abs(acc(d)))), 8);
 const top = Math.max(step, Math.ceil(maxIn / step) * step);
-const bottom = Math.ceil(maxOut / step) * step;
+const bottom = Math.max(Math.ceil(maxOut / step) * step, daily.some((d) => d.expenses > 0) ? step : 0);
 const span = top + bottom;
 const pct = (v: number) => (v / span) * 100;
 const zero = pct(bottom); // baseline height from the bottom, in %
@@ -78,7 +79,7 @@ const shownIn = (d: (typeof daily)[number]) => Math.min(d.income, top);
 const shownOut = (d: (typeof daily)[number]) => Math.min(d.expenses, bottom);
 const clippedIn = (d: (typeof daily)[number]) => d.income > top;
 const clippedOut = (d: (typeof daily)[number]) => d.expenses > bottom;
-const plexShare = (shown: number, nonPlex: number) => Math.min(100, Math.max(0, ((shown - nonPlex) / shown) * 100));
+const plexShare = (shown: number, nonPlex: number) => (shown > 0 ? Math.min(100, Math.max(0, ((shown - nonPlex) / shown) * 100)) : 0);
 // Where the clipped bar's label hangs, so it doesn't run off the plot on a phone
 const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.length > 0.8 ? 'end' : '');
 ---
@@ -198,8 +199,9 @@ const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.l
         </tr>
       </thead>
       <tbody>
+        {/* Without the days before the history or after a stuck sync: they aren't zeros */}
         {
-          [...daily].reverse().map((d) => (
+          daily.filter((_, i) => known(i)).reverse().map((d) => (
             <tr>
               <td>{date(d.date)}</td>
               <td>{plain(d.income)}</td>
@@ -293,7 +295,9 @@ const labelSide = (i: number) => (i / daily.length < 0.2 ? 'start' : i / daily.l
       if (!chart.contains(document.activeElement)) hide();
     });
     chart.addEventListener('focusout', (e) => {
-      if (!chart.contains(e.relatedTarget as Node)) hide();
+      if (chart.contains(e.relatedTarget as Node)) return;
+      hide();
+      delete chart.dataset.touch; // Tabbing back in later must show the keyboard hint
     });
   }
 </script>

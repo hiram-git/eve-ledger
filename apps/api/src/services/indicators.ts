@@ -1,26 +1,20 @@
 import { and, eq, gte, inArray, sql, sum } from 'drizzle-orm';
 import { db } from '../db/client';
 import { assets, characters, marketPrices, names, systems, walletJournal } from '../db/schema';
-import { PVE_EXTRA_KINDS, refKindOf } from '../lib/activities';
+import { BOUNTY_REFS, ESS_REF, PLEX_TYPE_ID, PVE_EXTRA_KINDS, refKindOf } from '../lib/activities';
 import { env } from '../lib/env';
 import { deductionsIndicator } from './deductions';
 import { loyaltyIndicator } from './loyalty';
 import { shipLosses } from './losses';
-import { PLEX_TYPE_ID, getQuote } from './quotes';
+import { DAY_MS, periodFrom } from '../lib/period';
+import { getQuote } from './quotes';
 import { activity, dailyNetRate, isInternal, lastBalance } from './summary';
 
-const DAY_MS = 86_400_000;
-// From 00:00 EVE `days - 1` days ago, like the summary
-const periodFrom = (days: number) => {
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return new Date(today - (days - 1) * DAY_MS);
-};
-// Wallet balance: each pilot's last balance
-async function walletBalance() {
-  const chars = await db.select({ id: characters.id }).from(characters);
+// Wallet balance: each pilot's last balance, and their sum
+async function pilotBalances() {
+  const chars = await db.select({ id: characters.id, lastSyncAt: characters.lastSyncAt }).from(characters);
   const balances = await Promise.all(chars.map((c) => lastBalance(c.id)));
-  return balances.reduce((acc, b) => acc + (b?.balance ?? 0), 0);
+  return { chars, balances, total: balances.reduce((acc, b) => acc + (b?.balance ?? 0), 0) };
 }
 
 // PLEX: it pays for Omega. Price = lowest sell on the market (refreshed on each sync);
@@ -44,9 +38,7 @@ export async function omegaIndicator() {
 
   // Wallet balance of the linked pilots. From the inventory only the PLEX you already have counts:
   // the rest is not money until it is sold
-  const chars = await db.select({ id: characters.id, lastSyncAt: characters.lastSyncAt }).from(characters);
-  const balances = await Promise.all(chars.map((c) => lastBalance(c.id)));
-  const available = balances.reduce((acc, b) => acc + (b?.balance ?? 0), 0);
+  const { chars, balances, total: available } = await pilotBalances();
   const [owned] = await db.select({ qty: sum(assets.quantity) }).from(assets).where(eq(assets.typeId, PLEX_TYPE_ID));
   const plexOwned = Number(owned?.qty ?? 0);
   const plexMissing = Math.max(0, plexNeeded - plexOwned);
@@ -100,8 +92,6 @@ export async function omegaIndicator() {
 // yields outside bounties: sold escalations and loot sold to the buyback (refKindOf); time still comes
 // from the bounty blocks (escalation sites pay them too)
 const TICK_MINUTES = 20;
-const BOUNTY_REFS = ['bounty_prizes', 'bounty_prize'];
-const ESS_REF = 'ess_escrow_transfer';
 const RATTING_KINDS = [...BOUNTY_REFS, ESS_REF, ...PVE_EXTRA_KINDS];
 const ratKind = refKindOf(walletJournal.refType, walletJournal.amount, walletJournal.firstPartyId);
 
@@ -239,7 +229,7 @@ export async function daysIndicator(days = 30) {
 // ESI's average price) with the wallet balance, and how much ratting each one costs. Plus what the period's
 // losses cost you, expressed in ratting hours
 export async function replacementIndicator(iskPerHour: number | null, days = 30) {
-  const available = await walletBalance();
+  const { total: available } = await pilotBalances();
   const recent = await shipLosses(90);
   const period = await shipLosses(days);
   const seen = new Set<number>();
@@ -254,7 +244,7 @@ export async function replacementIndicator(iskPerHour: number | null, days = 30)
       times: l.value > 0 ? Math.floor(available / l.value) : null,
       hours: iskPerHour && l.value > 0 ? l.value / iskPerHour : null,
     }));
-  const cost = period.totals.cost;
+  const cost = period.totals.firmCost;
   return {
     available,
     iskPerHour,

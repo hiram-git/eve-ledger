@@ -3,10 +3,9 @@
 // restore) with `VACUUM INTO`, which writes a compact, consistent database even while the API is writing.
 // Restoring copies the backup's contents into the open database, without restarting the API (replaceDatabase)
 import { Database } from 'bun:sqlite';
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { appliedMigrations, DB_PATH, knownMigrations, rawDb, replaceDatabase } from '../db/client';
-import { maintenance } from '../lib/maintenance';
 import { syncBusy } from './sync';
 
 export const BACKUP_DIR = Bun.env.BACKUP_DIR || join(dirname(DB_PATH), 'backups');
@@ -82,7 +81,11 @@ export function createBackup(kind: BackupKind): Backup {
     at = new Date(at.getTime() + 1000);
     name = `ledger-${stamp(at)}-${kind}.db`;
   }
-  rawDb().query('VACUUM INTO ?').run(join(BACKUP_DIR, name));
+  // Written under a temporary name: a copy cut short (the app closing) never looks like a valid one
+  const tmp = join(BACKUP_DIR, `${name}.tmp`);
+  rmSync(tmp, { force: true });
+  rawDb().query('VACUUM INTO ?').run(tmp);
+  renameSync(tmp, join(BACKUP_DIR, name));
   prune(kind);
   console.log(`[backup] ${name}`);
   return parse(name)!;
@@ -102,7 +105,7 @@ function hasData(handle: Database = rawDb()) {
 
 // The daily one: at startup, after each sync round and every few hours (also with automatic sync turned off)
 export function maybeAutoBackup(): Backup | null {
-  if (maintenance.active() || !hasData()) return null;
+  if (!hasData()) return null;
   const last = listBackups().find((b) => b.kind === 'auto');
   if (last && Date.now() - last.createdAt.getTime() < AUTO_EVERY_MS) return null;
   try {
@@ -172,17 +175,13 @@ export function inspectBackupByName(name: string) {
 // Replaces the database with the backup. First it saves what is there ("restore"); the change runs in a single
 // transaction, so if something fails the database stays as it was
 export function restoreFromFile(file: string): { info: BackupInfo; safety: Backup | null } {
-  if (maintenance.active() || syncBusy()) throw new BackupError('busy');
+  // Restoring is synchronous from start to end: no sync can start halfway; only one already running blocks it
+  if (syncBusy()) throw new BackupError('busy');
   const info = inspectBackup(file);
-  maintenance.set(true);
-  try {
-    const safety = hasData() ? createBackup('restore') : null;
-    replaceDatabase(file);
-    console.log(`[backup] restaurada (${info.pilots} pilotos, ${info.entries} movimientos)`);
-    return { info, safety };
-  } finally {
-    maintenance.set(false);
-  }
+  const safety = hasData() ? createBackup('restore') : null;
+  replaceDatabase(file);
+  console.log(`[backup] restaurada (${info.pilots} pilotos, ${info.entries} movimientos)`);
+  return { info, safety };
 }
 
 export function restoreBackup(name: string) {
@@ -204,5 +203,5 @@ export function restoreUpload(bytes: Uint8Array) {
 
 // For the web: where they are, how many are kept and the list
 export function backupsView() {
-  return { dir: BACKUP_DIR, keep: KEEP, backups: listBackups(), busy: maintenance.active() };
+  return { dir: BACKUP_DIR, keep: KEEP, backups: listBackups() };
 }

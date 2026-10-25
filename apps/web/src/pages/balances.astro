@@ -7,6 +7,7 @@ import Base from '../layouts/Base.astro';
 import Icon from '../components/Icon.astro';
 import {
   getIndicators,
+  gameResult,
   getInventory,
   getLosses,
   getPilots,
@@ -19,7 +20,7 @@ import {
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { hasIssue, pilotState } from '../lib/pilot-state';
+import { countIssues } from '../lib/pilot-state';
 import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { shareOf } from '../lib/shares';
@@ -63,8 +64,7 @@ try {
   apiError = err instanceof Error ? err.message : String(err);
 }
 
-const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
-const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
+const pilotIssues = countIssues(pilots, m, status);
 
 const chars = summary?.characters ?? [];
 const selected = pilotId ? chars.find((c) => c.id === pilotId) : undefined;
@@ -103,7 +103,7 @@ const internal = selected ? (summary?.internalReceived ?? 0) - (summary?.interna
 const walletChange = walletResult + internal;
 const accountsNet = acts.find((a) => a.activity === 'accounts')?.net ?? 0;
 const unreplaced = losses?.totals.unreplaced ?? 0;
-const gameResult = walletResult - accountsNet - unreplaced - toReplace;
+const result = summary ? gameResult(summary, losses) : 0;
 const prev = summary?.previous;
 
 // ---- Wallet reconciliation ----
@@ -207,7 +207,11 @@ const partialAt = recRows
                     <tr class={selected ? undefined : 'sub'}>
                       <th scope="row">
                         {selected ? m.bsWallets : m.bsWallet(c.name)}
-                        {c.openingBalance !== null && <span class="row-meta">{m.bsBefore(days, fmt(c.openingBalance))}</span>}
+                        {c.openingBalance !== null && (
+                          <span class="row-meta">
+                            {c.openingPartial && c.openingAt ? `${m.recOpeningPartial(date(c.openingAt))}: ${fmt(c.openingBalance)}` : m.bsBefore(days, fmt(c.openingBalance))}
+                          </span>
+                        )}
                       </th>
                       <td class="op" aria-hidden="true" />
                       <td title={c.balance === null ? m.noEntries : full(c.balance)}>{c.balance === null ? '—' : fmt(c.balance)}</td>
@@ -453,8 +457,8 @@ const partialAt = recRows
                           <span aria-hidden="true">=</span>
                           <span class="sr-only">{m.opEquals}</span>
                         </td>
-                        <td class:list={[toReplace > 0 ? 'estimate' : sign(gameResult)]} title={fullNet(gameResult)}>
-                          {toReplace > 0 ? `~ ${fmt(gameResult, { sign: true })}` : fmt(gameResult, { sign: true })}
+                        <td class:list={[toReplace > 0 ? 'estimate' : sign(result)]} title={fullNet(result)}>
+                          {toReplace > 0 ? `~ ${fmt(result, { sign: true })}` : fmt(result, { sign: true })}
                         </td>
                         <td class="share" />
                       </tr>

@@ -21,7 +21,7 @@ runMigrations();
 
 const allowed = allowedHosts();
 const app = new Elysia()
-  // This machine only: local Host and, for non-GET requests, no foreign Origin (src/lib/local-only.ts)
+  // This machine only: local Host and, for non-GET requests, no Origin (src/lib/local-only.ts)
   .onRequest(({ request }) => localOnly(request, allowed) ?? undefined)
   .onError(({ error, code }) => {
     console.error(`[${code}]`, error);
@@ -38,7 +38,8 @@ const app = new Elysia()
   .use(lossRoutes)
   .use(doctrineRoutes)
   .use(backupRoutes)
-  .listen({ port: env.port, hostname: env.host });
+  // Backups are uploaded raw: Bun's default 128 MB body limit would reject a few years of history (the web allows 1 GB)
+  .listen({ port: env.port, hostname: env.host, maxRequestBodySize: 2 ** 30 });
 
 console.log(`EVE Ledger API en http://localhost:${app.server?.port}`);
 console.log(`Vincula un personaje: http://localhost:${app.server?.port}/auth/login`);

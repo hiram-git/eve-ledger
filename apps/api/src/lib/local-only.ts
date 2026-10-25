@@ -1,7 +1,8 @@
 // This machine only. The API listens on 127.0.0.1, but that does not stop the user's own browser: a site it
 // visits can point its domain at 127.0.0.1 (DNS rebinding) and read the wallet through the desktop app's fixed
 // port (47300), or send a POST with a form. Any Host that is not local is rejected, as is any non-GET request
-// with a foreign Origin. ALLOWED_HOSTS (comma-separated) adds names by hand, for
+// with an Origin: only the web's server and the desktop app write to the API, and they send none (a page on
+// another local port would pass a hostname check). ALLOWED_HOSTS (comma-separated) adds names by hand, for
 // example if someone exposes the API on their network with HOST=0.0.0.0
 const LOCAL = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -25,13 +26,8 @@ export function localOnly(request: Request, allowed = allowedHosts()): Response 
   const host = request.headers.get('host');
   const name = host ? hostname(host) : null;
   if (!name || !allowed.has(name)) return new Response('Host no permitido: EVE Ledger solo responde en esta máquina', { status: 403 });
-  const origin = request.headers.get('origin');
-  if (origin && request.method !== 'GET' && request.method !== 'HEAD') {
-    let from: string | null = null;
-    try {
-      from = new URL(origin).hostname.toLowerCase();
-    } catch {}
-    if (!from || !allowed.has(from)) return new Response('Origen no permitido', { status: 403 });
+  if (request.headers.has('origin') && request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Origen no permitido', { status: 403 });
   }
   return null;
 }

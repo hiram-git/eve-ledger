@@ -263,3 +263,22 @@ test('el selector de idioma cambia la interfaz y vuelve a la misma página', asy
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('h1')).toContainText('Balance');
 });
+
+test('la vuelta tras cambiar de idioma no sale del dashboard', async ({ request }) => {
+  for (const back of ['/.//evil.example', '/./\\evil.example', '/a/..//evil.example', '/%2e//evil.example', '//evil.example']) {
+    const res = await request.get(`${WEB_URL}/lang?to=en&back=${encodeURIComponent(back)}`, { maxRedirects: 0 });
+    expect(res.headers().location, back).toBe('/');
+  }
+  const ok = await request.get(`${WEB_URL}/lang?to=es&back=${encodeURIComponent('/pilotos?x=1')}`, { maxRedirects: 0 });
+  expect(ok.headers().location).toBe('/pilotos?x=1');
+});
+
+test('el Resultado de juego del Resumen es el mismo que el de Balances', async ({ page }) => {
+  for (const query of ['days=30', `days=30&pilot=${PILOTS.aria.id}`]) {
+    await page.goto(`/?${query}`);
+    const headline = await page.locator('.hero-stat .value.signed').first().getAttribute('title');
+    await page.goto(`/balances?${query}`);
+    const books = await page.locator('tr.result', { hasText: 'Resultado de juego' }).locator('td[title]').getAttribute('title');
+    expect(books, query).toBe(headline);
+  }
+});

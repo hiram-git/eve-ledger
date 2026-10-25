@@ -7,20 +7,19 @@
 import { and, desc, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { characters, loyaltyLog, loyaltyOffers, loyaltyPoints, loyaltyStores, marketPrices, names, syncLog } from '../db/schema';
+import { isNpcCorp } from '../lib/activities';
 import { EsiError, esiGet } from '../lib/esi';
+import { periodFrom } from '../lib/period';
 import type { StepResult } from './sync';
 
 export const LOYALTY_SCOPE = 'esi-characters.read_loyalty.v1';
 // EverMarks: the LP of this NPC corporation (its ID isn't hardcoded; it is told apart by the name ESI gives)
 export const EVERMARKS_CORP = 'Paragon';
-// NPC corporations (Sisters of EVE, Federation Navy…): their IDs are in this range
-const NPC_CORPS = [1_000_000, 2_000_000] as const;
 // A store is read again after a day (ESI caches it daily); one that failed, after a week
 const STORE_MAX_AGE_MS = 24 * 3_600_000;
 const STORE_RETRY_MS = 7 * 86_400_000;
 const MAX_STORES = 10;
 const CHUNK = 200;
-const DAY_MS = 86_400_000;
 
 type EsiLoyalty = { corporation_id: number; loyalty_points: number };
 type EsiOffer = {
@@ -81,7 +80,8 @@ export async function refreshLoyaltyStores(fetch: FetchOffers = esiOffers, now =
       const s = checked.get(c.id);
       if (!s) return true;
       const age = now.getTime() - s.checkedAt.getTime();
-      return s.status === 'ok' ? age > STORE_MAX_AGE_MS : age > STORE_RETRY_MS;
+      // Only a store ESI doesn't have waits a week; a passing failure (503, 420) is retried the next day
+      return s.status === 'missing' ? age > STORE_RETRY_MS : age > STORE_MAX_AGE_MS;
     })
     .sort((a, b) => b.points - a.points)
     .slice(0, MAX_STORES);
@@ -120,11 +120,6 @@ export async function refreshLoyaltyStores(fetch: FetchOffers = esiOffers, now =
   return read;
 }
 
-const periodFrom = (days: number, now: Date) => {
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return new Date(today - (days - 1) * DAY_MS);
-};
-
 type Offer = { typeId: number; name: string | null; quantity: number; lpCost: number; iskCost: number; required: number };
 
 export async function loyaltyIndicator(days = 30, now = new Date()) {
@@ -133,11 +128,12 @@ export async function loyaltyIndicator(days = 30, now = new Date()) {
   const missingScope = pilots.filter((p) => !p.scopes.split(' ').includes(LOYALTY_SCOPE)).map((p) => ({ characterId: p.id, name: p.name }));
   // A pilot with the scope counts as covered once a loyalty sync finished without error (even with no LP anywhere)
   const synced = await db
-    .select({ characterId: syncLog.characterId })
+    .select({ characterId: syncLog.characterId, firstAt: sql<number>`min(${syncLog.finishedAt})` })
     .from(syncLog)
     .where(and(eq(syncLog.kind, 'loyalty'), isNull(syncLog.error), sql`${syncLog.finishedAt} is not null`))
     .groupBy(syncLog.characterId);
   const syncedIds = new Set(synced.map((s) => s.characterId));
+  const firstSyncAt = new Map(synced.map((s) => [s.characterId, Number(s.firstAt)]));
   const rows = await db.select().from(loyaltyPoints);
   for (const r of rows) syncedIds.add(r.characterId);
   const nameOf = new Map(pilots.map((p) => [p.id, p.name]));
@@ -206,7 +202,12 @@ export async function loyaltyIndicator(days = 30, now = new Date()) {
   const historySince = history?.at ? new Date(Number(history.at) * 1000) : null;
   const key = (c: number, k: number) => `${c}:${k}`;
   const base = new Map<string, number>();
-  for (const f of first) base.set(key(f.characterId, f.corporationId), f.points);
+  // A corporation that first appears after the pilot's first loyalty sync started from 0 (before, its first value
+  // was taken as the starting point and the LP earned until then were lost)
+  for (const f of first) {
+    const since = firstSyncAt.get(f.characterId);
+    base.set(key(f.characterId, f.corporationId), since !== undefined && Number(f.at) > since ? 0 : f.points);
+  }
   for (const b of baseline) base.set(key(b.characterId, b.corporationId), b.points);
   const current = new Map(rows.map((r) => [key(r.characterId, r.corporationId), r.points]));
   // Corporations in the log but no longer in the snapshot (their LP went to 0) still count in the change
@@ -232,7 +233,7 @@ export async function loyaltyIndicator(days = 30, now = new Date()) {
       return {
         corporationId,
         name: corpName.get(corporationId) ?? null,
-        npc: corporationId >= NPC_CORPS[0] && corporationId < NPC_CORPS[1],
+        npc: isNpcCorp(corporationId),
         points: c.points,
         byPilot: c.byPilot.sort((x, y) => y.points - x.points),
         iskPerLp: b?.rate ?? null,

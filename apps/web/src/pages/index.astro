@@ -22,6 +22,7 @@ import {
   getMap,
   getPilots,
   getSummary,
+  gameResult,
   getSyncStatus,
   loginUrl,
   syncLogUrl,
@@ -36,7 +37,7 @@ import {
 import { ago, isk, iskFull, longDate, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { withInventory } from '../lib/inventory-pref';
-import { ASSETS_SCOPE, CONTRACTS_SCOPE, SKILLS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
+import { ASSETS_SCOPE, CONTRACTS_SCOPE, SKILLS_SCOPE, LOSSES_SCOPE, hasIssue, needsRelink, pilotState, staleAfter, syncKindLabel } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -107,8 +108,8 @@ const syncFailed = q.get('syncFailed');
 
 // Consolidated net worth and proportions for the breakdown bars
 const inventoryValue = inventory && inventory.stacks > 0 ? inventory.value : 0;
-// Without inventory, the figure is just the wallet balance
-const netWorth = (summary?.balance ?? 0) + (withInv ? inventoryValue : 0);
+// Only shown with inventory (without it, the card isn't drawn)
+const netWorth = (summary?.balance ?? 0) + inventoryValue;
 const share = (part: number, total: number) => (total > 0 ? Math.max(0, Math.min(1, part / total)) : 0);
 const flowTotal = (summary?.totals.income ?? 0) + (summary?.totals.expenses ?? 0);
 
@@ -122,7 +123,7 @@ const globalLastSync = summary?.characters
 const lastSync = selected ? (selected.lastSyncAt ?? undefined) : globalLastSync;
 
 // Age: data is «stale» when older than two sync intervals (or 2 h if the cron is off)
-const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const staleAfterMs = staleAfter(status);
 const isStale = (iso: string | null | undefined) => !iso || Date.now() - new Date(iso).getTime() > staleAfterMs;
 // Pilots that need attention: the same state as in /pilotos (error, first sync or stale data),
 // with their short cause and the action to take, in a line under the filter
@@ -150,15 +151,8 @@ const healthItems =
     if (st.kind === 'pending') return { id: c.id, name: c.name, cause: m.healthPending, action: null };
     if (st.kind === 'error') {
       const token = st.hint === m.errToken;
-      const kinds: Record<string, string> = {
-        journal: m.kindJournal,
-        transactions: m.kindTransactions,
-        assets: m.kindAssets,
-        killmails: m.kindKillmails,
-        contracts: m.kindContracts,
-      };
-      const raw = pilotById.get(c.id)?.lastError?.kind ?? '';
-      return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kinds[raw] ?? raw), action: token ? 'relink' : 'review' };
+      const kind = syncKindLabel(pilotById.get(c.id)?.lastError?.kind ?? '', m);
+      return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kind), action: needsRelink(pilotById.get(c.id)!, st, m) ? 'relink' : 'review' };
     }
     // Sync up to date, but some permission is missing (inventory, killmails, contracts): fixed by relinking
     const perms = missingPerms(c.id);
@@ -259,7 +253,7 @@ const toReplace = losses?.totals.toReplace ?? 0;
 const accountsNet = summary?.byActivity.find((a) => a.activity === 'accounts')?.net ?? 0;
 const hasAccounts = Math.abs(accountsNet) >= 0.5;
 const showResult = !!summary && ((!!losses && notBack + toReplace >= 0.5) || hasAccounts);
-const headline = summary ? summary.totals.net - (showResult ? accountsNet + notBack + toReplace : 0) : 0;
+const headline = summary ? (showResult ? gameResult(summary, losses) : summary.totals.net) : 0;
 // The previous period's result takes out the same things, so the comparison is of the headline figure (before it
 // compared the wallet net under a «Resultado» headline: the green figure and the red arrow spoke of different numbers)
 const previousHeadline = summary
@@ -283,10 +277,8 @@ const internalNote = !summary
     : summary.internalTransfers > 0
       ? m.internal(fmt(summary.internalTransfers))
       : null;
-// Card footer: lost ships (the firm part with its sign, the estimate in gray). In the consolidated view, how much of the
-// firm part is already in the net (PvP); not in a pilot's view, because someone else may have paid to replace their ships
+// Card footer: lost ships (the firm part with its sign, the estimate in gray)
 const lossesFirm = losses?.totals.firmCost ?? 0;
-const lossesInNet = !selected && losses ? losses.totals.walletEffect : 0;
 const lossesOnlyEstimate = Math.abs(lossesFirm) < 0.5 && toReplace >= 0.5;
 
 // Net with partial coverage: the title says so (90 days requested, 42 with history)
@@ -505,7 +497,7 @@ const worthNote =
         noPilots && <FirstRun slots={PILOT_SLOTS} />
       }
       {
-        waiting && <FirstSync pilots={summary!.characters} slots={PILOT_SLOTS} />
+        waiting && <FirstSync pilots={summary!.characters} slots={PILOT_SLOTS} states={pilotStates} />
       }
 
       {
@@ -933,14 +925,13 @@ const worthNote =
                   <div>
                     <span class="label">
                       <Icon name="wallet" />
-                      {withInv ? m.netWorth : m.walletsOnly}
+                      {m.netWorth}
                     </span>
                     <span class="value" title={full(netWorth)}>
                       {fmt(netWorth)}
                       <small> ISK</small>
                     </span>
                   </div>
-                  {withInv && (
                   <dl class="breakdown">
                     <div>
                       <dt>
@@ -959,14 +950,13 @@ const worthNote =
                       </dd>
                     </div>
                   </dl>
-                  )}
                   {/* What counts toward net worth: wallets only (what pays for Omega) or + inventory. Remembered (cookie) */}
                   <form class="inv-toggle" method="get" action="/inv">
                     <fieldset>
                       <legend class="sr-only">{m.invToggle}</legend>
                       <input type="hidden" name="back" value={invBack} />
-                      <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
-                      <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                      <button type="submit" name="to" value="0" aria-pressed="false">{m.invWallets}</button>
+                      <button type="submit" name="to" value="1" aria-pressed="true">{m.invPlus}</button>
                     </fieldset>
                   </form>
                 </div>
@@ -983,7 +973,6 @@ const worthNote =
                     staleAfterMs={staleAfterMs}
                     syncRunning={status?.running}
                     amounts={worthByPilot}
-                    walletOnly={!withInv}
                   />
                 )}
                 {worthNote && (
@@ -1552,7 +1541,6 @@ const worthNote =
   .foot-losses-value.neg {
     color: var(--critical);
   }
-  .foot-losses-pending,
   .foot-losses-value.estimate {
     color: var(--text-muted);
   }
@@ -1611,9 +1599,6 @@ const worthNote =
     margin-top: 8px;
     padding-top: 6px;
     border-top: 1px solid var(--line);
-  }
-  .foot-losses-split {
-    color: var(--text-muted);
   }
   .acts-link {
     display: inline-flex;

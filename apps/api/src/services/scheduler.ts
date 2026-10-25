@@ -1,5 +1,5 @@
 import { desc } from 'drizzle-orm';
-import { db } from '../db/client';
+import { db, rawDb } from '../db/client';
 import { syncLog } from '../db/schema';
 import { env } from '../lib/env';
 import { maybeAutoBackup } from './backups';
@@ -8,7 +8,7 @@ import { syncAll } from './sync';
 // Startup delay so as not to sync in the middle of starting up (or of each `bun --watch` reload)
 const STARTUP_DELAY_MS = 15_000;
 
-type LastRun = { startedAt: Date; finishedAt: Date; inserted: number; errors: number; characters: number };
+type LastRun = { startedAt: Date; finishedAt: Date; inserted: number; errors: number; characters: number; failed: number[] };
 
 const state: {
   timer?: ReturnType<typeof setTimeout>;
@@ -40,6 +40,7 @@ async function run() {
       inserted: results.reduce((n, r) => n + r.inserted, 0),
       errors: errors.length,
       characters: results.length,
+      failed: errors.map((r) => r.characterId),
     };
     console.log(
       `[cron] sync: ${state.lastRun.inserted} movimientos nuevos en ${results.length} personajes` +
@@ -75,6 +76,18 @@ export function schedulerStatus() {
     intervalMin: env.syncIntervalMin,
     running: state.running,
     nextRunAt: state.nextRunAt ?? null,
-    lastRun: state.lastRun ?? null,
+    lastRun: state.lastRun ? { ...state.lastRun, failed: undefined, errors: stillFailing(state.lastRun) } : null,
   };
+}
+
+// Pilots of the last round that still have no good sync after it (a manual sync or a relink may have fixed them since)
+function stillFailing(run: LastRun) {
+  if (!run.failed.length) return 0;
+  const row = rawDb()
+    .query(
+      `select count(*) as n from characters where id in (${run.failed.map(() => '?').join(',')})
+       and (last_sync_at is null or last_sync_at < ?)`,
+    )
+    .get(...run.failed, Math.floor(run.finishedAt.getTime() / 1000)) as { n: number };
+  return row.n;
 }

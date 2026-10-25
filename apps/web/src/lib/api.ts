@@ -204,6 +204,14 @@ export type Losses = {
   historyFrom: string | null;
   losses: Loss[];
 };
+// Game result (the Net card's headline and Balances): the wallet net without PLEX / accounts (kept apart) and minus the
+// lost ships that didn't come back or are still to be replaced (estimated). One formula for both pages
+export const gameResult = (summary: Summary, losses?: Losses | null) =>
+  summary.totals.net -
+  (summary.byActivity.find((a) => a.activity === 'accounts')?.net ?? 0) -
+  (losses?.totals.unreplaced ?? 0) -
+  (losses?.totals.toReplace ?? 0);
+
 export const getLosses = (days: number, characterId?: number) =>
   call<Losses>(`/losses?days=${days}${characterId ? `&characterId=${characterId}` : ''}`);
 export const getMap = (characterId?: number) => call<GeoMap>(`/map?${pilotQuery(characterId)}`);
@@ -479,7 +487,7 @@ export const setClone = (characterId: number, clone: 'omega' | 'alpha') =>
 // Database backups (apps/api/src/services/backups.ts)
 export type BackupKind = 'auto' | 'manual' | 'restore' | 'update';
 export type Backup = { name: string; kind: BackupKind; createdAt: string; size: number };
-export type BackupsView = { dir: string; keep: Record<BackupKind, number>; backups: Backup[]; busy: boolean };
+export type BackupsView = { dir: string; keep: Record<BackupKind, number>; backups: Backup[] };
 export type BackupInfo = { pilots: number; entries: number; firstEntryAt: string | null; lastEntryAt: string | null };
 export type Restored = { info: BackupInfo; safety: Backup | null };
 // Only names in the backup format: the same the API accepts

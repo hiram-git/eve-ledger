@@ -168,3 +168,36 @@ test('el indicador valora al mejor cambio, aparta los EverMarks y mide el cambio
   expect(lp.changePartial).toBe(false);
   expect(lp.evermarks).toEqual({ points: 2_500, byPilot: [{ characterId: A, name: 'Aria', points: 2_000 }, { characterId: B, name: 'Bea', points: 500 }], change: 1_000 });
 });
+
+test('una tienda que falló por un corte pasajero se vuelve a leer al día siguiente', async () => {
+  const t0 = new Date(now);
+  await db.insert(s.loyaltyPoints).values({ characterId: A, corporationId: SOE, points: 1_000, updatedAt: t0 });
+  let down = true;
+  const fetch = async (corp: number) => {
+    if (down) throw new EsiError(503, `/loyalty/stores/${corp}/offers`, 'downtime');
+    return [];
+  };
+  await refreshLoyaltyStores(fetch, t0);
+  down = false;
+  expect(await refreshLoyaltyStores(fetch, new Date(t0.getTime() + H))).toBe(0);
+  expect(await refreshLoyaltyStores(fetch, new Date(t0.getTime() + 25 * H))).toBe(1);
+});
+
+test('una corporación que aparece después del primer sync de lealtad empieza en 0', async () => {
+  const t0 = new Date(now);
+  const at = (daysAgo: number) => new Date(t0.getTime() - daysAgo * D);
+  // Aria's loyalty is synced since 60 days ago; Federation Navy since then, Sisters of EVE first seen 10 days ago
+  await db.insert(s.syncLog).values({ characterId: A, kind: 'loyalty', startedAt: at(60), finishedAt: at(60) });
+  await db.insert(s.loyaltyPoints).values([
+    { characterId: A, corporationId: FEDNAVY, points: 50_000, updatedAt: t0 },
+    { characterId: A, corporationId: SOE, points: 20_000, updatedAt: t0 },
+  ]);
+  await db.insert(s.loyaltyLog).values([
+    { characterId: A, corporationId: FEDNAVY, at: at(60), points: 50_000 },
+    { characterId: A, corporationId: SOE, at: at(10), points: 5_000 },
+    { characterId: A, corporationId: SOE, at: at(1), points: 20_000 },
+  ]);
+  const lp = await loyaltyIndicator(30, t0);
+  expect(lp.corps.find((c) => c.corporationId === SOE)?.change).toBe(20_000);
+  expect(lp.change).toBe(20_000);
+});

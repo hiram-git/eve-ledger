@@ -165,11 +165,10 @@ const byShip = sumBy((l) => l.ship ?? `#${l.shipTypeId}`);
 const foldCount = (items: { label: string; value: number; count: number }[], other: (n: number) => string) => {
   const folded = fold(items, other);
   const rest = items.slice(folded.length - 1);
-  return folded.map((f, i) => ('count' in f ? f : { ...f, count: rest.reduce((n, r) => n + r.count, 0) })) as typeof items;
+  return folded.map((f) => ('count' in f ? f : { ...f, count: rest.reduce((n, r) => n + r.count, 0) })) as typeof items;
 };
 const pilotSlices = byPilot.length > 1 ? foldCount(byPilot, m.otherPilots) : [];
 const shipSlices = byShip.length > 1 ? foldCount(byShip, m.otherShips) : [];
-const shareCaption = (label: string) => label;
 // View of a pilot who lost nothing but paid for someone else's replacement (the Jita alt): there's a sum too
 const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
 ---
@@ -268,9 +267,9 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
             .filter((f) => f.slices.length > 0)
             .map((f) => (
               <figure>
-                <Donut slices={f.slices} label={shareCaption(f.label)} format={fmt} lang={lang} center={fmt(headValue, { sign: true })} centerSub="ISK" />
+                <Donut slices={f.slices} label={f.label} format={fmt} lang={lang} center={fmt(headValue, { sign: true })} centerSub="ISK" />
                 <table class="mini">
-                  <caption class="sr-only">{shareCaption(f.label)}</caption>
+                  <caption class="sr-only">{f.label}</caption>
                   <thead>
                     <tr>
                       <th>{f.col}</th>
@@ -291,7 +290,7 @@ const hasAccount = tot.count > 0 || (own?.forOthers ?? 0) > 0;
                     ))}
                   </tbody>
                 </table>
-                <figcaption class="sr-only">{shareCaption(f.label)}</figcaption>
+                <figcaption class="sr-only">{f.label}</figcaption>
               </figure>
             ))}
         </div>

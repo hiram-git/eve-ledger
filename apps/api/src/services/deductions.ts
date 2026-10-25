@@ -1,7 +1,9 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { esiChecks, incursionSystems, names, systems, walletJournal } from '../db/schema';
+import { BOUNTY_REFS, ESS_REF, isNpcCorp } from '../lib/activities';
 import { esiGet } from '../lib/esi';
+import { periodFrom } from '../lib/period';
 
 // Deductions (user's decision): what you earn in PvE that never reaches the wallet.
 // - Corporation tax: exact. ESI gives it on every entry (`tax`, `tax_receiver_id`) and `amount` already comes
@@ -12,18 +14,13 @@ import { esiGet } from '../lib/esi';
 //   seen counts (anything before the first record is unknown: the figure is «al menos»). The ESS doesn't give the system: it's left out.
 
 export const INCURSION_BOUNTY_PENALTY = 0.5;
-const BOUNTY_REFS = ['bounty_prizes', 'bounty_prize'];
-const ESS_REF = 'ess_escrow_transfer';
 // What pays corporation tax: with `tax` null (stored before it was read) the amount is unknown
 const TAXED_REFS = [...BOUNTY_REFS, ESS_REF, 'agent_mission_reward', 'agent_mission_time_bonus_reward'];
-// NPC corporations (Aliastra, State Protectorate…): their IDs are in this range
-const NPC_CORPS = [1_000_000, 2_000_000] as const;
 // An incursion lasts days: if a system is seen infested again within 24 h (the app closed overnight),
 // it's the same span
 const SAME_SPELL_MS = 24 * 3_600_000;
 // A syncAll calls syncCharacter for each pilot: with this it's only asked once per round
 const MIN_AGE_MS = 60_000;
-const DAY_MS = 86_400_000;
 
 type EsiIncursion = { constellation_id: number; infested_solar_systems: number[]; state: string };
 
@@ -64,12 +61,6 @@ export async function refreshIncursions(fetch = fetchIncursions, now = new Date(
   return seen;
 }
 
-const periodFrom = (days: number) => {
-  const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return new Date(today - (days - 1) * DAY_MS);
-};
-
 // From ratting (rattingIndicator) the hours and ISK are enough to say what an hour would yield without deductions
 type Ratting = { hours: number; isk: number };
 
@@ -96,7 +87,7 @@ export async function deductionsIndicator(ratting: Ratting, days = 30) {
     const c = corps.get(key) ?? {
       corpId: r.corpId,
       name: r.corpId ? (corpName.get(r.corpId) ?? null) : null,
-      npc: r.corpId !== null && r.corpId >= NPC_CORPS[0] && r.corpId < NPC_CORPS[1],
+      npc: r.corpId !== null && isNpcCorp(r.corpId),
       tax: 0,
       gross: 0,
       byType: [],

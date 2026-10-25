@@ -12,6 +12,7 @@ import {
   type KillmailItem,
 } from '../db/schema';
 import { EsiError, esiGet } from '../lib/esi';
+import { DAY_MS, periodFrom } from '../lib/period';
 import { CONTRACTS_SCOPE, courierContracts } from './contracts';
 
 export const LOSSES_SCOPE = 'esi-killmails.read_killmails.v1';
@@ -35,7 +36,6 @@ type EsiKillmail = {
   attackers: unknown[];
 };
 
-const DAY_MS = 86_400_000;
 // New details per sync: the rest arrive in the next one (no need to burn the ESI limit all at once)
 const MAX_NEW = 100;
 const CHUNK = 500;
@@ -501,8 +501,7 @@ async function computeLosses(now: Date) {
 // Value lost: hull + fit (destroyed and dropped) at the ESI average price, like the inventory
 export async function shipLosses(days: number, characterId?: number) {
   const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+  const from = periodFrom(days, now);
 
   const { pilots, nameOf, rows, losses, unpriced, historyFrom, spend, usedCouriers } = await allLosses(now);
   const inView = pilots.filter((p) => !characterId || p.id === characterId);

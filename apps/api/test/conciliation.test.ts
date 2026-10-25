@@ -201,3 +201,27 @@ test('el saldo es el del wallet de ESI y la conciliación sigue cuadrando con el
   await db.update(s.characters).set({ walletBalance: null, walletAt: null }).where(inArray(s.characters.id, [A]));
   expect((await getSummary(7)).characters.find((c) => c.id === A)!.balance).toBe(1000);
 });
+
+test('el período anterior trae su PLEX y sus naves para comparar el mismo Resultado', async () => {
+  await db.insert(s.marketPrices).values({ typeId: RIFTER, averagePrice: 10_000_000, adjustedPrice: null, updatedAt: new Date() });
+  const loss = (id: number, time: Date) => ({
+    killmailId: id, hash: 'h', characterId: A, time, solarSystemId: 30000142, victimCharacterId: A, shipTypeId: RIFTER, items: [], attackers: 1,
+  });
+  // The 7-day period starts 6 days ago: a loss 10 days ago (window closed, not replaced) and another yesterday (still open)
+  await db.insert(s.killmails).values([loss(990021, daysAgo(10)), loss(990022, yesterday(9))]);
+  // 500 PLEX bought 9 days ago, in the previous period
+  await journal([{ id: 4, char: A, date: daysAgo(20), ref: 'bounty_prizes', amount: 5_000_000_000, balance: 5_000_000_000, first: NPC }]);
+  // As in ESI, the escrow's context_id is the transaction
+  await db.insert(s.walletJournal).values({
+    journalId: 73001, characterId: A, date: daysAgo(9), refType: 'market_escrow', amount: -2_000_000_000, balance: 3_000_000_000, firstPartyId: A, secondPartyId: A, contextId: 83001, contextIdType: 'market_transaction_id',
+  });
+  await db.insert(s.walletTransactions).values({
+    transactionId: 83001, characterId: A, date: daysAgo(9), typeId: 44992, quantity: 500, unitPrice: 4_000_000, isBuy: true, locationId: 60003760, clientId: NPC, journalRefId: 73001,
+  });
+
+  const sum = await getSummary(7);
+  expect(sum.previous.accounts).toBeCloseTo(-2_000_000_000, 2);
+  expect(sum.previous.lossesNotBack).toBeCloseTo(10_000_000, 2);
+  // Yesterday's loss belongs to this period, not the previous one
+  expect(sum.previous.lossesToReplace).toBe(0);
+});

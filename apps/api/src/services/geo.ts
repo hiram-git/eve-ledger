@@ -2,6 +2,7 @@ import { and, eq, gte, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { assets, killmails, marketPrices, stationSystems, systems, walletJournal } from '../db/schema';
 import { EsiError, esiGet } from '../lib/esi';
+import { periodFrom } from '../lib/period';
 import { unitPrice } from './inventory';
 import { STATION_RANGE, SYSTEM_RANGE } from './names';
 
@@ -93,8 +94,7 @@ export type MapNode = {
 
 // Data for the «tu New Eden» map: where the inventory is and where ISK was earned today
 export async function getMap(characterId?: number) {
-  const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const todayStart = periodFrom(1);
 
   // Value per root location; the station is mapped to its system
   const byRoot = await db

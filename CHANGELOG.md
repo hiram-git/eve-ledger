@@ -4,6 +4,16 @@ What changed in each version of the EVE Ledger desktop app. Every version is a [
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
+## Unreleased
+
+- **Restoring a backup keeps your pilots linked.** EVE replaces a pilot's login on every renewal, so a backup holds logins that no longer work; restoring used to bring them back and every pilot then needed relinking. Now the history comes from the backup and each pilot keeps its current login (a pilot that isn't linked any more, or that changed owner, keeps the backup's).
+- **Sync errors that don't hide or repeat.** A step that failed (for example contracts) now shows in Pilots even when the steps after it finished fine; a courier whose items ESI no longer has (404) doesn't fail the contracts step on every sync; the automatic round and "Sync" pressed at the same time are one round, so neither reports the other's pilots as errors; and the header badge stops saying "N with errors" once those pilots have synced again.
+- **Relink only when it helps.** ESI down or rate limited is retried with "Sync"; "Relink" is offered for an expired or rejected login, a pilot that changed owner or a missing permission.
+- **Figures.** The replacement fund in Indicators counts only the firm part of the losses (the estimate still to replace stays apart, as in the Lost ships panel); a corporation you earn loyalty points with after your first sync counts all of them as earned in the period; an LP store that failed is read again the next day, not after a week.
+- **Summary and Balances agree.** Both pages compute the game result with the same formula, and the first-sync screen says why a pilot isn't syncing instead of "first sync in progress" forever.
+- **Daily chart.** A period whose only movement is PLEX keeps a scale; "Show as table" leaves out the days before the history; the keyboard hint comes back when you return to the chart with Tab after a tap.
+- **Safer by default.** The API rejects any write that comes from a web page (only the dashboard's own server and the app write to it); return links after an action can't point outside the dashboard; a backup is written to a temporary file first, so an interrupted one never looks complete; uploads of large backups (up to 1 GB) are accepted; automatic reloads don't repeat a notice ("Backup restored", "Fit added"). The third-party actions of the installer build are pinned to a commit.
+
 ## 1.0.0 — 2026-10-19
 
 First stable release. EVE Ledger answers "am I making or losing ISK?" for all your EVE Online pilots, on your own computer: it reads your wallets, assets, losses, contracts, skills and loyalty points through ESI, keeps the history ESI drops after 30 days, and shows it as a Summary (net by activity, today, daily chart, pilots, inventory, market review), Lost ships (what they really cost you), Indicators (Omega for all your accounts, ratting ISK/h, deductions, fees, loyalty points…), Balances (a balance sheet, an income statement and a wallet reconciliation) and Doctrines (who can fly each fit, what it costs, what is missing). Everything stays local: no server, no account, read-only permissions, login with PKCE and no secrets to keep. Spanish, English and German.

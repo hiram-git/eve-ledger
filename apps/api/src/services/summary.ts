@@ -2,10 +2,10 @@ import { and, asc, desc, eq, gte, inArray, lt, min, sql, type SQL } from 'drizzl
 import { db } from '../db/client';
 import { characters, walletJournal, walletTransactions } from '../db/schema';
 import { ACTIVITIES, activityOf, PLEX_TYPE_ID, refKindOf } from '../lib/activities';
+import { DAY_MS, periodFrom } from '../lib/period';
 import { REPLACEMENT_DAYS, shipLosses } from './losses';
 import { marketReview } from './transactions';
 
-const DAY_MS = 86_400_000;
 
 // The market transaction of a journal entry (same pilot, journal_ref_id = journal_id): its
 // counterparty (client_id) and its id, which both sides of a trade between your pilots share
@@ -75,8 +75,7 @@ async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date, withou
 export async function dailyNetRate(characterId: number, lastSyncAt: Date | null, days: number) {
   if (!lastSyncAt) return null;
   const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const windowFrom = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+  const windowFrom = periodFrom(days, now);
   const [first] = await db
     .select({ at: min(walletJournal.date) })
     .from(walletJournal)
@@ -155,9 +154,8 @@ export async function lastBalance(characterId: number) {
 
 export async function getSummary(days: number, characterId?: number) {
   const now = new Date();
-  // From the start of the UTC day, so the first day of the series is complete
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+  const todayStart = periodFrom(1, now);
+  const from = periodFrom(days, now);
   const pilot = characterId ? eq(walletJournal.characterId, characterId) : undefined;
   const allPilots = and(gte(walletJournal.date, from), eq(isInternal, 0));
   const inPeriod = and(allPilots, pilot);

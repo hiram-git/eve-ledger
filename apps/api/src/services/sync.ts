@@ -1,6 +1,5 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../db/client';
-import { maintenance } from '../lib/maintenance';
 import { characters, syncLog, walletJournal, walletTransactions } from '../db/schema';
 import { esiGet } from '../lib/esi';
 import { ASSETS_SCOPE, fetchAssets } from './assets';
@@ -244,8 +243,6 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
   if (!ch) throw new Error(`Personaje ${characterId} no vinculado`);
 
   const result: SyncResult = { characterId, name: ch.name, inserted: 0 };
-  // Restoring a backup: the database is being changed
-  if (maintenance.active()) return { ...result, error: 'Restaurando una copia de seguridad; vuelve a sincronizar en un momento' };
   if (running.has(characterId)) {
     if (opts.queue) rerun.add(characterId);
     return { ...result, error: 'Ya hay una sincronización en curso para este personaje' };
@@ -321,10 +318,17 @@ export async function syncCharacter(characterId: number, opts: { queue?: boolean
   return result;
 }
 
-// Sequential: one character after another so as not to trigger ESI's rate limit
-export async function syncAll(): Promise<SyncResult[]> {
-  const all = await db.select({ id: characters.id }).from(characters);
-  const results: SyncResult[] = [];
-  for (const { id } of all) results.push(await syncCharacter(id));
-  return results;
+// Sequential: one character after another so as not to trigger ESI's rate limit. A round asked for while another runs
+// (the cron and «Sincronizar» at once) joins it: two crossed rounds reported each other's pilots as errors
+let round: Promise<SyncResult[]> | null = null;
+export function syncAll(): Promise<SyncResult[]> {
+  round ??= (async () => {
+    const all = await db.select({ id: characters.id }).from(characters);
+    const results: SyncResult[] = [];
+    for (const { id } of all) results.push(await syncCharacter(id));
+    return results;
+  })().finally(() => {
+    round = null;
+  });
+  return round;
 }

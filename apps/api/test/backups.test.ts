@@ -16,7 +16,6 @@ Bun.env.EVE_CALLBACK_URL ||= 'http://127.0.0.1/auth/callback';
 const { db, runMigrations, appliedMigrations, knownMigrations } = await import(`${API}/db/client.ts`);
 const s = await import(`${API}/db/schema.ts`);
 const backups = await import(`${API}/services/backups.ts`);
-const { maintenance } = await import(`${API}/lib/maintenance.ts`);
 const { eq, inArray } = await import('drizzle-orm');
 runMigrations();
 
@@ -135,12 +134,24 @@ test('restaurar un archivo subido y negarse mientras otra restauración está en
   expect(existsSync(backups.BACKUP_DIR)).toBe(true);
 
   expect(() => backups.restoreUpload(new Uint8Array())).toThrow(expect.objectContaining({ code: 'empty' }));
-  maintenance.set(true);
-  try {
-    expect(() => backups.restoreBackup(b.name)).toThrow(expect.objectContaining({ code: 'busy' }));
-  } finally {
-    maintenance.set(false);
-  }
+});
+
+test('restaurar conserva el vínculo actual de cada piloto (EVE ya anuló los tokens de la copia)', async () => {
+  await pilot(X, 2);
+  const b = backups.createBackup('manual');
+  // After the backup a sync rotated the refresh token, and Y was linked
+  await db.update(s.characters).set({ refreshToken: 'rotado', scopes: 'a b' }).where(eq(s.characters.id, X));
+  await pilot(Y, 1);
+  backups.restoreBackup(b.name);
+  const x = await db.query.characters.findFirst({ where: eq(s.characters.id, X) });
+  expect(x?.refreshToken).toBe('rotado');
+  expect(x?.scopes).toBe('a b');
+  // The history is the backup's: Y (linked later) is gone
+  expect(await db.query.characters.findFirst({ where: eq(s.characters.id, Y) })).toBeUndefined();
+  // A different character on the same id (owner changed) keeps the backup's token
+  await db.update(s.characters).set({ ownerHash: 'otro', refreshToken: 'ajeno' }).where(eq(s.characters.id, X));
+  backups.restoreBackup(b.name);
+  expect((await db.query.characters.findFirst({ where: eq(s.characters.id, X) }))?.refreshToken).toBe('x');
 });
 
 test('una copia de una versión anterior (con menos migraciones) se restaura y queda al día', async () => {

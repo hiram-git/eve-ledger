@@ -18,7 +18,10 @@ const valid = new Set<string>();
 let n = 0;
 let verifyFails = false;
 const calls: string[] = [];
+// Keeps the module's other exports: bun test shares one module registry, and later files import routes that use them
+const realSso = { ...(await import(`${API}/lib/sso.ts`)) };
 mock.module(`${API}/lib/sso.ts`, () => ({
+  ...realSso,
   refreshAccessToken: async (rt: string, method: string) => {
     calls.push(`${method}:${rt}`);
     await Bun.sleep(30);

@@ -1,4 +1,4 @@
-import type { Pilot } from './api';
+import type { Pilot, SyncStatus } from './api';
 import type { Messages } from './i18n';
 
 export type PilotState = { kind: 'ok' | 'pending' | 'stale' | 'error'; text: string; title?: string; hint?: string };
@@ -28,19 +28,36 @@ export const SKILLS_SCOPE = 'esi-skills.read_skills.v1';
 // This is what the amber dot on «Pilotos» in the navigation counts
 export const hasIssue = (p: Pilot, st: PilotState) => st.kind !== 'ok' || p.missingScopes.length > 0;
 
+// Relinking fixes it: a missing scope, or an error of the token or of the link itself. ESI down or rate limited is
+// retried with Sincronizar (sending the pilot to the EVE login for that fixed nothing)
+export const needsRelink = (p: Pilot, st: PilotState, m: Messages) =>
+  p.missingScopes.length > 0 || (st.kind === 'error' && [m.errToken, m.errForbidden, m.errOwner, m.errDecrypt].includes(st.hint ?? ''));
+
+// Name of a sync step (sync_log.kind) in the chosen language
+export function syncKindLabel(kind: string, m: Messages): string {
+  const kinds: Record<string, string> = {
+    journal: m.kindJournal,
+    transactions: m.kindTransactions,
+    assets: m.kindAssets,
+    killmails: m.kindKillmails,
+    contracts: m.kindContracts,
+    skills: m.kindSkills,
+    loyalty: m.kindLoyalty,
+  };
+  return kinds[kind] ?? kind;
+}
+
+// Data is «desactualizado» when the last sync is older than twice the interval (2 h with the automatic sync off)
+export const staleAfter = (status?: SyncStatus | null) => 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+
+// How many pilots need attention: the amber dot on «Pilotos» in every page's navigation
+export const countIssues = (pilots: Pilot[], m: Messages, status?: SyncStatus | null) =>
+  pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfter(status), status?.running))).length;
+
 // A pilot's sync state: the same on the Pilotos page and in the summary's notice line
 export function pilotState(p: Pilot, m: Messages, staleAfterMs: number, syncRunning = false): PilotState {
   if (p.lastError) {
-    const kinds: Record<string, string> = {
-      journal: m.kindJournal,
-      transactions: m.kindTransactions,
-      assets: m.kindAssets,
-      killmails: m.kindKillmails,
-      contracts: m.kindContracts,
-      skills: m.kindSkills,
-      loyalty: m.kindLoyalty,
-    };
-    const kind = kinds[p.lastError.kind] ?? p.lastError.kind;
+    const kind = syncKindLabel(p.lastError.kind, m);
     const hint = explainError(p.lastError.message, m);
     // An expired token has the same name everywhere (card, health line and Pilotos)
     const text = hint === m.errToken ? m.stateToken : m.stateError(kind);

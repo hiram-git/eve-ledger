@@ -9,6 +9,11 @@ export const ACTIVITIES = ['pve', 'pvp', 'trading', 'logistics', 'other', 'accou
 export type Activity = (typeof ACTIVITIES)[number];
 
 export const PLEX_TYPE_ID = 44992;
+// Ratting: NPC bounties (one per 20-minute tick) and the deferred ESS part
+export const BOUNTY_REFS = ['bounty_prizes', 'bounty_prize'];
+export const ESS_REF = 'ess_escrow_transfer';
+// NPC corporations (Aliastra, Sisters of EVE, Federation Navy…): their IDs are in this range
+export const isNpcCorp = (id: number) => id >= 1_000_000 && id < 2_000_000;
 
 const REF_TYPES: Record<Exclude<Activity, 'other' | 'accounts'>, string[]> = {
   logistics: [
