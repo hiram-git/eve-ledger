@@ -1,6 +1,6 @@
 [package]
 name = "iskpulse-desktop"
-version = "1.0.0"
+version = "1.1.0"
 description = "IskPulse: ingresos, gastos e inventario de tus pilotos de EVE Online, en tu equipo"
 edition = "2021"
 license = "MIT"

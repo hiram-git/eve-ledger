@@ -4,7 +4,7 @@ What changed in each version of the IskPulse desktop app. Every version is a [re
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
-## Unreleased
+## 1.1.0 — 2026-11-08
 
 - **New name: IskPulse** (formerly EVE Ledger), "Follow the pulse of your ISK". New look: a pulse trace replaces the "E" and the blinking cursor in the logo, the favicon, the header, the installer icons and the setup wizard. Nothing changes in your data: your pilots, history, backups and settings stay where they were, and the app still updates itself. The installers are now called `IskPulse_x.y.z_…`. On Windows and Linux (.deb) the first update from the old name may leave the old app installed next to the new one; uninstall "EVE Ledger" when you see it.
 - **Restoring a backup keeps your pilots linked.** EVE replaces a pilot's login on every renewal, so a backup holds logins that no longer work; restoring used to bring them back and every pilot then needed relinking. Now the history comes from the backup and each pilot keeps its current login (a pilot that isn't linked any more, or that changed owner, keeps the backup's).
