@@ -1,4 +1,4 @@
-//! EVE Ledger desktop: a Tauri wrapper for the personal ledger.
+//! IskPulse desktop: a Tauri wrapper for the personal ledger.
 //! - First launch: the main window shows the wizard (ui/index.html) to create `ledger.env`.
 //! - After that: it starts the API and the web (services.rs) and the main window navigates to the dashboard
 //!   (http://127.0.0.1:<web port>), which has no access to any Tauri command.
@@ -130,8 +130,13 @@ fn save_config(app: AppHandle, config: Config) -> Result<Vec<&'static str>, Stri
 
 #[tauri::command]
 fn retry(app: AppHandle) {
-    if let Some(cfg) = load_config(&app) {
-        launch(&app, cfg);
+    relaunch(&app);
+}
+
+/// Starts the API and the web again with the saved configuration (also after an update that failed to install)
+pub(crate) fn relaunch(app: &AppHandle) {
+    if let Some(cfg) = load_config(app) {
+        launch(app, cfg);
     }
 }
 
@@ -369,9 +374,9 @@ fn menu_text(key: &str) -> &'static str {
     let lang = sys_locale::get_locale().unwrap_or_default().to_lowercase();
     let lang = if lang.starts_with("de") { "de" } else if lang.starts_with("en") { "en" } else { "es" };
     match (lang, key) {
-        ("en", "menu") => "EVE Ledger",
+        ("en", "menu") => "IskPulse",
         ("en", "settings") => "Settings…",
-        ("en", "settingsTitle") => "EVE Ledger · Settings",
+        ("en", "settingsTitle") => "IskPulse · Settings",
         ("en", "reload") => "Reload",
         ("en", "updates") => "Check for updates…",
         ("en", "data") => "Open data folder",
@@ -379,17 +384,17 @@ fn menu_text(key: &str) -> &'static str {
         ("en", "quit") => "Quit",
         ("en", "loginNotice") => "EVE login opened in your browser. When you finish there, this window shows the linked pilot (you can close that tab).",
         ("en", "close") => "Close",
-        ("en", "trayTooltip") => "EVE Ledger",
-        ("en", "trayOpen") => "Open EVE Ledger",
+        ("en", "trayTooltip") => "IskPulse",
+        ("en", "trayOpen") => "Open IskPulse",
         ("en", "traySync") => "Sync now",
-        ("en", "traySyncing") => "EVE Ledger · syncing…",
-        ("en", "traySyncFailed") => "EVE Ledger · the last sync failed (see Pilots)",
+        ("en", "traySyncing") => "IskPulse · syncing…",
+        ("en", "traySyncFailed") => "IskPulse · the last sync failed (see Pilots)",
         ("en", "trayAutostart") => "Start with the system",
-        ("en", "trayHintTitle") => "EVE Ledger keeps running",
-        ("en", "trayHint") => "EVE Ledger is still in the system tray and keeps syncing your pilots. To quit completely, use Quit in its tray icon. You can change this in Settings…",
-        ("de", "menu") => "EVE Ledger",
+        ("en", "trayHintTitle") => "IskPulse keeps running",
+        ("en", "trayHint") => "IskPulse is still in the system tray and keeps syncing your pilots. To quit completely, use Quit in its tray icon. You can change this in Settings…",
+        ("de", "menu") => "IskPulse",
         ("de", "settings") => "Einstellungen…",
-        ("de", "settingsTitle") => "EVE Ledger · Einstellungen",
+        ("de", "settingsTitle") => "IskPulse · Einstellungen",
         ("de", "reload") => "Neu laden",
         ("de", "updates") => "Nach Updates suchen…",
         ("de", "data") => "Datenordner öffnen",
@@ -397,17 +402,17 @@ fn menu_text(key: &str) -> &'static str {
         ("de", "quit") => "Beenden",
         ("de", "loginNotice") => "Der EVE-Login wurde in deinem Browser geöffnet. Wenn du dort fertig bist, zeigt dieses Fenster den verknüpften Piloten (den Tab kannst du schließen).",
         ("de", "close") => "Schließen",
-        ("de", "trayTooltip") => "EVE Ledger",
-        ("de", "trayOpen") => "EVE Ledger öffnen",
+        ("de", "trayTooltip") => "IskPulse",
+        ("de", "trayOpen") => "IskPulse öffnen",
         ("de", "traySync") => "Jetzt synchronisieren",
-        ("de", "traySyncing") => "EVE Ledger · synchronisiert…",
-        ("de", "traySyncFailed") => "EVE Ledger · die letzte Synchronisierung schlug fehl (siehe Piloten)",
+        ("de", "traySyncing") => "IskPulse · synchronisiert…",
+        ("de", "traySyncFailed") => "IskPulse · die letzte Synchronisierung schlug fehl (siehe Piloten)",
         ("de", "trayAutostart") => "Mit dem System starten",
-        ("de", "trayHintTitle") => "EVE Ledger läuft weiter",
-        ("de", "trayHint") => "EVE Ledger bleibt im Infobereich und synchronisiert deine Piloten weiter. Zum vollständigen Beenden: Beenden im Symbol im Infobereich. Ändern kannst du das unter Einstellungen…",
-        (_, "menu") => "EVE Ledger",
+        ("de", "trayHintTitle") => "IskPulse läuft weiter",
+        ("de", "trayHint") => "IskPulse bleibt im Infobereich und synchronisiert deine Piloten weiter. Zum vollständigen Beenden: Beenden im Symbol im Infobereich. Ändern kannst du das unter Einstellungen…",
+        (_, "menu") => "IskPulse",
         (_, "settings") => "Configuración…",
-        (_, "settingsTitle") => "EVE Ledger · Configuración",
+        (_, "settingsTitle") => "IskPulse · Configuración",
         (_, "reload") => "Recargar",
         (_, "updates") => "Buscar actualizaciones…",
         (_, "data") => "Abrir la carpeta de datos",
@@ -415,14 +420,14 @@ fn menu_text(key: &str) -> &'static str {
         (_, "quit") => "Salir",
         (_, "loginNotice") => "Se abrió el login de EVE en tu navegador. Al terminar allí, esta ventana muestra el piloto vinculado (puedes cerrar esa pestaña).",
         (_, "close") => "Cerrar",
-        (_, "trayTooltip") => "EVE Ledger",
-        (_, "trayOpen") => "Abrir EVE Ledger",
+        (_, "trayTooltip") => "IskPulse",
+        (_, "trayOpen") => "Abrir IskPulse",
         (_, "traySync") => "Sincronizar ahora",
-        (_, "traySyncing") => "EVE Ledger · sincronizando…",
-        (_, "traySyncFailed") => "EVE Ledger · el último sync falló (mira Pilotos)",
+        (_, "traySyncing") => "IskPulse · sincronizando…",
+        (_, "traySyncFailed") => "IskPulse · el último sync falló (mira Pilotos)",
         (_, "trayAutostart") => "Iniciar con el sistema",
-        (_, "trayHintTitle") => "EVE Ledger sigue abierto",
-        (_, "trayHint") => "EVE Ledger sigue en la bandeja del sistema y continúa sincronizando tus pilotos. Para salir del todo, usa «Salir» en su icono. Puedes cambiarlo en Configuración…",
+        (_, "trayHintTitle") => "IskPulse sigue abierto",
+        (_, "trayHint") => "IskPulse sigue en la bandeja del sistema y continúa sincronizando tus pilotos. Para salir del todo, usa «Salir» en su icono. Puedes cambiarlo en Configuración…",
         _ => "",
     }
 }
@@ -510,7 +515,7 @@ pub fn run() {
             let nav = handle.clone();
             WebviewWindowBuilder::new(handle, "main", WebviewUrl::App("index.html".into()))
                 .on_navigation(move |url| on_navigation(&nav, url))
-                .title("EVE Ledger")
+                .title("IskPulse")
                 .inner_size(1320.0, 900.0)
                 .min_inner_size(380.0, 560.0)
                 .visible(!hidden)
@@ -540,7 +545,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("no se pudo iniciar EVE Ledger");
+        .expect("no se pudo iniciar IskPulse");
 
     app.run(|app, event| match event {
         // Closing the main window leaves it in the tray, syncing (if it's configured and that's what's wanted;

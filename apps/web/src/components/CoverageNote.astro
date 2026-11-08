@@ -7,7 +7,7 @@ import Icon from './Icon.astro';
 import type { Pilot } from '../lib/api';
 import { ago, isk } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
-import { pilotState } from '../lib/pilot-state';
+import { ASSETS_SCOPE, pilotState } from '../lib/pilot-state';
 
 interface Props {
   pilots: Pilot[];
@@ -21,7 +21,6 @@ interface Props {
 const { pilots, staleAfterMs, syncRunning, amounts, walletOnly } = Astro.props;
 const lang = getLang(Astro);
 const m = t(lang);
-const ASSETS_SCOPE = 'esi-assets.read_assets.v1';
 
 let oldValue = 0;
 let oldest: string | null = null;

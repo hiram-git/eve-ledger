@@ -4,11 +4,11 @@ Tres piezas de 2000 × 1000 px en español e inglés, para redes sociales y foro
 
 | Pieza | Archivos | Capturas |
 |---|---|---|
-| Portada: qué es EVE Ledger | `eve-ledger-brochure-es.png`, `eve-ledger-brochure-en.png` | resumen (delante) y una doctrina (detrás) |
-| Doctrinas: quién vuela qué y cuánto cuesta | `eve-ledger-doctrinas-es.png`, `eve-ledger-doctrinas-en.png` | la doctrina (delante) y «Con qué se paga» (detrás) |
-| Indicadores y Balances | `eve-ledger-indicadores-es.png`, `eve-ledger-indicadores-en.png` | indicadores (delante) y balances (detrás) |
+| Portada: qué es IskPulse | `iskpulse-brochure-es.png`, `iskpulse-brochure-en.png` | resumen (delante) y una doctrina (detrás) |
+| Doctrinas: quién vuela qué y cuánto cuesta | `iskpulse-doctrinas-es.png`, `iskpulse-doctrinas-en.png` | la doctrina (delante) y «Con qué se paga» (detrás) |
+| Indicadores y Balances | `iskpulse-indicadores-es.png`, `iskpulse-indicadores-en.png` | indicadores (delante) y balances (detrás) |
 
-Salen de `brochure.html` (`?slide=portada|doctrinas|indicadores&lang=es|en&v=1.0.0`), que sigue el design system del dashboard (`docs/design-system-prompt.md`), con las capturas `shot-<pantalla>-<idioma>.jpg` (también las usa el `README.md` de la raíz).
+Salen de `brochure.html` (`?slide=portada|doctrinas|indicadores&lang=es|en&v=1.1.0`), que sigue el design system del dashboard (`docs/design-system-prompt.md`), con las capturas `shot-<pantalla>-<idioma>.jpg` (también las usa el `README.md` de la raíz).
 
 **Datos de demostración, todos inventados** (`demo/seed.ts`): seis pilotos ficticios con 65 días de historial relativos a hoy (ratting en Deklein con ESS, escalaciones y loot vendido (con el impuesto de corporación de cada cobro), misiones, trading en Jita, couriers, PLEX, donaciones entre ellos), tres naves perdidas (una repuesta con su courier, otra sin reponer, otra con la ventana abierta), inventario en estaciones y citadelas, puntos de lealtad con Sisters of EVE y Federation Navy más EverMarks, y una doctrina de ejemplo (Hurricane, Scimitar y Rifter) con skills sembradas y ESI simulado (`demo/esi-mock.ts`, `demo/types.ts`; precios de Jita incluidos). Nada sale de una cuenta real.
 

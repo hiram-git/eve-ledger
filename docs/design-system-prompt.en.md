@@ -1,10 +1,10 @@
-# Prompt: EVE Ledger design system (English)
+# Prompt: IskPulse design system (English)
 
 English version of `design-system-prompt.md`. Copy everything below the next line into Claude or another design tool and fill in the last section with what you want designed. Keep both versions in sync.
 
 ---
 
-You are a product designer and front-end developer. You will design for **EVE Ledger**, following its design system to the letter. Do not invent new tokens, fonts or components when one of the ones below solves the case; if you need a new one, build it from these tokens and say so.
+You are a product designer and front-end developer. You will design for **IskPulse**, following its design system to the letter. Do not invent new tokens, fonts or components when one of the ones below solves the case; if you need a new one, build it from these tokens and say so.
 
 ## 1. Product
 
@@ -65,7 +65,7 @@ Use them as CSS variables with these names.
 | `--expenses` | `#e8604c` | Expenses |
 | `--inventory` | `#9a7cf0` | Assets |
 | `--balance` | `#6b8799` | Balance, neutral next to assets |
-| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Categorical palette for breakdowns (donuts and their legend table, the parts of a fit's cost): fixed order, slice i always gets `--cat-((i mod 7) + 1)` |
+| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Categorical palette for pilots (donuts and their legend table; in Doctrines, the parts of a fit's cost): each pilot its fixed `--cat-N` by its place among the pilots by balance |
 
 Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also for colour-vision-deficiency separation). Do not reuse them for buttons, borders or interface text, and do not use the interface accents as series. Translucent tints of a token (a border, a hover fill) are derived with `color-mix(in srgb, var(--token) N%, transparent)`, never a copied hex.
 
@@ -81,7 +81,7 @@ Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also 
 
 - **Inter** (variable): the whole interface. 14 px / 1.5 base.
 - **IBM Plex Mono** (400 and 500): **only figures and data** (amounts, dates in tables, IDs). Always with `font-variant-numeric: tabular-nums` in columns.
-- **Barlow Condensed** (500 and 700): **only the wordmark** "EVE LEDGER_" (uppercase, 46 px in the brand strip; the "_" in cyan, static).
+- **Barlow Condensed** (500 and 700): **only the wordmark** "ISKPULSE" (uppercase, 46 px in the brand strip, followed by the cyan pulse trace, static: the same line as the emblem).
 - Scale: main net 44 px mono 500 (`letter-spacing: -0.04em`) · panel headline figure 32 px · KPI 28 px · Net worth 24 px · section headings (`h2`) 15 px 600 · body 14 px · notes, metadata and sub-text **13 px (floor)** · table labels, axes and footer **12 px (floor)**.
 - Table headers: 12 px, 600, uppercase, `letter-spacing: 0.06em`, colour `#8ba4b5`.
 - Hierarchy: each page's `h1` is for screen readers only; sections are `h2`. **No eyebrows** (small labels above headings) and **no section numbers**.
@@ -91,7 +91,7 @@ Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also 
 - **Panel with crosshair corners:** background `linear-gradient(135deg, #111c27, #0d1620 70%)`, `--line` border, 10 px radius. Two 12 × 12 px corners in `--corner` (top-left and bottom-right, via `::before` and `::after`) that follow the radius.
 - **Featured panel (main KPI):** border `#345469`, background `linear-gradient(150deg, #13283875, #0f1924 55%)`, corners in `--cyan-dim`.
 - **KPI:** 13 px label in `--text-secondary` with a 14 px icon in `--cyan-dim`; mono value (colour `#cfe3ee`, or green/red when it is a net); 13 px sub-text in `--text-muted`.
-- **Top bar:** 52 px; compact mark (26 px square with an "E" in Barlow and a `--cyan-dim` border), sync status (6 px dot: green when up to date, amber when turned off, pulsing cyan while syncing), ES/EN/DE switcher and the Sync button.
+- **Top bar:** 52 px; compact mark (26 px square with the cyan pulse trace and a `--cyan-dim` border), sync status (6 px dot: green when up to date, amber when turned off, pulsing cyan while syncing), ES/EN/DE switcher and the Sync button.
 - **Brand strip:** 118 px (92 px on mobile) with the wordmark over a decorative star map. It never pushes the net below the first screen.
 - **Section navigation:** 13 px tabs at weight 550, text `#93a6b7`. The active one has background `#16304070`, text `#8addee`, border `#30506480` and a 2 px cyan bottom line; `aria-current="page"`.
 - **Filters** (period tabs, pilot chips): `aria-current="true"`. Each chip shows the pilot's name and their wallet balance (no sign, no colour: it isn't a net); a pilot with issues shows only a small amber icon and the data age in grey, with a neutral border.
@@ -135,7 +135,8 @@ Contrast-checked against `--panel` (the categorical palette, on `#111c27`, also 
 - Daily income and expense bars in their series colours, with one dot per day for the net (green/red).
 - The axis uses one unit and the same decimals (`0 · 500 M · 1,0 B`); labels are skipped depending on the available width.
 - Days with no history are hatched with the label "No history" (days with no sync likewise, labelled "No sync"). A day with no transactions leaves a short mark on the axis, distinct from the hatching.
-- The part of a bar that is not gameplay (PLEX / accounts) is hatched, with a legend.
+- The part of a bar that is not gameplay (PLEX / accounts) is hatched, with a legend; in a donut its slice is grey and hatched, with "X without PLEX" under it. Hatching always means "accounts, not gameplay".
+- The categorical palette belongs to pilots alone, the one entity that crosses panels: each pilot keeps the same colour in every donut on every page (its place among the pilots sorted by balance, not its rank in each breakdown). Activities use neutral tones by their fixed order (so PvE isn't mistaken for the income blue); ships, one grey tone that gets lighter; "Others", the strong line colour. Hatching marks PLEX and sits on its owner's colour (grey for activities, the pilot's in its donuts, red in the chart).
 - Accessibility: the chart is a list (`role="list"` and `listitem`) with a single Tab stop (← → Home End), an `aria-label` per day, a tooltip with abbreviated figures and a full table under "View as table".
 
 ## 9. Motion

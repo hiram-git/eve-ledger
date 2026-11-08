@@ -18,3 +18,13 @@ export const shareOf = (value: number, total: number, lang: string) => {
   if (p < 0.01) return `<1 %`;
   return new Intl.NumberFormat(lang, { style: 'percent', maximumFractionDigits: 0 }).format(p);
 };
+
+// A pilot's colour: its place among the pilots sorted by balance (the Summary's pilots table, which comes that way from
+// the API), the same in every donut of every page. The palette is the pilots' alone; «Otros» and unknown pilots in grey
+export const pilotColors = (pilots: { id: number; balance: number | null }[]) => {
+  const order = [...pilots].sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0)).map((p) => p.id);
+  return (id: number) => {
+    const i = order.indexOf(id);
+    return i < 0 ? 'var(--line-strong)' : `var(--cat-${Math.min(i, 6) + 1})`;
+  };
+};

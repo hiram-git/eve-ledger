@@ -1,4 +1,4 @@
-# Prompt: design system de EVE Ledger
+# Prompt: design system de IskPulse
 
 Prompt autocontenido para diseñar pantallas nuevas (o una versión para corporaciones) con el mismo sistema visual que el dashboard actual. Cópialo entero desde la línea siguiente, en Claude u otra herramienta de diseño, y completa la última sección con lo que quieres diseñar.
 
@@ -6,7 +6,7 @@ Fuente de verdad: `apps/web/src/styles/theme.css`, `PRODUCT.md` y las reglas de 
 
 ---
 
-Eres diseñador de producto y front-end. Vas a diseñar para **EVE Ledger** siguiendo su design system al pie de la letra. No inventes tokens, fuentes ni componentes nuevos si uno de los de abajo resuelve el caso; si hace falta uno nuevo, constrúyelo con estos tokens y dilo.
+Eres diseñador de producto y front-end. Vas a diseñar para **IskPulse** siguiendo su design system al pie de la letra. No inventes tokens, fuentes ni componentes nuevos si uno de los de abajo resuelve el caso; si hace falta uno nuevo, constrúyelo con estos tokens y dilo.
 
 ## 1. Producto
 
@@ -67,7 +67,7 @@ Eres diseñador de producto y front-end. Vas a diseñar para **EVE Ledger** sigu
 | `--expenses` | `#e8604c` | Gastos |
 | `--inventory` | `#9a7cf0` | Inventario |
 | `--balance` | `#6b8799` | Saldo, neutro junto al inventario |
-| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Paleta categórica de los repartos (tortas y su tabla-leyenda, partes del coste de un fit): orden fijo, la porción i siempre lleva `--cat-((i mod 7) + 1)` |
+| `--cat-1` … `--cat-7` | `#3987e5` `#d95926` `#199e70` `#c98500` `#d55181` `#9085e9` `#e66767` | Paleta categórica de los pilotos (tortas y su tabla-leyenda; en Doctrinas, partes del coste de un fit): cada piloto su `--cat-N` fijo por su puesto entre los pilotos por saldo |
 
 Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, también en separación para daltonismo). No los reutilices como colores de botones, bordes o texto de interfaz, y no uses los acentos de interfaz como series. Los tintes translúcidos de un token (borde o relleno al pasar) se derivan con `color-mix(in srgb, var(--token) N%, transparent)`, no con un hex copiado.
 
@@ -83,7 +83,7 @@ Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, 
 
 - **Inter** (variable): toda la interfaz. 14 px / 1.5 de base.
 - **IBM Plex Mono** (400 y 500): **solo cifras y datos** (importes, fechas en tablas, IDs). Siempre con `font-variant-numeric: tabular-nums` en columnas.
-- **Barlow Condensed** (500 y 700): **solo el logotipo** «EVE LEDGER_» (mayúsculas, 46 px en la franja de marca; el «_» en cian, fijo).
+- **Barlow Condensed** (500 y 700): **solo el logotipo** «ISKPULSE» (mayúsculas, 46 px en la franja de marca, seguido del trazo de pulso en cian, fijo: el mismo del emblema).
 - Escala: neto principal 44 px mono 500 (`letter-spacing: -0.04em`) · cifra titular de un panel 32 px · KPI 28 px · Patrimonio 24 px · títulos de sección (`h2`) 15 px 600 · texto 14 px · notas, metadatos y sub-textos **13 px (suelo)** · etiquetas de tabla, ejes y pie **12 px (suelo)**.
 - Cabeceras de tabla: 12 px, 600, mayúsculas, `letter-spacing: 0.06em`, color `#8ba4b5`.
 - Jerarquía: el `h1` de cada página es solo para lectores de pantalla; las secciones son `h2`. **Sin eyebrows** (etiquetas pequeñas sobre títulos) y **sin números de sección**.
@@ -93,7 +93,7 @@ Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, 
 - **Panel con esquinas de mira:** fondo `linear-gradient(135deg, #111c27, #0d1620 70%)`, borde `--line`, radio 10 px. Dos esquinas de 12 × 12 px en `--corner` (arriba-izquierda y abajo-derecha, con `::before` y `::after`), que siguen el radio.
 - **Panel destacado (KPI principal):** borde `#345469`, fondo `linear-gradient(150deg, #13283875, #0f1924 55%)`, esquinas en `--cyan-dim`.
 - **KPI:** etiqueta de 13 px en `--text-secondary` con icono de 14 px en `--cyan-dim`; valor en mono (color `#cfe3ee`, o verde/rojo si es un neto); sub-texto de 13 px en `--text-muted`.
-- **Barra superior:** 52 px; marca compacta (cuadrado de 26 px con «E» en Barlow y borde `--cyan-dim`), estado del sync (punto de 6 px: verde al día, ámbar desactivado, cian latiendo mientras sincroniza), selector ES/EN/DE y botón Sincronizar.
+- **Barra superior:** 52 px; marca compacta (cuadrado de 26 px con el trazo de pulso en cian y borde `--cyan-dim`), estado del sync (punto de 6 px: verde al día, ámbar desactivado, cian latiendo mientras sincroniza), selector ES/EN/DE y botón Sincronizar.
 - **Franja de marca:** 118 px (92 px en móvil) con el logotipo sobre un mapa estelar decorativo. Nunca empuja el neto fuera de la primera pantalla.
 - **Navegación de secciones:** pestañas de 13 px 550, texto `#93a6b7`. La activa lleva fondo `#16304070`, texto `#8addee`, borde `#30506480` y una línea inferior de 2 px en cian; `aria-current="page"`.
 - **Filtros** (pestañas de período, chips de piloto): `aria-current="true"`. Cada chip lleva el nombre y el saldo de su wallet (sin signo ni color: no es un neto); un piloto con problemas lleva solo un icono ámbar pequeño y la edad en gris, con borde neutro.
@@ -137,7 +137,8 @@ Validados en contraste sobre `--panel` (la paleta categórica, sobre `#111c27`, 
 - Barras diarias de ingresos y gastos en sus colores de serie, con un punto por día para el neto (verde/rojo).
 - El eje usa una sola unidad y los mismos decimales (`0 · 500 M · 1,0 B`); las etiquetas se omiten según el ancho.
 - Los días sin historial van rayados con la etiqueta «Sin historial» (los días sin sync, igual, con «Sin sync»). Un día sin movimientos deja una marca corta en el eje, distinta del rayado.
-- La parte de una barra que no es juego (PLEX / cuentas) va rayada, con leyenda.
+- La parte de una barra que no es juego (PLEX / cuentas) va rayada, con leyenda; en una torta, su porción va gris y rayada, con «X sin PLEX» bajo ella. El rayado significa siempre «cuentas, no juego».
+- La paleta categórica es solo de los pilotos, la única entidad que cruza paneles: cada piloto lleva el mismo color en todas las tortas de todas las páginas (su puesto entre los pilotos ordenados por saldo, no su puesto en cada reparto). Las actividades van en tonos neutros por su orden fijo (así PvE no se confunde con el azul de ingresos); las naves, en un solo gris que se aclara; «Otros», en el color de línea fuerte. El rayado marca el PLEX y va sobre el color de su dueño (gris en actividades, el del piloto en sus tortas, rojo en el gráfico).
 - Accesibilidad: el gráfico es una lista (`role="list"` y `listitem`) con una sola parada de Tab (← → Inicio Fin), `aria-label` por día, tooltip con cifras abreviadas y una tabla completa en «Ver como tabla».
 
 ## 9. Movimiento

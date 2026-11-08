@@ -13,7 +13,7 @@ import BarList, { type BarRow } from '../components/BarList.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import ShipLosses from '../components/ShipLosses.astro';
 import Donut from '../components/Donut.astro';
-import { fold } from '../lib/shares';
+import { fold, pilotColors } from '../lib/shares';
 import {
   ApiError,
   getIndicators,
@@ -22,6 +22,9 @@ import {
   getMap,
   getPilots,
   getSummary,
+  CAPSULES,
+  gameResult,
+  lossesHeadline,
   getSyncStatus,
   loginUrl,
   syncLogUrl,
@@ -33,10 +36,10 @@ import {
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { ago, isk, iskFull, longDate, refTypeLabel, shortDate } from '../lib/format';
+import { ago, approx, isk, iskFull, longDate, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { withInventory } from '../lib/inventory-pref';
-import { ASSETS_SCOPE, CONTRACTS_SCOPE, SKILLS_SCOPE, LOSSES_SCOPE, hasIssue, pilotState } from '../lib/pilot-state';
+import { ASSETS_SCOPE, CONTRACTS_SCOPE, SKILLS_SCOPE, LOSSES_SCOPE, hasIssue, needsRelink, pilotState, staleAfter, syncKindLabel } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -107,10 +110,8 @@ const syncFailed = q.get('syncFailed');
 
 // Consolidated net worth and proportions for the breakdown bars
 const inventoryValue = inventory && inventory.stacks > 0 ? inventory.value : 0;
-// Without inventory, the figure is just the wallet balance
-const netWorth = (summary?.balance ?? 0) + (withInv ? inventoryValue : 0);
-const share = (part: number, total: number) => (total > 0 ? Math.max(0, Math.min(1, part / total)) : 0);
-const flowTotal = (summary?.totals.income ?? 0) + (summary?.totals.expenses ?? 0);
+// Only shown with inventory (without it, the card isn't drawn)
+const netWorth = (summary?.balance ?? 0) + inventoryValue;
 
 // Most recent sync across all characters: drives the global stale-data warning
 const globalLastSync = summary?.characters
@@ -122,7 +123,7 @@ const globalLastSync = summary?.characters
 const lastSync = selected ? (selected.lastSyncAt ?? undefined) : globalLastSync;
 
 // Age: data is «stale» when older than two sync intervals (or 2 h if the cron is off)
-const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const staleAfterMs = staleAfter(status);
 const isStale = (iso: string | null | undefined) => !iso || Date.now() - new Date(iso).getTime() > staleAfterMs;
 // Pilots that need attention: the same state as in /pilotos (error, first sync or stale data),
 // with their short cause and the action to take, in a line under the filter
@@ -150,15 +151,8 @@ const healthItems =
     if (st.kind === 'pending') return { id: c.id, name: c.name, cause: m.healthPending, action: null };
     if (st.kind === 'error') {
       const token = st.hint === m.errToken;
-      const kinds: Record<string, string> = {
-        journal: m.kindJournal,
-        transactions: m.kindTransactions,
-        assets: m.kindAssets,
-        killmails: m.kindKillmails,
-        contracts: m.kindContracts,
-      };
-      const raw = pilotById.get(c.id)?.lastError?.kind ?? '';
-      return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kinds[raw] ?? raw), action: token ? 'relink' : 'review' };
+      const kind = syncKindLabel(pilotById.get(c.id)?.lastError?.kind ?? '', m);
+      return { id: c.id, name: c.name, cause: token ? m.healthToken : m.healthFailed(kind), action: needsRelink(pilotById.get(c.id)!, st, m) ? 'relink' : 'review' };
     }
     // Sync up to date, but some permission is missing (inventory, killmails, contracts): fixed by relinking
     const perms = missingPerms(c.id);
@@ -235,7 +229,8 @@ const pricesOld =
 const PLEX_TYPE_ID = 44992;
 // Ships lost today (EVE day): «Hoy» (Today) says so, that's when the bill matters most
 const todayIso = new Date().toISOString().slice(0, 10);
-const lostTodayList = losses?.losses.filter((l) => l.time.slice(0, 10) === todayIso) ?? [];
+// Without capsules and losses under 1 M: a ship and its pod is one loss, and a pod can't be insured
+const lostTodayList = losses?.losses.filter((l) => l.time.slice(0, 10) === todayIso && !l.trivial && !CAPSULES.has(l.shipTypeId)) ?? [];
 // Omega for all accounts, with the same calculation as Indicators (wallet balance + stored PLEX)
 const omega = !pilotId && pilotList?.length ? indicators?.omega : undefined;
 const firstDate = summary?.coverage.firstEntryAt?.slice(0, 10) ?? null;
@@ -259,7 +254,7 @@ const toReplace = losses?.totals.toReplace ?? 0;
 const accountsNet = summary?.byActivity.find((a) => a.activity === 'accounts')?.net ?? 0;
 const hasAccounts = Math.abs(accountsNet) >= 0.5;
 const showResult = !!summary && ((!!losses && notBack + toReplace >= 0.5) || hasAccounts);
-const headline = summary ? summary.totals.net - (showResult ? accountsNet + notBack + toReplace : 0) : 0;
+const headline = summary ? (showResult ? gameResult(summary, losses) : summary.totals.net) : 0;
 // The previous period's result takes out the same things, so the comparison is of the headline figure (before it
 // compared the wallet net under a «Resultado» headline: the green figure and the red arrow spoke of different numbers)
 const previousHeadline = summary
@@ -268,6 +263,9 @@ const previousHeadline = summary
 const delta = summary && summary.previous.complete ? headline - previousHeadline : undefined;
 // The card's activities are gameplay ones: PLEX goes on its own line at the foot
 const cardActivities = summary?.byActivity.filter((a) => a.activity !== 'accounts') ?? [];
+// The period's gross income and expenses: the breakdown of the wallet net, so they go with it (as a bar under «Hoy»
+// they read as today's expenses), in the same words as «Hoy»
+const periodFlow = summary ? m.todayFlow(fmt(summary.totals.income), fmt(summary.totals.expenses)) : '';
 // Moved with your other pilots: not in any net. In a pilot's view, in both directions (what they received
 // and what they sent) and how much their wallet changed with it, which is what they see in game
 const internalNote = !summary
@@ -283,11 +281,8 @@ const internalNote = !summary
     : summary.internalTransfers > 0
       ? m.internal(fmt(summary.internalTransfers))
       : null;
-// Card footer: lost ships (the firm part with its sign, the estimate in gray). In the consolidated view, how much of the
-// firm part is already in the net (PvP); not in a pilot's view, because someone else may have paid to replace their ships
-const lossesFirm = losses?.totals.firmCost ?? 0;
-const lossesInNet = !selected && losses ? losses.totals.walletEffect : 0;
-const lossesOnlyEstimate = Math.abs(lossesFirm) < 0.5 && toReplace >= 0.5;
+// Card footer: lost ships (the firm part with its sign, the estimate in gray)
+const { value: lossesHead, estimate: lossesOnlyEstimate } = losses ? lossesHeadline(losses.totals) : { value: 0, estimate: false };
 
 // Net with partial coverage: the title says so (90 days requested, 42 with history)
 const coverageNote = partialHistory && summary ? ` (${m.onlyCovered(summary.coverage.coveredDays)})` : '';
@@ -361,9 +356,27 @@ const totalLabel = selected ? m.pilotsTotalAll : m.pilotsTotal(summary?.characte
 // Pies of the pilots table: who the income comes from and who spends (gross, without what's moved between pilots).
 // The color follows the pilot (their position in the list), also in their row's swatch; with more than 7, «Otros»
 const pilotRows = summary?.characters ?? [];
-const pilotColor = (i: number) => `var(--cat-${(pilotRows.length <= 7 ? i : Math.min(i, 6)) + 1})`;
-const pilotIncomeSlices = fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? c.income : 0 })), m.otherPilots);
-const pilotExpensesSlices = fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? c.expenses : 0 })), m.otherPilots);
+// The same colour for a pilot in every donut (the lost ships' too, and Indicators'): its place in this list
+const colorOfPilot = pilotColors(pilotRows);
+const pilotColor = (i: number) => colorOfPilot(pilotRows[i].id);
+// With PLEX, each pilot's slice splits into its game part and its PLEX part, hatched in its own colour (the accounts'
+// cost, apart from the game: it read as three quarters of the expenses being one pilot's spending)
+type PilotRow = (typeof pilotRows)[number];
+const pilotSlices = (value: (c: PilotRow) => number, plex: (c: PilotRow) => number) =>
+  pilotRows.length > 7
+    ? fold(pilotRows.map((c) => ({ label: c.name, value: c.lastSyncAt ? value(c) : 0 })), m.otherPilots)
+    : pilotRows.flatMap((c, i) =>
+        c.lastSyncAt
+          ? [
+              { label: c.name, value: value(c) - plex(c), color: pilotColor(i) },
+              { label: `${c.name} · PLEX`, value: plex(c), color: pilotColor(i), hatch: true },
+            ]
+          : [],
+      );
+const pilotIncomeSlices = pilotSlices((c) => c.income, (c) => c.plexIncome);
+const pilotExpensesSlices = pilotSlices((c) => c.expenses, (c) => c.plexExpenses);
+const plexIncomeAll = pilotRows.reduce((n, c) => n + c.plexIncome, 0);
+const plexExpensesAll = pilotRows.reduce((n, c) => n + c.plexExpenses, 0);
 // Columns that sort the table (and the cards on mobile): the data-* key of each row and its label
 const sortCols = [
   { key: 'name', label: m.pilot, cls: '' },
@@ -421,6 +434,15 @@ const worthNote =
   pilots={summary?.characters.length}
   pilotIssues={(pilotList ?? []).filter((p) => hasIssue(p, pilotStates.get(p.id)!)).length}
 >
+  {/* 28 Tabs from the top to the chart: jumps to each section, right after «Saltar al contenido» */}
+  {dashboard && summary && (
+    <Fragment slot="skip">
+      {!pilotEmpty && <a class="skip-link" href="#flujo">{m.skipToChart}</a>}
+      {!pilotEmpty && <a class="skip-link" href="#por-actividad">{m.skipToActivity}</a>}
+      {!pilotEmpty && losses && <a class="skip-link" href="#perdidas">{m.skipToLosses}</a>}
+      <a class="skip-link" href="#pilotos">{m.skipToPilots}</a>
+    </Fragment>
+  )}
     {dashboard && (
     <nav class="main-nav shell" aria-label={m.period} slot="nav">
       <div class="nav-tabs">
@@ -505,7 +527,7 @@ const worthNote =
         noPilots && <FirstRun slots={PILOT_SLOTS} />
       }
       {
-        waiting && <FirstSync pilots={summary!.characters} slots={PILOT_SLOTS} />
+        waiting && <FirstSync pilots={summary!.characters} slots={PILOT_SLOTS} states={pilotStates} />
       }
 
       {
@@ -657,6 +679,7 @@ const worthNote =
                         <small> ISK</small>
                         <span class="sr-only">{headline > 0 ? m.gain : headline < 0 ? m.loss : m.even} ({fullNet(headline)})</span>
                       </span>
+                      {!showResult && <p class="versus">{periodFlow}</p>}
                       {showResult && (
                         /* Where it comes from, as the equation Indicators uses (operator in its column, figures aligned):
                            the wallet net (what the activities, «Hoy» and the chart measure), the PLEX kept apart, the ships
@@ -665,7 +688,10 @@ const worthNote =
                           <caption class="sr-only">{m.resultBreakdown}</caption>
                           <tbody>
                             <tr>
-                              <th scope="row">{selected ? m.resultWalletPilot : m.resultWallet}</th>
+                              <th scope="row">
+                                {selected ? m.resultWalletPilot : m.resultWallet}
+                                <span class="row-meta">{periodFlow}</span>
+                              </th>
                               <td class="op" aria-hidden="true"></td>
                               <td title={fullNet(summary.totals.net)}>{fmt(summary.totals.net, { sign: true })}</td>
                             </tr>
@@ -683,12 +709,6 @@ const worthNote =
                                     ]
                                       .filter(Boolean)
                                       .join(' · ')}
-                                    {!selected && (
-                                      <>
-                                        {' · '}
-                                        <a class="inline-action" href="/indicadores">{m.accountsOmegaLink}</a>
-                                      </>
-                                    )}
                                   </span>
                                 </th>
                                 <td class="op">{accountsNet < 0 ? '+' : '−'}</td>
@@ -706,7 +726,7 @@ const worthNote =
                               <tr class="estimate">
                                 <th scope="row">{m.resultToReplaceRow}</th>
                                 <td class="op">−</td>
-                                <td title={full(toReplace)}>{`~\u2009${fmt(toReplace)}`}</td>
+                                <td title={full(toReplace)}>{approx(fmt(toReplace))}</td>
                               </tr>
                             )}
                             <tr class="total">
@@ -812,34 +832,6 @@ const worthNote =
                     </div>
                   </div>
                   <div class="composition">
-                    <div class="flow">
-                      <div class="ratio" aria-hidden="true">
-                        {summary.totals.income > 0 && (
-                          <i class="income" style={`flex-grow:${share(summary.totals.income, flowTotal)}`} />
-                        )}
-                        {summary.totals.expenses > 0 && (
-                          <i class="expenses" style={`flex-grow:${share(summary.totals.expenses, flowTotal)}`} />
-                        )}
-                      </div>
-                      <dl class="breakdown">
-                        <div>
-                          <dt>
-                            <i class="key income" />
-                            {m.income}
-                          </dt>
-                          <dd title={full(summary.totals.income)}>{fmt(summary.totals.income)}</dd>
-                        </div>
-                        <div>
-                          <dt>
-                            <i class="key expenses" />
-                            {m.expenses}
-                          </dt>
-                          <dd title={full(-summary.totals.expenses)}>{fmt(-summary.totals.expenses)}</dd>
-                        </div>
-                      </dl>
-                      {/* At 520–879 px card width, the note goes here: otherwise a gap is left under Income/Expenses */}
-                      {internalNote && <span class="sub in-flow">{internalNote}</span>}
-                    </div>
                     {
                       cardActivities.length > 0 && (
                         <div class="acts-block">
@@ -860,7 +852,7 @@ const worthNote =
                               </li>
                             ))}
                           </ul>
-                          <p class="acts-note">{m.actsNote}</p>
+                          {cardActivities.some((a) => a.activity === 'trading') && <p class="acts-note">{m.actsNote}</p>}
                           <a class="acts-link" href="#por-actividad">
                             {m.activityDetailLink}
                             <i class="chev" aria-hidden="true" />
@@ -870,60 +862,62 @@ const worthNote =
                     }
                   </div>
                   <div class="hero-foot">
-                    {losses && losses.totals.count > 0 && (
-                      /* What the lost ships cost, full width (not a sixth activity): the firm part
-                         with its sign, how much of it is already in the net (PvP) and the estimate in gray */
-                      <p class="foot-losses">
-                        <span>{m.actsLosses}</span>
-                        {lossesOnlyEstimate ? (
-                          /* Nothing firm yet (open windows not replaced): the figure is the estimate, in gray */
-                          <span class="foot-losses-value estimate" title={fullNet(-toReplace)}>
-                            ~{fmt(-toReplace, { sign: true })}
-                            <span class="sr-only"> ({m.lossEstimate})</span>
-                          </span>
-                        ) : (
+                    {/* One row at the card's foot: lost ships and (wallets only) the Omega line, with the inventory toggle
+                        always here, in both states (it used to jump ~350 px up to the net-worth card when pressed) */}
+                    <div class="hero-tools">
+                      <div class="hero-tools-text">
+                        {losses && losses.totals.count > 0 && (
+                          /* What the lost ships cost, full width (not a sixth activity): the firm part
+                             with its sign, how much of it is already in the net (PvP) and the estimate in gray */
+                          <p class="foot-losses">
+                            <span>{m.actsLosses}</span>
+                            {lossesOnlyEstimate ? (
+                              /* Nothing firm yet (insurance in, replacement still to buy): the figure is the estimate, in gray */
+                              <span class="foot-losses-value estimate" title={fullNet(lossesHead)}>
+                                {approx(fmt(lossesHead, { sign: true }))}
+                                <span class="sr-only"> ({m.lossEstimate})</span>
+                              </span>
+                            ) : (
+                              /* Never green: insurance that covered more than the replacement isn't a gain from losing ships */
+                              <span class:list={['foot-losses-value', sign(Math.min(lossesHead, 0))]} title={fullNet(lossesHead)}>
+                                {fmt(lossesHead, { sign: true })}
+                              </span>
+                            )}
+                            <a class="inline-action" href="#perdidas">{nbsp(m.actsLossesLink)}</a>
+                          </p>
+                        )}
+                        {/* Moved with your other pilots: only in a pilot's view (in the consolidated view it cancels out) */}
+                        {selected && internalNote && <span class="sub">{internalNote}</span>}
+                        {!withInv && (
                           <>
-                            <span class:list={['foot-losses-value', sign(lossesFirm)]} title={fullNet(lossesFirm)}>
-                              {fmt(lossesFirm, { sign: true })}
-                            </span>
+                            {omega && omega.missing !== null && (
+                              <p class="omega-line">
+                                {omega.missing > 0 ? m.omegaLine(fmt(omega.missing)) : m.omegaLineCovered}
+                                {' · '}
+                                <a class="inline-action" href="/indicadores">{m.indicators}</a>
+                              </p>
+                            )}
+                            {!selected && pilotList && (
+                              <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} walletOnly={true} />
+                            )}
+                            {worthNote && (
+                              <p class="worth-note">
+                                <Icon name="alert" class="stale-icon" />
+                                {worthNote}
+                              </p>
+                            )}
                           </>
                         )}
-                        <a class="inline-action" href="#perdidas">{nbsp(m.actsLossesLink)}</a>
-                      </p>
-                    )}
-                    {internalNote && <span class="sub at-end">{internalNote}</span>}
-                    {!withInv && (
-                      /* Wallets only: no net-worth card (it repeated the active chip's balance 200 px below it); its Omega
-                         line, its coverage note and the inventory toggle live here, at the card's foot */
-                      <div class="hero-tools">
-                        <div class="hero-tools-text">
-                          {omega && omega.missing !== null && (
-                            <p class="omega-line">
-                              {omega.missing > 0 ? m.omegaLine(fmt(omega.missing)) : m.omegaLineCovered}
-                              {' · '}
-                              <a class="inline-action" href="/indicadores">{m.indicators}</a>
-                            </p>
-                          )}
-                          {!selected && pilotList && (
-                            <CoverageNote pilots={pilotList} staleAfterMs={staleAfterMs} syncRunning={status?.running} amounts={worthByPilot} walletOnly={true} />
-                          )}
-                          {worthNote && (
-                            <p class="worth-note">
-                              <Icon name="alert" class="stale-icon" />
-                              {worthNote}
-                            </p>
-                          )}
-                        </div>
-                        <form class="inv-toggle" method="get" action="/inv">
-                          <fieldset>
-                            <legend class="sr-only">{m.invToggle}</legend>
-                            <input type="hidden" name="back" value={invBack} />
-                            <button type="submit" name="to" value="0" aria-pressed="true">{m.invWallets}</button>
-                            <button type="submit" name="to" value="1" aria-pressed="false">{m.invPlus}</button>
-                          </fieldset>
-                        </form>
                       </div>
-                    )}
+                      <form class="inv-toggle" method="get" action="/inv">
+                        <fieldset>
+                          <legend class="sr-only">{m.invToggle}</legend>
+                          <input type="hidden" name="back" value={invBack} />
+                          <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
+                          <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
+                        </fieldset>
+                      </form>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -933,14 +927,13 @@ const worthNote =
                   <div>
                     <span class="label">
                       <Icon name="wallet" />
-                      {withInv ? m.netWorth : m.walletsOnly}
+                      {m.netWorth}
                     </span>
                     <span class="value" title={full(netWorth)}>
                       {fmt(netWorth)}
                       <small> ISK</small>
                     </span>
                   </div>
-                  {withInv && (
                   <dl class="breakdown">
                     <div>
                       <dt>
@@ -959,16 +952,6 @@ const worthNote =
                       </dd>
                     </div>
                   </dl>
-                  )}
-                  {/* What counts toward net worth: wallets only (what pays for Omega) or + inventory. Remembered (cookie) */}
-                  <form class="inv-toggle" method="get" action="/inv">
-                    <fieldset>
-                      <legend class="sr-only">{m.invToggle}</legend>
-                      <input type="hidden" name="back" value={invBack} />
-                      <button type="submit" name="to" value="0" aria-pressed={withInv ? 'false' : 'true'}>{m.invWallets}</button>
-                      <button type="submit" name="to" value="1" aria-pressed={withInv ? 'true' : 'false'}>{m.invPlus}</button>
-                    </fieldset>
-                  </form>
                 </div>
                 {omega && omega.missing !== null && (
                   <p class="omega-line">
@@ -983,7 +966,6 @@ const worthNote =
                     staleAfterMs={staleAfterMs}
                     syncRunning={status?.running}
                     amounts={worthByPilot}
-                    walletOnly={!withInv}
                   />
                 )}
                 {worthNote && (
@@ -999,7 +981,7 @@ const worthNote =
             )}
 
             {!pilotEmpty && (
-            <section class:list={['panel', { 'chart-stale': selectedBroken }]}>
+            <section id="flujo" class:list={['panel', { 'chart-stale': selectedBroken }]}>
               <div class="panel-heading">
                 <h2>{m.dailyFlow}</h2>
                 <span class="meta">{m.eveTimeUtc}</span>
@@ -1012,7 +994,7 @@ const worthNote =
 
             {!pilotEmpty && <ActivityList activities={summary.byActivity} />}
 
-            {!pilotEmpty && losses && <ShipLosses losses={losses} days={days} pilotName={selected?.name} />}
+            {!pilotEmpty && losses && <ShipLosses losses={losses} days={days} pilotName={selected?.name} pilotColor={colorOfPilot} />}
 
             <section class="panel" data-pilots-panel>
               <div class="panel-heading">
@@ -1022,22 +1004,108 @@ const worthNote =
                   {m.managePilots}
                 </a>
               </div>
-              {(pilotTotals.income > 0 || pilotTotals.expenses > 0) && (
-                <div class="panel-body shares pilot-shares">
-                  {pilotTotals.income > 0 && (
-                    <figure class="caption-only">
-                      <Donut slices={pilotIncomeSlices} label={m.shareIncomePilot} format={fmt} lang={lang} center={fmt(pilotTotals.income)} centerSub="ISK" />
-                      <figcaption>{m.shareIncomePilot}</figcaption>
-                    </figure>
-                  )}
-                  {pilotTotals.expenses > 0 && (
-                    <figure class="caption-only">
-                      <Donut slices={pilotExpensesSlices} label={m.shareExpensesPilot} format={fmt} lang={lang} center={fmt(pilotTotals.expenses)} centerSub="ISK" />
-                      <figcaption>{m.shareExpensesPilot}</figcaption>
-                    </figure>
-                  )}
+              {/* Wide enough, the donuts form a column beside the table they share (they sat over ~900 px of nothing) */}
+              <div class="beside">
+                {(pilotTotals.income > 0 || pilotTotals.expenses > 0) && (
+                  <div class="panel-body shares pilot-shares">
+                    {pilotTotals.income > 0 && (
+                      <figure class="caption-only">
+                        <Donut slices={pilotIncomeSlices} label={m.shareIncomePilot} format={fmt} lang={lang} center={fmt(pilotTotals.income)} centerSub="ISK" />
+                        <figcaption>
+                          {m.shareIncomePilot}
+                          {plexIncomeAll >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(pilotTotals.income - plexIncomeAll))}</span>}
+                        </figcaption>
+                      </figure>
+                    )}
+                    {pilotTotals.expenses > 0 && (
+                      <figure class="caption-only">
+                        <Donut slices={pilotExpensesSlices} label={m.shareExpensesPilot} format={fmt} lang={lang} center={fmt(pilotTotals.expenses)} centerSub="ISK" />
+                        <figcaption>
+                          {m.shareExpensesPilot}
+                          {plexExpensesAll >= 0.5 && <span class="no-plex">{m.withoutPlex(fmt(pilotTotals.expenses - plexExpensesAll))}</span>}
+                        </figcaption>
+                      </figure>
+                    )}
+                  </div>
+                )}
+                <div class="scroll pilots-table" role="group" aria-label={m.pilots}>
+                  <table class="pilots">
+                    <thead>
+                      <tr>
+                        {/* Opening balance + (income − expenses + between your pilots = net) = balance; from the period to «now»
+                            (balance, inventory, last sync) after a rule. Each header sorts the table */}
+                        {sortCols.map((col) => (
+                          <th class={col.cls || undefined} aria-sort="none">
+                            <button type="button" class="sort-button" data-sort={col.key} title={m.sortByCol(col.label)}>
+                              {col.label}
+                            </button>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.characters.map((c, i) => (
+                        <tr class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined} {...rowData(c)}>
+                          <td>
+                            <span class="who">
+                              <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
+                              <span class="portrait" data-initials={initials(c.name)} aria-hidden="true">
+                                <img src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`} alt="" width="30" height="30" loading="lazy" onerror="this.remove()" />
+                              </span>
+                              {c.name}
+                            </span>
+                          </td>
+                          <td
+                            class="opening"
+                            title={
+                              c.openingBalance === null || !c.openingAt
+                                ? undefined
+                                : `${full(c.openingBalance)} · ${c.openingPartial ? m.openingPartialTitle(longDate(c.openingAt, lang)) : m.openingTitle(longDate(c.openingAt, lang))}`
+                            }
+                          >
+                            {c.openingBalance === null ? '—' : fmt(c.openingBalance)}
+                          </td>
+                          <td title={c.lastSyncAt ? full(c.income) : undefined}>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
+                          <td title={c.lastSyncAt ? full(out(c.expenses)) : undefined}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</td>
+                          <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
+                            {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
+                          </td>
+                          <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
+                            {c.lastSyncAt ? betweenText(between(c)) : '—'}
+                          </td>
+                          <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
+                            {c.balance === null ? '—' : fmt(c.balance)}
+                          </td>
+                          {withInv && (
+                            <td title={inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory}>
+                              {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
+                            </td>
+                          )}
+                          <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
+                            {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
+                            {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th scope="row">{totalLabel}</th>
+                        <td class="opening" title={full(pilotTotals.opening)}>{fmt(pilotTotals.opening)}</td>
+                        <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
+                        <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
+                        <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
+                          {fmt(pilotTotals.net, { sign: true })}
+                        </td>
+                        <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
+                        <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
+                        {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-              )}
+              </div>
               {/* Mobile: the cards have no sorting header; a select does the same */}
               <div class="cards-sort">
                 <label class="sort-select">
@@ -1049,83 +1117,6 @@ const worthNote =
                     ))}
                   </select>
                 </label>
-              </div>
-              <div class="scroll pilots-table" role="group" aria-label={m.pilots}>
-                <table class="pilots">
-                  <thead>
-                    <tr>
-                      {/* Opening balance + (income − expenses + between your pilots = net) = balance; from the period to «now»
-                          (balance, inventory, last sync) after a rule. Each header sorts the table */}
-                      {sortCols.map((col) => (
-                        <th class={col.cls || undefined} aria-sort="none">
-                          <button type="button" class="sort-button" data-sort={col.key} title={m.sortByCol(col.label)}>
-                            {col.label}
-                          </button>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.characters.map((c, i) => (
-                      <tr class:list={{ selected: c.id === pilotId && !pilotEmpty }} aria-current={c.id === pilotId ? 'true' : undefined} {...rowData(c)}>
-                        <td>
-                          <span class="who">
-                            <i class="swatch" style={`background: ${pilotColor(i)}`} aria-hidden="true" />
-                            <span class="portrait" data-initials={initials(c.name)} aria-hidden="true">
-                              <img src={`https://images.evetech.net/characters/${c.id}/portrait?size=64`} alt="" width="30" height="30" loading="lazy" onerror="this.remove()" />
-                            </span>
-                            {c.name}
-                          </span>
-                        </td>
-                        <td
-                          class="opening"
-                          title={
-                            c.openingBalance === null || !c.openingAt
-                              ? undefined
-                              : `${full(c.openingBalance)} · ${c.openingPartial ? m.openingPartialTitle(longDate(c.openingAt, lang)) : m.openingTitle(longDate(c.openingAt, lang))}`
-                          }
-                        >
-                          {c.openingBalance === null ? '—' : fmt(c.openingBalance)}
-                        </td>
-                        <td title={c.lastSyncAt ? full(c.income) : undefined}>{c.lastSyncAt ? fmt(c.income) : '—'}</td>
-                        <td title={c.lastSyncAt ? full(out(c.expenses)) : undefined}>{c.lastSyncAt ? fmt(out(c.expenses)) : '—'}</td>
-                        <td class:list={{ pos: c.net > 0, neg: c.net < 0 }} title={c.lastSyncAt ? fullNet(c.net) : undefined}>
-                          {c.lastSyncAt ? fmt(c.net, { sign: true }) : '—'}
-                        </td>
-                        <td class="between" title={c.lastSyncAt ? m.betweenPilotsTitle(c.name, full(c.internalReceived), full(c.internalSent)) : undefined}>
-                          {c.lastSyncAt ? betweenText(between(c)) : '—'}
-                        </td>
-                        <td class="now-start" title={c.balance === null ? m.noEntries : full(c.balance)}>
-                          {c.balance === null ? '—' : fmt(c.balance)}
-                        </td>
-                        {withInv && (
-                          <td title={inventoryByChar.has(c.id) ? full(inventoryByChar.get(c.id)!) : m.noInventory}>
-                            {inventoryByChar.has(c.id) ? fmt(inventoryByChar.get(c.id)!) : '—'}
-                          </td>
-                        )}
-                        <td class:list={['last-sync', { stale: isStale(c.lastSyncAt) }]}>
-                          {isStale(c.lastSyncAt) && <Icon name="alert" class="stale-icon" />}
-                          {c.lastSyncAt ? <time datetime={c.lastSyncAt} data-ago={c.lastSyncAt}>{rel(c.lastSyncAt)}</time> : m.never}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <th scope="row">{totalLabel}</th>
-                      <td class="opening" title={full(pilotTotals.opening)}>{fmt(pilotTotals.opening)}</td>
-                      <td title={full(pilotTotals.income)}>{fmt(pilotTotals.income)}</td>
-                      <td title={full(out(pilotTotals.expenses))}>{fmt(out(pilotTotals.expenses))}</td>
-                      <td class:list={{ pos: pilotTotals.net > 0, neg: pilotTotals.net < 0 }} title={fullNet(pilotTotals.net)}>
-                        {fmt(pilotTotals.net, { sign: true })}
-                      </td>
-                      <td class="between" title={fullNet(pilotTotals.between)}>{betweenText(pilotTotals.between)}</td>
-                      <td class="now-start" title={full(pilotTotals.balance)}>{fmt(pilotTotals.balance)}</td>
-                      {withInv && <td title={full(pilotTotals.inventory)}>{pilotTotals.inventory ? fmt(pilotTotals.inventory) : '—'}</td>}
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
               </div>
               {/* Mobile: one card per pilot with name, net and last sync; the 7-column table is hidden */}
               <ul class="pilot-cards">
@@ -1319,7 +1310,7 @@ const worthNote =
             {withInv && !pilotEmpty && inventory && inventory.stacks > 0 && (
               <div class="split">
                 <div class="stack">
-                  <BarList title={m.whereInventory} kind="inventory" rows={locationRows} limit={11} />
+                  <BarList title={m.whereInventory} rows={locationRows} limit={11} />
                   {
                     mapBelow && geo && (
                       /* With no earnings today, the map only repeats the list above: it stays collapsed */
@@ -1399,9 +1390,6 @@ const worthNote =
   .hero-body .sub {
     order: 4;
   }
-  .sub.in-flow {
-    display: none;
-  }
   .fig {
     display: flex;
     flex-direction: column;
@@ -1428,9 +1416,6 @@ const worthNote =
     display: grid;
     gap: 14px;
     margin-top: 8px;
-  }
-  .flow {
-    min-width: 0;
   }
   .acts-block {
     display: grid;
@@ -1503,6 +1488,7 @@ const worthNote =
   }
   /* Air before the divider of «Hoy»: the table measured exactly its column and a fallback font cut the last glyph */
   .hero-eq td:last-child {
+    padding-left: 8px;
     padding-right: 10px;
   }
   .hero-eq .row-meta {
@@ -1536,9 +1522,7 @@ const worthNote =
     flex-wrap: wrap;
     align-items: baseline;
     gap: 0 8px;
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px solid var(--line);
+    margin: 0;
     font-size: 13px;
     color: var(--text-secondary);
   }
@@ -1552,14 +1536,11 @@ const worthNote =
   .foot-losses-value.neg {
     color: var(--critical);
   }
-  .foot-losses-pending,
   .foot-losses-value.estimate {
     color: var(--text-muted);
   }
-  /* Wallets only: the Omega line, the coverage note and the inventory toggle at the card's foot (no net-worth card) */
+  /* The card's foot, one row: lost ships, the Omega line (wallets only) and the inventory toggle at the right */
   .hero-tools {
-    /* Last in the foot: on a phone the internal-transfers note (order 4) would otherwise land after the toggle */
-    order: 5;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
@@ -1570,14 +1551,22 @@ const worthNote =
     border-top: 1px solid var(--line);
   }
   .hero-tools-text {
-    display: grid;
-    gap: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 28px;
     min-width: 0;
   }
   .hero-tools .omega-line,
   .hero-tools .worth-note,
   .hero-tools :global(.coverage-note) {
     margin: 0;
+  }
+  /* The notes that quantify take their own line under the row */
+  .hero-tools .worth-note,
+  .hero-tools :global(.coverage-note),
+  .hero-tools-text .sub {
+    flex-basis: 100%;
   }
   /* Pilot portrait: the initials sit underneath and show when CCP's image doesn't load (before, an empty bordered box) */
   .portrait {
@@ -1606,14 +1595,6 @@ const worthNote =
   .portrait.small {
     width: 28px;
     height: 28px;
-  }
-  .hero-foot > :first-child:not(.foot-losses):not(.sub) {
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px solid var(--line);
-  }
-  .foot-losses-split {
-    color: var(--text-muted);
   }
   .acts-link {
     display: inline-flex;
@@ -1678,13 +1659,6 @@ const worthNote =
     .hero-foot {
       order: 0;
     }
-    .sub.in-flow {
-      display: block;
-      margin-top: 14px;
-    }
-    .sub.at-end {
-      display: none;
-    }
     .fig.today {
       flex-direction: column;
       flex-wrap: nowrap;
@@ -1707,28 +1681,20 @@ const worthNote =
     .fig.today .value.zero {
       font-size: 28px;
     }
-    /* A rule separates the period/today pair from the period composition: so the activities don't read as today's */
+    /* A rule separates the period/today pair from the activities: so they don't read as today's */
     .composition {
-      grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
       gap: 0;
       margin-top: 14px;
       padding-top: 14px;
       border-top: 1px solid var(--line);
     }
-    .flow {
-      padding-right: 24px;
-    }
-    .acts-block {
-      padding-left: 24px;
-      border-left: 1px solid var(--line);
-    }
   }
-  /* Full width (no map beside it): Net | Today | By activity in three columns, Income/Expenses under the pair */
+  /* Full width: Net | Today | By activity in three columns */
   @container (min-width: 880px) {
     .hero-body {
       display: grid;
       grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1.2fr);
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: 1fr auto;
       column-gap: 0;
       row-gap: 14px;
     }
@@ -1745,25 +1711,15 @@ const worthNote =
       grid-column: 2;
       grid-row: 1;
     }
-    .flow {
-      grid-column: 1 / 3;
-      grid-row: 2;
-      padding: 14px 24px 0 0;
-      border-top: 1px solid var(--line);
-    }
     .acts-block {
       grid-column: 3;
-      grid-row: 1 / 3;
+      grid-row: 1;
+      padding-left: 24px;
+      border-left: 1px solid var(--line);
     }
     .hero-foot {
       grid-column: 1 / -1;
-      grid-row: 3;
-    }
-    .sub.in-flow {
-      display: none;
-    }
-    .sub.at-end {
-      display: block;
+      grid-row: 2;
     }
   }
   .signed {
@@ -1879,7 +1835,6 @@ const worthNote =
     color: var(--text-muted);
   }
   /* Broken pilot: the income/expenses bar is dimmed too, like the net */
-  .hero-stat.stale .ratio i,
   .hero-stat.stale .key {
     background: var(--text-muted);
   }
@@ -2085,6 +2040,12 @@ const worthNote =
   }
   .pilot-shares {
     border-bottom: 1px solid var(--line);
+  }
+  /* Beside the rows (wide screens, .beside in theme.css): the rule is on the right, not below */
+  @media (min-width: 1100px) {
+    .pilot-shares {
+      border-bottom: 0;
+    }
   }
   .cards-sort {
     display: none;
@@ -2343,17 +2304,6 @@ const worthNote =
   .pilot-balance {
     font: 500 13px var(--mono);
     color: var(--text);
-  }
-  .ratio {
-    display: flex;
-    gap: 2px;
-    height: 6px;
-    margin: 10px 0 4px;
-  }
-  .ratio i {
-    flex-basis: 0;
-    min-width: 2px;
-    border-radius: 2px;
   }
   .income {
     background: var(--income);

@@ -1,13 +1,13 @@
 // Backups: created with VACUUM INTO, pruned by kind, checked before restoring, and restoring
 // changes the contents of the open database without restarting (also from a backup made by an older version)
 import { afterAll, beforeEach, expect, test } from 'bun:test';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 
 const API = join(import.meta.dir, '../src');
-Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'eve-ledger-test-')), 'ledger.db');
+Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'iskpulse-test-')), 'ledger.db');
 Bun.env.MIGRATIONS_DIR ||= join(import.meta.dir, '../drizzle');
 Bun.env.ENC_KEY ||= Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
 Bun.env.EVE_CLIENT_ID ||= 'test';
@@ -16,13 +16,12 @@ Bun.env.EVE_CALLBACK_URL ||= 'http://127.0.0.1/auth/callback';
 const { db, runMigrations, appliedMigrations, knownMigrations } = await import(`${API}/db/client.ts`);
 const s = await import(`${API}/db/schema.ts`);
 const backups = await import(`${API}/services/backups.ts`);
-const { maintenance } = await import(`${API}/lib/maintenance.ts`);
 const { eq, inArray } = await import('drizzle-orm');
 runMigrations();
 
 const X = 9101;
 const Y = 9102;
-const tmp = mkdtempSync(join(tmpdir(), 'eve-ledger-backup-test-'));
+const tmp = mkdtempSync(join(tmpdir(), 'iskpulse-backup-test-'));
 
 async function clean() {
   await db.delete(s.walletJournal).where(inArray(s.walletJournal.characterId, [X, Y]));
@@ -68,6 +67,27 @@ test('cada tipo se recorta por separado: 10 manuales, la diaria no la borra', as
   expect(list.map((b) => b.name)).toContain(auto.name);
 });
 
+test('restaurar la copia «restore» más antigua no la borra al guardar lo que había', async () => {
+  await pilot(X, 1);
+  for (let i = 0; i < 5; i++) backups.createBackup('restore');
+  const oldest = backups.listBackups().filter((b) => b.kind === 'restore').at(-1)!;
+  backups.restoreBackup(oldest.name);
+  expect(existsSync(join(backups.BACKUP_DIR, oldest.name))).toBe(true);
+});
+
+test('los temporales de una copia cortada a medias se borran pasada una hora', async () => {
+  await pilot(X, 1);
+  backups.createBackup('manual');
+  const old = join(backups.BACKUP_DIR, 'ledger-20260101-000000-auto.db.tmp');
+  const fresh = join(backups.BACKUP_DIR, 'upload-20260101-000000-1.tmp');
+  writeFileSync(old, 'x');
+  writeFileSync(fresh, 'x');
+  utimesSync(old, new Date(Date.now() - 2 * 3_600_000), new Date(Date.now() - 2 * 3_600_000));
+  backups.createBackup('manual');
+  expect(existsSync(old)).toBe(false);
+  expect(existsSync(fresh)).toBe(true);
+});
+
 test('la diaria se hace una vez y no se repite hasta pasadas 20 h', async () => {
   // (the test database is shared: other files already leave pilots in it, so there is always something to back up)
   await pilot(X, 1);
@@ -75,7 +95,7 @@ test('la diaria se hace una vez y no se repite hasta pasadas 20 h', async () => 
   expect(backups.maybeAutoBackup()).toBeNull();
 });
 
-test('solo restaura bases de EVE Ledger sanas y de esta versión o anteriores', async () => {
+test('solo restaura bases de IskPulse sanas y de esta versión o anteriores', async () => {
   const junk = join(tmp, 'junk.db');
   writeFileSync(junk, 'esto no es una base de datos '.repeat(200));
   expect(() => backups.inspectBackup(junk)).toThrow(expect.objectContaining({ code: 'not_sqlite' }));
@@ -135,12 +155,24 @@ test('restaurar un archivo subido y negarse mientras otra restauración está en
   expect(existsSync(backups.BACKUP_DIR)).toBe(true);
 
   expect(() => backups.restoreUpload(new Uint8Array())).toThrow(expect.objectContaining({ code: 'empty' }));
-  maintenance.set(true);
-  try {
-    expect(() => backups.restoreBackup(b.name)).toThrow(expect.objectContaining({ code: 'busy' }));
-  } finally {
-    maintenance.set(false);
-  }
+});
+
+test('restaurar conserva el vínculo actual de cada piloto (EVE ya anuló los tokens de la copia)', async () => {
+  await pilot(X, 2);
+  const b = backups.createBackup('manual');
+  // After the backup a sync rotated the refresh token, and Y was linked
+  await db.update(s.characters).set({ refreshToken: 'rotado', scopes: 'a b' }).where(eq(s.characters.id, X));
+  await pilot(Y, 1);
+  backups.restoreBackup(b.name);
+  const x = await db.query.characters.findFirst({ where: eq(s.characters.id, X) });
+  expect(x?.refreshToken).toBe('rotado');
+  expect(x?.scopes).toBe('a b');
+  // The history is the backup's: Y (linked later) is gone
+  expect(await db.query.characters.findFirst({ where: eq(s.characters.id, Y) })).toBeUndefined();
+  // A different character on the same id (owner changed) keeps the backup's token
+  await db.update(s.characters).set({ ownerHash: 'otro', refreshToken: 'ajeno' }).where(eq(s.characters.id, X));
+  backups.restoreBackup(b.name);
+  expect((await db.query.characters.findFirst({ where: eq(s.characters.id, X) }))?.refreshToken).toBe('x');
 });
 
 test('una copia de una versión anterior (con menos migraciones) se restaura y queda al día', async () => {

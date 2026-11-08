@@ -117,11 +117,14 @@ export async function setPlan(fitId: number, bytes: Uint8Array, filename = '') {
     if (err instanceof EmpError) throw new DoctrineError(`emp_${err.message}`);
     throw err;
   }
-  await ensureDogma(plan.skills.map((s) => s.skillId));
+  const dogma = await ensureDogma(plan.skills.map((s) => s.skillId));
+  // Only what ESI confirms as a skill: an unknown ID (404) isn't stored, so every sync would ask for it again
+  const skills = plan.skills.filter((s) => dogma.get(s.skillId)?.categoryId === CATEGORY.skill);
+  if (!skills.length) throw new DoctrineError('emp_empty');
   const name = (plan.name || filename.replace(/\.emp$/i, '') || 'Plan').slice(0, 120);
-  const values = { fitId, name, skills: plan.skills, createdAt: new Date() };
+  const values = { fitId, name, skills, createdAt: new Date() };
   await db.insert(fitPlans).values(values).onConflictDoUpdate({ target: fitPlans.fitId, set: values });
-  return { name, skills: plan.skills.length };
+  return { name, skills: skills.length };
 }
 
 // Fit cost at Jita's lowest sell order, by part. unpriced = types with no sell order in Jita (or no price

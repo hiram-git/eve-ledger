@@ -7,11 +7,11 @@ body:
       value: |
         Thanks for reporting! You can write in English, Spanish or German.
 
-        **Never attach or paste** your `ledger.db`, your `ledger.env`, your `ENC_KEY`, or anything that looks like a token. EVE Ledger never needs them to look into a bug.
+        **Never attach or paste** your `ledger.db`, your `ledger.env`, your `ENC_KEY`, or anything that looks like a token. IskPulse never needs them to look into a bug.
   - type: input
     id: version
     attributes:
-      label: EVE Ledger version
+      label: IskPulse version
       description: It's at the bottom of the dashboard, for example `v0.1.17`.
       placeholder: v0.1.17
     validations:
@@ -66,7 +66,7 @@ body:
     attributes:
       label: Logs
       description: |
-        In the app menu, **EVE Ledger → Open logs**, then copy the relevant lines of `api.log` (and `web.log` if the page fails). Logs include your pilots' names and IDs; edit them out if you prefer.
+        In the app menu, **IskPulse → Open logs**, then copy the relevant lines of `api.log` (and `web.log` if the page fails). Logs include your pilots' names and IDs; edit them out if you prefer.
       render: text
   - type: checkboxes
     id: privacy

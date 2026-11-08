@@ -2,11 +2,13 @@
 // Donut chart (ring) for a breakdown: each slice is an arc with a 2 px gap between neighbors, in the
 // categorical palette validated on the panel background (--cat-1…7, fixed order: slice i always gets
 // color i, also in the table beside it, which acts as legend and table view). No labels on the ring:
-// the name, figure and % go in the table; each arc has a <title> for hover and the svg an aria-label
+// the name, figure and % go in the table; each arc has a <title> for hover and the svg an aria-label.
+// A slice can bring its own colour (a pilot keeps theirs in every donut) and be hatched (PLEX: «cuentas, no juego»,
+// the same hatch as in the daily chart)
 import type { Lang } from '../lib/i18n';
 
 interface Props {
-  slices: { label: string; value: number }[];
+  slices: { label: string; value: number; color?: string; hatch?: boolean }[];
   label: string;
   format: (v: number) => string;
   lang: Lang;
@@ -41,13 +43,25 @@ const arcs = slices
   })
   .filter((a): a is NonNullable<typeof a> => a !== null);
 const summary = arcs.map((a) => `${a.s.label} ${pct.format(a.share)}`).join(', ');
+const hatchId = `donut-hatch-${Math.random().toString(36).slice(2, 8)}`;
 ---
 
 <svg class="donut" viewBox="0 0 120 120" role="img" aria-label={`${label}: ${summary}`}>
+  {
+    arcs.some((a) => a.s.hatch) && (
+      <defs>
+        <pattern id={hatchId} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="2" height="5" style="fill: var(--panel)" />
+        </pattern>
+      </defs>
+    )
+  }
   {arcs.map((a) => (
-    <path d={a.d} fill="none" stroke={`var(--cat-${(a.i % 7) + 1})`} stroke-width={WIDTH}>
+    <g>
       <title>{`${a.s.label} · ${format(a.s.value)} · ${pct.format(a.share)}`}</title>
-    </path>
+      <path d={a.d} fill="none" stroke={a.s.color ?? `var(--cat-${(a.i % 7) + 1})`} stroke-width={WIDTH} />
+      {a.s.hatch && <path d={a.d} fill="none" stroke={`url(#${hatchId})`} stroke-width={WIDTH} />}
+    </g>
   ))}
   {center && (
     <text x="60" y={centerSub ? 58 : 64} text-anchor="middle" class="center">
@@ -55,7 +69,7 @@ const summary = arcs.map((a) => `${a.s.label} ${pct.format(a.share)}`).join(', '
     </text>
   )}
   {centerSub && (
-    <text x="60" y="74" text-anchor="middle" class="center-sub">
+    <text x="60" y="75" text-anchor="middle" class="center-sub">
       {centerSub}
     </text>
   )}
@@ -72,8 +86,9 @@ const summary = arcs.map((a) => `${a.s.label} ${pct.format(a.share)}`).join(', '
     font: 500 13px var(--mono);
     fill: var(--text);
   }
+  /* 10.5 of the 120 viewBox: ~12 px at the 136 px the donut is drawn (it was 8, under the text floor) */
   .donut .center-sub {
-    font: 400 8px var(--font);
+    font: 400 10.5px var(--font);
     fill: var(--text-muted);
   }
   .swatch {

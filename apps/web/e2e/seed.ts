@@ -75,6 +75,9 @@ export function seed() {
   // Kade loses a Rifter 5 days ago; insurance pays and Aria buys another two days later
   entries.push({ char: kade.id, date: ago(5, 21), ref: 'insurance', amount: 300_000, first: NPC_CORP, second: kade.id });
   entries.push({ char: aria.id, date: ago(3, 17), ref: 'market_escrow', amount: -1_100_000, first: aria.id, second: aria.id });
+  // Aria loses a Rifter yesterday: the insurance came half an hour later and nothing is replaced yet (the firm part is
+  // positive while the hull is still to buy: «te costaron» must show the estimate, never a gain)
+  entries.push({ char: aria.id, date: new Date(ago(1, 10).getTime() + 30 * 60_000), ref: 'insurance', amount: 400_000, first: NPC_CORP, second: aria.id });
   // Today: Aria is already ratting
   entries.push({ char: aria.id, date: minutesAgo(30), ref: 'bounty_prizes', amount: 25_000_000, first: NPC_CORP, second: aria.id, ctx: [AMARR, 'system_id'] });
 
@@ -149,6 +152,20 @@ export function seed() {
       shipTypeId: T.rifter,
       items: [{ typeId: T.autocannon, destroyed: 2, dropped: 1, flag: 27 }],
       attackers: 3,
+    })
+    .run();
+
+  db.insert(s.killmails)
+    .values({
+      killmailId: 120_000_002,
+      hash: 'demo',
+      characterId: aria.id,
+      time: ago(1, 10),
+      solarSystemId: AMARR,
+      victimCharacterId: aria.id,
+      shipTypeId: T.rifter,
+      items: [],
+      attackers: 2,
     })
     .run();
 

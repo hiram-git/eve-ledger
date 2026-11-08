@@ -1,5 +1,5 @@
 name: Idea
-description: Something EVE Ledger could answer or do.
+description: Something IskPulse could answer or do.
 labels: [idea]
 body:
   - type: markdown
@@ -9,7 +9,7 @@ body:
     id: question
     attributes:
       label: What do you want to know?
-      description: The question you'd like EVE Ledger to answer, in game terms. For example, "How much do my alts cost me each month?"
+      description: The question you'd like IskPulse to answer, in game terms. For example, "How much do my alts cost me each month?"
     validations:
       required: true
   - type: dropdown

@@ -1,7 +1,7 @@
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { contracts } from '../db/schema';
-import { esiGet } from '../lib/esi';
+import { EsiError, esiGet } from '../lib/esi';
 
 export const CONTRACTS_SCOPE = 'esi-contracts.read_character_contracts.v1';
 
@@ -82,8 +82,14 @@ export async function fetchContracts(characterId: number, r: { pages: number; fe
     .where(and(eq(contracts.issuerId, characterId), eq(contracts.type, 'courier'), isNull(contracts.items)))
     .limit(MAX_ITEMS);
   for (const { id } of pending) {
-    const { data } = await esiGet<EsiContractItem[]>(`/characters/${characterId}/contracts/${id}/items`, characterId);
-    const items = data.filter((i) => i.is_included).map((i) => ({ typeId: i.type_id, quantity: i.quantity }));
+    let items: { typeId: number; quantity: number }[] = [];
+    try {
+      const { data } = await esiGet<EsiContractItem[]>(`/characters/${characterId}/contracts/${id}/items`, characterId);
+      items = data.filter((i) => i.is_included).map((i) => ({ typeId: i.type_id, quantity: i.quantity }));
+    } catch (err) {
+      // ESI no longer has it (deleted contract): stored empty, or it would fail the contracts step on every sync
+      if (!(err instanceof EsiError && err.status === 404)) throw err;
+    }
     await db.update(contracts).set({ items }).where(eq(contracts.contractId, id));
   }
 }

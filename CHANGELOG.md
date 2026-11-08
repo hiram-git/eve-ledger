@@ -1,12 +1,31 @@
 # Changelog
 
-What changed in each version of the EVE Ledger desktop app. Every version is a [release](../../releases) with installers for Windows, macOS (Apple Silicon) and Linux, and the app updates itself when a new one is published.
+What changed in each version of the IskPulse desktop app. Every version is a [release](../../releases) with installers for Windows, macOS (Apple Silicon) and Linux, and the app updates itself when a new one is published.
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
+## 1.1.0 — 2026-11-08
+
+- **New name: IskPulse** (formerly EVE Ledger), "Follow the pulse of your ISK". New look: a pulse trace replaces the "E" and the blinking cursor in the logo, the favicon, the header, the installer icons and the setup wizard. Nothing changes in your data: your pilots, history, backups and settings stay where they were, and the app still updates itself. The installers are now called `IskPulse_x.y.z_…`. On Windows and Linux (.deb) the first update from the old name may leave the old app installed next to the new one; uninstall "EVE Ledger" when you see it.
+- **Restoring a backup keeps your pilots linked.** EVE replaces a pilot's login on every renewal, so a backup holds logins that no longer work; restoring used to bring them back and every pilot then needed relinking. Now the history comes from the backup and each pilot keeps its current login (a pilot that isn't linked any more, or that changed owner, keeps the backup's).
+- **Sync errors that don't hide or repeat.** A step that failed (for example contracts) now shows in Pilots even when the steps after it finished fine; a courier whose items ESI no longer has (404) doesn't fail the contracts step on every sync; the automatic round and "Sync" pressed at the same time are one round, so neither reports the other's pilots as errors; and the header badge stops saying "N with errors" once those pilots have synced again.
+- **Relink only when it helps.** ESI down or rate limited is retried with "Sync"; "Relink" is offered for an expired or rejected login, a pilot that changed owner or a missing permission.
+- **Figures.** The replacement fund in Indicators counts only the firm part of the losses (the estimate still to replace stays apart, as in the Lost ships panel); a corporation you earn loyalty points with after your first sync counts all of them as earned in the period; an LP store that failed is read again the next day, not after a week.
+- **Summary and Balances agree.** Both pages compute the game result with the same formula, and the first-sync screen says why a pilot isn't syncing instead of "first sync in progress" forever.
+- **Daily chart.** A period whose only movement is PLEX keeps a scale; "Show as table" leaves out the days before the history; the keyboard hint comes back when you return to the chart with Tab after a tap.
+- **Safer by default.** The API rejects any write that comes from a web page (only the dashboard's own server and the app write to it); return links after an action can't point outside the dashboard; a backup is written to a temporary file first, so an interrupted one never looks complete; uploads of large backups (up to 1 GB) are accepted; automatic reloads don't repeat a notice ("Backup restored", "Fit added"). The third-party actions of the installer build are pinned to a commit.
+- **Lost ships never show as a gain.** The insurance arrives within the hour and the replacement days later; in between, "they cost you" read "+400 k" in green. Until something firm costs you, the figure is the estimate, in grey with "~", in the panel and at the foot of the Net card, and Indicators says "0 h" instead of "no ratting hours". "Today" no longer counts the capsule as a second ship or says it had no insurance.
+- **The Net card reads in one direction.** The period's income and expenses now sit under "Wallet net" in the result equation (as a bar under "Today" they read as today's expenses), and today's map with one or two systems is a short strip instead of a box with a dot. On a phone the header says how long ago the data synced also right after the app starts.
+- **Colours that mean the same everywhere.** Each pilot keeps its colour in every donut (the lost ships' too); ships are drawn in one grey tone; PLEX is grey and hatched in the By activity donuts, like in the daily chart, with "X without PLEX" under them.
+- **Fixes.** Restoring the oldest "restore" backup no longer deletes it first; a skill plan with unknown IDs no longer makes ESI errors on every sync (and a crafted plan file can't freeze the app); one pilot with an expired login no longer stops citadel names for everyone; a transactions page that failed is filled in on the next sync; relinking while a login is being checked keeps the new login; an alt that moved no ISK in 30 days reconciles; the ratting donut includes the pilot who sells the loot; the chart axis shows 0,25 B steps right; "1000 M" reads "1,00 B"; Balances loses its clock icons; the daily table scrolls with the keyboard; Doctrines reloads after a sync; interrupted backups leave no hidden files; the sync log is kept for 90 days.
+- **By activity shows each activity's net.** The panel the Net card links to now has a Net column next to income and expenses (Trading's +615 M was nowhere), Trading's hint says "sales − purchases − fees", and the card's "Trading is the margin" note only shows when there is trading.
+- **Colours belong to pilots.** The donut palette is now only for pilots, with the same colour for each pilot on every page (Indicators too); activities use neutral tones, so PvE no longer looks like the chart's income blue. PLEX is hatched in the pilots' donuts too, in each pilot's colour, with "X without PLEX" under them.
+- **A shorter, quieter Summary.** The Net card's foot is one row (lost ships, the Omega line and the Wallets / + inventory switch, which no longer jumps to another card); "moved between your pilots" only shows in a pilot's view. On wide screens the donuts of By activity and Pilots sit beside their table, the per-ship table of Lost ships is folded, and keyboard users can jump to each section right after "Skip to content".
+- **Desktop.** If "Restart now" fails to install an update, the app starts its services again instead of staying open with nothing running; the app's own tests now run in the release builds.
+
 ## 1.0.0 — 2026-10-19
 
-First stable release. EVE Ledger answers "am I making or losing ISK?" for all your EVE Online pilots, on your own computer: it reads your wallets, assets, losses, contracts, skills and loyalty points through ESI, keeps the history ESI drops after 30 days, and shows it as a Summary (net by activity, today, daily chart, pilots, inventory, market review), Lost ships (what they really cost you), Indicators (Omega for all your accounts, ratting ISK/h, deductions, fees, loyalty points…), Balances (a balance sheet, an income statement and a wallet reconciliation) and Doctrines (who can fly each fit, what it costs, what is missing). Everything stays local: no server, no account, read-only permissions, login with PKCE and no secrets to keep. Spanish, English and German.
+First stable release. IskPulse answers "am I making or losing ISK?" for all your EVE Online pilots, on your own computer: it reads your wallets, assets, losses, contracts, skills and loyalty points through ESI, keeps the history ESI drops after 30 days, and shows it as a Summary (net by activity, today, daily chart, pilots, inventory, market review), Lost ships (what they really cost you), Indicators (Omega for all your accounts, ratting ISK/h, deductions, fees, loyalty points…), Balances (a balance sheet, an income statement and a wallet reconciliation) and Doctrines (who can fly each fit, what it costs, what is missing). Everything stays local: no server, no account, read-only permissions, login with PKCE and no secrets to keep. Spanish, English and German.
 
 Since 0.1.18:
 
@@ -45,13 +64,13 @@ Upgrading from 0.1.x:
 
 - **Indicators → Deductions:** what never reaches your wallet from PvE.
   - **Corporation tax, exact.** What each corporation kept from your bounties, ESS and missions, with its rate. ESI reports it with every payout, already taken out of what you're paid, so your net doesn't change. If the corporation is yours, that ISK is still in its wallet.
-  - **Incursion penalty, estimated.** Bounties in an incursion's constellation pay half. ESI only lists active incursions, so EVE Ledger records them on every sync from this version on; anything earlier can't be known.
+  - **Incursion penalty, estimated.** Bounties in an incursion's constellation pay half. ESI only lists active incursions, so IskPulse records them on every sync from this version on; anything earlier can't be known.
   - **Your ratting ISK/h without deductions**, next to what you actually make.
 - **Ratting by system** tags the systems whose bounties an incursion halved.
 
 ## 0.1.16 — 2026-10-12
 
-- **CCP license agreement.** Requests to ESI now name the app, its source code and the contact you set in Settings. A new **Legal notice** page, linked from the footer, explains what EVE Ledger is and isn't, what it reads from ESI, and includes CCP's notice and the license.
+- **CCP license agreement.** Requests to ESI now name the app, its source code and the contact you set in Settings. A new **Legal notice** page, linked from the footer, explains what IskPulse is and isn't, what it reads from ESI, and includes CCP's notice and the license.
 
 ## 0.1.15 — 2026-10-11
 

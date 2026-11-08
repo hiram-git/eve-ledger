@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const API = join(import.meta.dir, '../src');
-Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'eve-ledger-test-')), 'ledger.db');
+Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'iskpulse-test-')), 'ledger.db');
 Bun.env.MIGRATIONS_DIR ||= join(import.meta.dir, '../drizzle');
 Bun.env.ENC_KEY ||= Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
 Bun.env.EVE_CLIENT_ID ||= 'test';
@@ -200,4 +200,39 @@ test('el saldo es el del wallet de ESI y la conciliación sigue cuadrando con el
   // Without the ESI wallet (before the first sync with this version), the balance is still the journal's
   await db.update(s.characters).set({ walletBalance: null, walletAt: null }).where(inArray(s.characters.id, [A]));
   expect((await getSummary(7)).characters.find((c) => c.id === A)!.balance).toBe(1000);
+});
+
+test('el período anterior trae su PLEX y sus naves para comparar el mismo Resultado', async () => {
+  await db.insert(s.marketPrices).values({ typeId: RIFTER, averagePrice: 10_000_000, adjustedPrice: null, updatedAt: new Date() });
+  const loss = (id: number, time: Date) => ({
+    killmailId: id, hash: 'h', characterId: A, time, solarSystemId: 30000142, victimCharacterId: A, shipTypeId: RIFTER, items: [], attackers: 1,
+  });
+  // The 7-day period starts 6 days ago: a loss 10 days ago (window closed, not replaced) and another yesterday (still open)
+  await db.insert(s.killmails).values([loss(990021, daysAgo(10)), loss(990022, yesterday(9))]);
+  // 500 PLEX bought 9 days ago, in the previous period
+  await journal([{ id: 4, char: A, date: daysAgo(20), ref: 'bounty_prizes', amount: 5_000_000_000, balance: 5_000_000_000, first: NPC }]);
+  // As in ESI, the escrow's context_id is the transaction
+  await db.insert(s.walletJournal).values({
+    journalId: 73001, characterId: A, date: daysAgo(9), refType: 'market_escrow', amount: -2_000_000_000, balance: 3_000_000_000, firstPartyId: A, secondPartyId: A, contextId: 83001, contextIdType: 'market_transaction_id',
+  });
+  await db.insert(s.walletTransactions).values({
+    transactionId: 83001, characterId: A, date: daysAgo(9), typeId: 44992, quantity: 500, unitPrice: 4_000_000, isBuy: true, locationId: 60003760, clientId: NPC, journalRefId: 73001,
+  });
+
+  const sum = await getSummary(7);
+  expect(sum.previous.accounts).toBeCloseTo(-2_000_000_000, 2);
+  expect(sum.previous.lossesNotBack).toBeCloseTo(10_000_000, 2);
+  // Yesterday's loss belongs to this period, not the previous one
+  expect(sum.previous.lossesToReplace).toBe(0);
+});
+
+test('un piloto sin movimientos en el journal pero con wallet concilia con su saldo', async () => {
+  await journal([{ id: 801, char: A, date: yesterday(10), ref: 'bounty_prizes', amount: 500, balance: 500, first: NPC }]);
+  // B hasn't moved ISK in the ~30 days ESI keeps: no journal at all, only its ESI wallet
+  await db.update(s.characters).set({ walletBalance: 100_000_000, walletAt: new Date() }).where(inArray(s.characters.id, [B]));
+  const sum = await expectReconciles();
+  const b = sum.characters.find((c) => c.id === B)!;
+  expect(b.openingBalance).toBe(100_000_000);
+  expect(b.journalBalance).toBe(100_000_000);
+  expect(b.openingPartial).toBe(false);
 });

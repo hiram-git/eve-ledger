@@ -12,7 +12,7 @@ const DAYS = arg('days', 365);
 const RUNS = arg('runs', 5);
 const KEEP = Bun.argv.includes('--keep');
 
-const dir = mkdtempSync(join(tmpdir(), 'eve-ledger-bench-'));
+const dir = mkdtempSync(join(tmpdir(), 'iskpulse-bench-'));
 const DB_PATH = join(dir, 'ledger.db');
 const MIGRATIONS_DIR = join(import.meta.dir, '../drizzle');
 const baseEnv = {

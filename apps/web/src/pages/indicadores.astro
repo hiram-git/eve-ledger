@@ -4,10 +4,10 @@
 import Base from '../layouts/Base.astro';
 import CoverageNote from '../components/CoverageNote.astro';
 import Donut from '../components/Donut.astro';
-import { fold } from '../lib/shares';
+import { fold, pilotColors } from '../lib/shares';
 import { getIndicators, getPilots, getSyncStatus, type Indicators, type Pilot, type SyncStatus } from '../lib/api';
-import { hasIssue, pilotState } from '../lib/pilot-state';
-import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { countIssues, staleAfter } from '../lib/pilot-state';
+import { ago, approx, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 
 const lang = getLang(Astro);
@@ -36,8 +36,8 @@ const priced = !!o && o.cost !== null;
 const percent = o?.progress == null ? 0 : covered ? 1 : Math.min(0.99, o.progress);
 // ISK value of the PLEX you already have (only up to what's needed): the term that was missing from the sum
 // Same freshness criterion as the Resumen: the balance Omega adds up says whose is stale or missing
-const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
-const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
+const staleAfterMs = staleAfter(status);
+const pilotIssues = countIssues(pilots, m, status);
 // What each pilot contributes to the balance: the coverage note says how much of it is stale
 const balanceByPilot: Record<number, number> = Object.fromEntries(
   (o?.balances ?? []).map((b) => [b.characterId, b.balance ?? 0]),
@@ -64,10 +64,13 @@ const fmtSigned = (v: number) => isk(v, { lang, sign: true });
 const fullSigned = (v: number) => iskFull(v, lang, true);
 const otherPilots = m.otherPilots;
 // Ratting ISK by pilot (everything that adds to the pilot: bounties, ESS, escalations and loot)
+// Each pilot in its colour, as in the Summary's donuts (its place among the pilots by balance), not by its rank here
+const colorOf = pilotColors((o?.balances ?? []).map((b) => ({ id: b.characterId, balance: b.balance })));
+// «Otros» in grey: it isn't anyone
 const pilotSlices = fold(
-  (r?.byPilot ?? []).map((p) => ({ label: p.name, value: p.isk, hours: p.hours, iskPerHour: p.iskPerHour })),
+  (r?.byPilot ?? []).map((p) => ({ label: p.name, value: p.isk, hours: p.hours, iskPerHour: p.iskPerHour, color: colorOf(p.characterId) })),
   otherPilots,
-);
+).map((s) => ({ ...s, color: 'color' in s ? s.color : 'var(--line-strong)' }));
 // Bounties by system: the top 6, the rest grouped, and those that don't say the system
 const systemSlices = [
   ...(r?.bySystem ?? []).map((sys) => ({ label: sys.name ?? `#${sys.systemId}`, sec: sys.security, value: sys.isk, hours: sys.hours, iskPerHour: sys.iskPerHour, incursion: incursionSystems.has(sys.systemId) })),
@@ -80,10 +83,10 @@ const pilotName = new Map(pilots.map((p) => [p.id, p.name]));
 const balanceSlices = fold(
   (o?.balances ?? [])
     .filter((b) => (b.balance ?? 0) > 0)
-    .map((b) => ({ label: pilotName.get(b.characterId) ?? `#${b.characterId}`, value: b.balance ?? 0 }))
+    .map((b) => ({ label: pilotName.get(b.characterId) ?? `#${b.characterId}`, value: b.balance ?? 0, color: colorOf(b.characterId) }))
     .sort((a, b) => b.value - a.value),
   otherPilots,
-);
+).map((s) => ({ ...s, color: 'color' in s ? s.color : 'var(--line-strong)' }));
 const balanceTotal = balanceSlices.reduce((n, b) => n + b.value, 0);
 // Loyalty points: LP by corporation (largest first; from the seventh on, «Otras N corporaciones»), valued at the
 // best exchange of each store (estimate, grey); EverMarks (Paragon) apart, they can't become ISK
@@ -284,10 +287,10 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                         </tr>
                       </thead>
                       <tbody>
-                        {pilotSlices.map((p, i) => (
+                        {pilotSlices.map((p) => (
                           <tr>
                             <th scope="row">
-                              <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                              <i class="swatch" style={`background: ${p.color}`} aria-hidden="true" />
                               {p.label}
                             </th>
                             <td>{'hours' in p && typeof p.hours === 'number' ? hours(p.hours) : '—'}</td>
@@ -376,7 +379,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       </span>
                     ) : (
                       <span class="answer-value est" title={full(ded.incursion)}>
-                        ~{'\u2009'}{fmt(ded.incursion)}<span class="unit"> ISK</span>
+                        {approx(fmt(ded.incursion))}<span class="unit"> ISK</span>
                       </span>
                     )}
                     {ded.tax > 0 && ded.incursion > 0 && <span class="answer-sub est">{m.dedIncursionSub(fmt(ded.incursion))}</span>}
@@ -424,7 +427,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                               <span class="sec">{sec(x.security)} · {m.dedTicks(qty.format(x.ticks))}</span>
                             </th>
                             <td>−{pct.format(ded.penalty)}</td>
-                            <td title={full(x.lost)}>~{'\u2009'}{fmt(x.lost)}</td>
+                            <td title={full(x.lost)}>{approx(fmt(x.lost))}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -455,7 +458,12 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                   {rep.count > 0 ? (
                     <p class="answer">
                       <span class="answer-label">{m.replAnswerLabel(rep.days)}</span>
-                      {rep.costHours !== null ? (
+                      {rep.cost >= 0 ? (
+                        /* Insurance in and nothing replaced yet: nothing firm cost you (the estimate is in Naves perdidas) */
+                        <span class="answer-value">
+                          {hours(0)}<span class="unit"> {m.replAnswerUnit}</span>
+                        </span>
+                      ) : rep.costHours !== null ? (
                         <span class="answer-value">
                           {hours(rep.costHours)}<span class="unit"> {m.replAnswerUnit}</span>
                         </span>
@@ -465,7 +473,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       {rep.costHours !== null && rep.iskPerHour !== null && (
                         <span class="answer-sub">{m.replSub(fmt(-rep.cost), fmt(rep.iskPerHour))}</span>
                       )}
-                      {rep.costHours === null && <span class="answer-sub">{m.replNoRate}</span>}
+                      {rep.cost < 0 && rep.iskPerHour === null && <span class="answer-sub">{m.replNoRate}</span>}
                     </p>
                   ) : (
                     <p class="eta">{m.replNoLosses(rep.days)}</p>
@@ -615,10 +623,10 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       </tr>
                     </thead>
                     <tbody>
-                      {balanceSlices.map((b, i) => (
+                      {balanceSlices.map((b) => (
                         <tr>
                           <th scope="row">
-                            <i class="swatch" style={`background: var(--cat-${(i % 7) + 1})`} aria-hidden="true" />
+                            <i class="swatch" style={`background: ${b.color}`} aria-hidden="true" />
                             {b.label}
                           </th>
                           <td title={full(b.value)}>{fmt(b.value)}</td>
@@ -654,7 +662,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                       <>
                         <span class="answer-label">{m.lpValueLabel}</span>
                         <span class="answer-value est" title={full(lp.value)}>
-                          ~{'\u2009'}{fmt(lp.value)}<span class="unit"> ISK</span>
+                          {approx(fmt(lp.value))}<span class="unit"> ISK</span>
                         </span>
                         <span class="answer-sub">{m.lpSub(qty.format(lp.points), lpWithPoints)}</span>
                       </>
@@ -695,7 +703,7 @@ const times = new Intl.NumberFormat(lang, { useGrouping: 'always' });
                                 <td title={c && c.change !== null ? lpChangeText(c.change, true) : undefined}>{qty.format(b.value)}</td>
                                 <td title={c ? lpOfferTitle(c) : undefined}>{c && c.iskPerLp !== null ? qty.format(Math.round(c.iskPerLp)) : '—'}</td>
                                 <td class="est" title={c && c.value !== null ? full(c.value) : c ? lpOfferTitle(c) : undefined}>
-                                  {c && c.value !== null ? `~\u2009${fmt(c.value)}` : '—'}
+                                  {c && c.value !== null ? approx(fmt(c.value)) : '—'}
                                 </td>
                               </tr>
                             );

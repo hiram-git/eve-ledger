@@ -21,7 +21,7 @@ import {
 } from '../lib/api';
 import { ago, bytes, isk, iskFull, longDate, shortDateTime } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
-import { hasIssue, pilotState } from '../lib/pilot-state';
+import { ASSETS_SCOPE, hasIssue, needsRelink, pilotState, staleAfter } from '../lib/pilot-state';
 
 const lang = getLang(Astro);
 const m = t(lang);
@@ -68,7 +68,7 @@ const invByPilot = new Map(inventory?.byCharacter.map((c) => [c.characterId, c.v
 
 const SCOPE_LABELS: Record<string, string> = {
   'esi-wallet.read_character_wallet.v1': m.scopeWallet,
-  'esi-assets.read_assets.v1': m.scopeInventory,
+  [ASSETS_SCOPE]: m.scopeInventory,
   'esi-killmails.read_killmails.v1': m.scopeLosses,
   'esi-contracts.read_character_contracts.v1': m.scopeContracts,
   'esi-skills.read_skills.v1': m.scopeSkills,
@@ -81,7 +81,7 @@ const OPTIONAL: { scope: string; icon: 'pin' | 'medal'; label: string; hint: str
   { scope: 'esi-characters.read_loyalty.v1', icon: 'medal', label: m.scopeLoyalty, hint: m.scopeLoyaltyHint },
 ];
 
-const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
+const staleAfterMs = staleAfter(status);
 const stateOf = (p: Pilot) => pilotState(p, m, staleAfterMs, status?.running);
 
 const rows = pilots.map((p) => ({ ...p, state: stateOf(p) }));
@@ -235,7 +235,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
               {p.state.hint && (
                 <span class:list={['error-msg', { soft: p.state.kind !== 'error' }]} title={p.state.title ? `${m.originalError} ${p.state.title}` : undefined}>
                   {p.state.hint}
-                  {(p.state.kind === 'error' || p.missingScopes.length > 0) && <> {m.relinkPick(p.name)}</>}
+                  {needsRelink(p, p.state, m) && <> {m.relinkPick(p.name)}</>}
                 </span>
               )}
             </div>
@@ -279,11 +279,11 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
                 <dt>{m.inventory}</dt>
                 {/* Without the inventory permission, what is stored is an older snapshot: it is dimmed and says so */}
                 <dd
-                  class:list={{ stale: invByPilot.has(p.id) && p.missingScopes.includes('esi-assets.read_assets.v1') }}
+                  class:list={{ stale: invByPilot.has(p.id) && p.missingScopes.includes(ASSETS_SCOPE) }}
                   title={
                     !invByPilot.has(p.id)
                       ? m.noInventory
-                      : p.missingScopes.includes('esi-assets.read_assets.v1')
+                      : p.missingScopes.includes(ASSETS_SCOPE)
                         ? `${full(invByPilot.get(p.id)!)} · ${m.inventoryOldPhoto}`
                         : full(invByPilot.get(p.id)!)
                   }
@@ -325,7 +325,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
                   <button type="submit" name="clone" value="alpha" aria-pressed={p.clone === 'alpha' ? 'true' : 'false'}>{m.cloneAlpha}</button>
                 </fieldset>
               </form>
-              {p.missingScopes.length > 0 || p.state.kind === 'error' ? (
+              {needsRelink(p, p.state, m) ? (
                 <a class="secondary-button" href={loginUrl} title={m.relinkAs(p.name)} aria-label={m.relinkAs(p.name)}>
                   <Icon name="login" />
                   {m.relink}
@@ -524,7 +524,7 @@ const backupError = atBackups && q.get('error') ? m.backupError(q.get('error')!)
     if (tries < 8) {
       setTimeout(() => {
         sessionStorage.setItem('pilotos-reload', String(tries + 1));
-        location.reload();
+        location.replace(document.body.dataset.reload!);
       }, 15_000);
     }
   } else {

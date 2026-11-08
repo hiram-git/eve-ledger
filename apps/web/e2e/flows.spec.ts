@@ -122,7 +122,7 @@ test('un archivo que no es una copia se rechaza sin tocar nada', async ({ page }
   page.once('dialog', (d) => d.accept());
   await panel.locator('.backup-upload button[type="submit"]').click();
   await expect(page).toHaveURL(/error=not_sqlite/);
-  await expect(panel.locator('.action-notice')).toContainText('no es una copia de EVE Ledger');
+  await expect(panel.locator('.action-notice')).toContainText('no es una copia de IskPulse');
 });
 
 test('el saldo es el del wallet de ESI y Balances concilia lo que el journal aún no da', async ({ page, request }) => {
@@ -262,4 +262,69 @@ test('el selector de idioma cambia la interfaz y vuelve a la misma página', asy
   await expect(page).toHaveURL(/\/balances/);
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('h1')).toContainText('Balance');
+});
+
+test('la vuelta tras cambiar de idioma no sale del dashboard', async ({ request }) => {
+  for (const back of ['/.//evil.example', '/./\\evil.example', '/a/..//evil.example', '/%2e//evil.example', '//evil.example']) {
+    const res = await request.get(`${WEB_URL}/lang?to=en&back=${encodeURIComponent(back)}`, { maxRedirects: 0 });
+    expect(res.headers().location, back).toBe('/');
+  }
+  const ok = await request.get(`${WEB_URL}/lang?to=es&back=${encodeURIComponent('/pilotos?x=1')}`, { maxRedirects: 0 });
+  expect(ok.headers().location).toBe('/pilotos?x=1');
+});
+
+test('el Resultado de juego del Resumen es el mismo que el de Balances', async ({ page }) => {
+  for (const query of ['days=30', `days=30&pilot=${PILOTS.aria.id}`]) {
+    await page.goto(`/?${query}`);
+    const headline = await page.locator('.hero-stat .value.signed').first().getAttribute('title');
+    await page.goto(`/balances?${query}`);
+    const books = await page.locator('tr.result', { hasText: 'Resultado de juego' }).locator('td[title]').getAttribute('title');
+    expect(books, query).toBe(headline);
+  }
+});
+
+test('una pérdida asegurada que aún falta reponer no sale como ganancia', async ({ page, request }) => {
+  const losses = await (await request.get(`${API_URL}/losses?days=30&characterId=${PILOTS.aria.id}`)).json();
+  // The seed: Aria's Rifter, insured half an hour later and not replaced yet
+  expect(losses.totals.insurance).toBeGreaterThan(0);
+  expect(losses.totals.firmCost).toBeGreaterThan(0);
+  expect(losses.totals.toReplace).toBeGreaterThan(0);
+  await page.goto(`/?days=30&pilot=${PILOTS.aria.id}`);
+  // Panel and the Net card's foot: the estimate in grey with «~», not «+400 k» in green
+  const head = page.locator('#perdidas .effect .value');
+  await expect(head).toHaveClass(/estimate/);
+  await expect(head).toContainText('~');
+  await expect(head).not.toContainText('+');
+  const foot = page.locator('.foot-losses-value');
+  await expect(foot).toHaveClass(/estimate/);
+  await expect(page.locator('.foot-losses-value.pos, #perdidas .effect .value.pos')).toHaveCount(0);
+});
+
+test('la web rechaza un Host que no sea de esta máquina (DNS rebinding)', async ({ request }) => {
+  expect((await request.get(`${WEB_URL}/`, { headers: { host: 'evil.example' } })).status()).toBe(403);
+  expect((await request.get(`${WEB_URL}/`)).status()).toBe(200);
+});
+
+test('las cifras abreviadas suben de unidad al redondear', async () => {
+  const { isk } = await import('../src/lib/format');
+  expect(isk(999_960_000)).toBe('1,00 B');
+  expect(isk(9_996_000)).toBe('10,0 M');
+  expect(isk(-1_050_000, { sign: true })).toBe('−1,05 M');
+});
+
+test('el detalle por actividad trae el neto de cada fila y el PLEX va aparte en las tortas de pilotos', async ({ page, request }) => {
+  const summary = await (await request.get(`${API_URL}/summary?days=30`)).json();
+  const trading = summary.byActivity.find((a: { activity: string }) => a.activity === 'trading');
+  const aria = summary.characters.find((c: { id: number }) => c.id === PILOTS.aria.id);
+  // The seed: Aria bought PLEX in the period
+  expect(aria.plexExpenses).toBeGreaterThan(0);
+  await page.goto('/?days=30');
+  const row = page.locator('#por-actividad summary', { hasText: 'Trading' });
+  await expect(row.locator('.cell.net')).toHaveAttribute('title', new RegExp(`${trading.net > 0 ? '\\+' : '−'}`));
+  // «X sin PLEX» under both expenses donuts (by activity and by pilot)
+  await expect(page.locator('.no-plex')).toHaveCount(2);
+  // A jump to each section right after «Saltar al contenido»
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(page.locator(':focus')).toHaveText('Saltar al gráfico');
 });

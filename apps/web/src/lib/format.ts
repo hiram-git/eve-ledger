@@ -7,16 +7,33 @@ const num = (digits: number, lang: Lang) =>
   new Intl.NumberFormat(LOCALE[lang], { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 // EVE notation: k / M / B (billion), the same in all three languages because it is the game's
+const UNITS: [number, string][] = [
+  [1, ''],
+  [1e3, '\u00a0k'],
+  [1e6, '\u00a0M'],
+  [1e9, '\u00a0B'],
+];
 export function isk(value: number, { sign = false, lang = DEFAULT_LANG }: { sign?: boolean; lang?: Lang } = {}): string {
   const abs = Math.abs(value);
   // Non-breaking space between the figure and its unit: «6,41 B» does not break across two lines
-  const [div, suffix] = abs >= 1e9 ? [1e9, '\u00a0B'] : abs >= 1e6 ? [1e6, '\u00a0M'] : abs >= 1e3 ? [1e3, '\u00a0k'] : [1, ''];
-  const scaled = abs / div;
+  let u = abs >= 1e9 ? 3 : abs >= 1e6 ? 2 : abs >= 1e3 ? 1 : 0;
   // Below 1000 decimals are shown if there are any (unit prices of minerals, e.g.)
-  const digits = div === 1 ? (Number.isInteger(abs) ? 0 : 2) : scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  const digitsFor = (x: number) => (u === 0 ? (Number.isInteger(abs) ? 0 : 2) : x >= 100 ? 0 : x >= 10 ? 1 : 2);
+  let scaled = abs / UNITS[u][0];
+  let digits = digitsFor(scaled);
+  // Rounding can reach the next size: 999 960 000 is «1,00 B», not «1000 M», and 9 996 000 is «10,0 M», not «10,00 M»
+  const rounded = Number(scaled.toFixed(digits));
+  if (rounded >= 1000 && u < 3) {
+    u++;
+    scaled = abs / UNITS[u][0];
+    digits = digitsFor(scaled);
+  } else if (u > 0) digits = digitsFor(rounded);
   const prefix = value < 0 ? '−' : sign && value > 0 ? '+' : '';
-  return `${prefix}${num(digits, lang).format(scaled)}${suffix}`;
+  return `${prefix}${num(digits, lang).format(scaled)}${UNITS[u][1]}`;
 }
+
+// An estimated figure: «~» and a thin space before it («~−» read as «~~»; «~ −1,05 M»)
+export const approx = (formatted: string) => `~\u2009${formatted}`;
 
 // Typographic minus sign (U+2212), as in the abbreviated figures
 // sign: «+» on positives (nets), as in the abbreviated figure
