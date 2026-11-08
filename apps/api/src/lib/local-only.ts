@@ -25,7 +25,7 @@ export function allowedHosts(extra = Bun.env.ALLOWED_HOSTS ?? '', bind = Bun.env
 export function localOnly(request: Request, allowed = allowedHosts()): Response | null {
   const host = request.headers.get('host');
   const name = host ? hostname(host) : null;
-  if (!name || !allowed.has(name)) return new Response('Host no permitido: EVE Ledger solo responde en esta máquina', { status: 403 });
+  if (!name || !allowed.has(name)) return new Response('Host no permitido: IskPulse solo responde en esta máquina', { status: 403 });
   if (request.headers.has('origin') && request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Origen no permitido', { status: 403 });
   }

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<title>EVE Ledger brochure</title>
+<title>IskPulse brochure</title>
 <style>
 @font-face { font-family: 'Inter'; src: url('../../apps/web/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2'); font-weight: 100 900; }
 @font-face { font-family: 'Barlow Condensed'; src: url('../../apps/web/node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-700-normal.woff2') format('woff2'); font-weight: 700; }
@@ -34,7 +34,7 @@ body {
 .mark svg { width: 68px; height: 68px; }
 .wordmark { font: 700 96px/1 var(--display); letter-spacing: 0.02em; text-transform: uppercase; color: var(--text); white-space: nowrap; }
 .wordmark span { font-weight: 500; color: #c9d8e4; }
-.wordmark i { font-style: normal; color: var(--cyan); margin-left: 4px; }
+.wordmark .pulse { width: 0.95em; height: 0.48em; margin-left: 0.14em; fill: none; stroke: var(--cyan); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
 .chip { margin-left: 22px; align-self: center; font: 500 24px var(--mono); color: var(--cyan); border: 2px solid var(--cyan-dim); border-radius: 14px; padding: 6px 18px; background: #61cce50f; }
 .tagline { margin: 18px 0 0; font-size: 30px; color: var(--text-secondary); letter-spacing: 0.01em; }
 h1 { margin: 40px 0 0; font-size: 58px; line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; }
@@ -77,8 +77,8 @@ li.hl::before { border-color: var(--cyan); background: #61cce522; }
 <div class="stars" id="stars"></div>
 <div class="left">
   <div class="lockup">
-    <div class="mark"><svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#e6eef5" d="M13 15h22v8H21v5h12v8H21v5h14v8H13z"/><rect x="39" y="45" width="12" height="4" fill="#61cce5"/></svg></div>
-    <div class="wordmark">EVE <span>LEDGER</span><i>_</i></div>
+    <div class="mark"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 35h13l6-19 9 31 6-12h14" fill="none" stroke="#61cce5" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="wordmark">ISK<span>PULSE</span><svg class="pulse" viewBox="0 0 48 24" aria-hidden="true"><path d="M1 14h13l5-11 7 19 5-8h16"/></svg></div>
     <div class="chip" data-version></div>
   </div>
   <p class="tagline" data-t="tagline"></p>
@@ -106,12 +106,12 @@ const T = {
   portada: {
     shots: ['doctrine', 'dashboard'],
     es: {
-      tagline: 'Contabilidad de tus pilotos de EVE Online',
+      tagline: 'Sigue el pulso de tu ISK',
       headline: '¿Ganas o pierdes ISK?<br>Tus pilotos, <em>una economía</em>.',
       bullets: ['Wallets e inventario de todos tus personajes, consolidados', 'Neto por actividad: PvE, PvP, trading y logística', 'Naves perdidas: lo que te costaron de verdad', ['Doctrinas: quién vuela cada fit y cuánto le falta'], 'Balances, ISK/h de ratting y Omega de todas las cuentas', '100 % local: sin crear apps en developers ni claves'],
     },
     en: {
-      tagline: 'A ledger for your EVE Online pilots',
+      tagline: 'Follow the pulse of your ISK',
       headline: 'Making or losing ISK?<br>Your pilots, <em>one economy</em>.',
       bullets: ['Wallets and assets of all your characters, consolidated', 'Net by activity: PvE, PvP, trading, logistics', 'Lost ships: what they really cost you', ['Doctrines: who flies each fit and what they lack'], 'Balance sheets, ratting ISK/h, Omega for all accounts', '100% local: no developer apps or keys to create'],
     },
@@ -119,12 +119,12 @@ const T = {
   doctrinas: {
     shots: ['funds', 'doctrine'],
     es: {
-      tagline: 'Doctrinas · nuevo en EVE Ledger',
+      tagline: 'Doctrinas · nuevo en IskPulse',
       headline: '¿Quién puede volar<br>la <em>doctrina</em>?',
       bullets: ['Pega el fit EFT y el plan de skills de EVEMon', 'Quién lo vuela ya y cuánto entrenamiento falta', 'Omega o Alfa, según las skills del fit', 'Coste en Jita e inyectores para volarlo ya', 'ISK del wallet, con y sin el Omega reservado'],
     },
     en: {
-      tagline: 'Doctrines · new in EVE Ledger',
+      tagline: 'Doctrines · new in IskPulse',
       headline: 'Who can fly<br>the <em>doctrine</em>?',
       bullets: ['Paste the EFT fit and the EVEMon skill plan', 'Who can fly it now and how much training is left', 'Omega or Alpha, from the fit’s skills', 'Jita cost and injectors to fly it now', 'Wallet ISK, with and without Omega set aside'],
     },
@@ -147,12 +147,12 @@ const COMMON = {
   es: {
     box1: 'App de escritorio, <b>gratis</b>',
     box3: 'Windows · macOS · Linux · Español / English / Deutsch',
-    foot: 'EVE Online y todo lo relacionado son marcas de CCP hf. EVE Ledger es una herramienta de terceros, no afiliada a CCP. Capturas con datos de demostración.',
+    foot: 'EVE Online y todo lo relacionado son marcas de CCP hf. IskPulse es una herramienta de terceros, no afiliada a CCP. Capturas con datos de demostración.',
   },
   en: {
     box1: 'Desktop app, <b>free</b>',
     box3: 'Windows · macOS · Linux · Español / English / Deutsch',
-    foot: 'EVE Online and all related marks are trademarks of CCP hf. EVE Ledger is a third-party tool, not affiliated with CCP. Screenshots: demo data.',
+    foot: 'EVE Online and all related marks are trademarks of CCP hf. IskPulse is a third-party tool, not affiliated with CCP. Screenshots: demo data.',
   },
 };
 const q = new URLSearchParams(location.search);

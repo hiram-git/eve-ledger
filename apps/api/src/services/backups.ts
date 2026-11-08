@@ -136,7 +136,7 @@ export type BackupInfo = {
   migrations: number;
 };
 
-// Checks that a file is a healthy EVE Ledger database and that this version can open it (it is not from a newer one)
+// Checks that a file is a healthy IskPulse database and that this version can open it (it is not from a newer one)
 export function inspectBackup(file: string): BackupInfo {
   let handle: Database;
   try {

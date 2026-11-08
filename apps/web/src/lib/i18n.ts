@@ -31,7 +31,7 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 const es = {
   // Frame
   sections: 'Secciones',
-  heroTagline: 'Ingresos, gastos e inventario consolidado de tus pilotos, vía ESI',
+  heroTagline: 'Sigue el pulso de tu ISK',
   skipToContent: 'Saltar al contenido',
   skipToChart: 'Saltar al gráfico',
   skipToActivity: 'Saltar a Por actividad',
@@ -55,9 +55,9 @@ const es = {
   legalLink: 'Aviso legal',
   legalTitle: 'Aviso legal',
   legalIntro:
-    'EVE Ledger es una herramienta de terceros, gratuita y de código abierto (licencia MIT). No está afiliada a CCP hf. ni cuenta con su respaldo.',
+    'IskPulse es una herramienta de terceros, gratuita y de código abierto (licencia MIT). No está afiliada a CCP hf. ni cuenta con su respaldo.',
   legalData:
-    'Usa ESI y el login de EVE (SSO) bajo el acuerdo de licencia para desarrolladores de CCP, con permisos de solo lectura. Tus datos y tus tokens se quedan en este equipo: EVE Ledger no tiene servidor ni recoge nada.',
+    'Usa ESI y el login de EVE (SSO) bajo el acuerdo de licencia para desarrolladores de CCP, con permisos de solo lectura. Tus datos y tus tokens se quedan en este equipo: IskPulse no tiene servidor ni recoge nada.',
   legalDataTitle: 'Datos y ESI',
   legalCcpTitle: 'Aviso de CCP',
   legalCcpNote: 'Texto original de CCP, en inglés.',
@@ -411,7 +411,7 @@ const es = {
   apiRunning: '¿Está corriendo? En',
   firstRunTitle: '¿Ganas o pierdes ISK? Vincula un piloto para empezar',
   firstRunLead:
-    'EVE Ledger junta los wallets e inventarios de tus pilotos en un solo neto: cuánto entra, cuánto sale, en qué actividad y dónde está tu inventario.',
+    'IskPulse junta los wallets e inventarios de tus pilotos en un solo neto: cuánto entra, cuánto sale, en qué actividad y dónde está tu inventario.',
   firstRunSteps: 'Primeros pasos',
   step1Title: 'Vincula un piloto',
   step1: 'Inicias sesión en EVE y autorizas solo la lectura de su wallet y su inventario.',
@@ -789,10 +789,10 @@ const es = {
   loginGeneric: 'El inicio de sesión con EVE falló.',
   // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Piloto vinculado",
-  doneLinked: (name: string) => `${name} ya está en EVE Ledger.`,
+  doneLinked: (name: string) => `${name} ya está en IskPulse.`,
   doneClose: "Puedes cerrar esta página.",
   doneFailedTitle: "No se vinculó ningún piloto",
-  doneRetry: "Vuelve a EVE Ledger para intentarlo de nuevo. Puedes cerrar esta página.",
+  doneRetry: "Vuelve a IskPulse para intentarlo de nuevo. Puedes cerrar esta página.",
   detail: 'Detalle:',
   retry: 'Volver a intentarlo',
   linkedOn: 'Vinculado',
@@ -864,10 +864,10 @@ const es = {
   backupError: (code: string) =>
     ({
       not_found: 'Esa copia ya no existe.',
-      not_sqlite: 'El archivo no es una copia de EVE Ledger.',
-      not_ledger: 'El archivo es una base de datos, pero no de EVE Ledger.',
+      not_sqlite: 'El archivo no es una copia de IskPulse.',
+      not_ledger: 'El archivo es una base de datos, pero no de IskPulse.',
       corrupt: 'La copia está dañada: elige otra.',
-      newer: 'La copia es de una versión más nueva de EVE Ledger: actualiza la app antes de restaurarla.',
+      newer: 'La copia es de una versión más nueva de IskPulse: actualiza la app antes de restaurarla.',
       busy: 'Hay una sincronización en marcha: espera a que acabe y vuelve a intentarlo.',
       empty: 'Elige un archivo de copia.',
       no_file: 'Elige un archivo de copia.',
@@ -894,7 +894,7 @@ export type Messages = typeof es;
 
 const en: Messages = {
   sections: 'Sections',
-  heroTagline: 'Consolidated income, expenses and assets of your pilots, via ESI',
+  heroTagline: 'Follow the pulse of your ISK',
   skipToContent: 'Skip to content',
   skipToChart: 'Skip to the chart',
   skipToActivity: 'Skip to By activity',
@@ -918,9 +918,9 @@ const en: Messages = {
   legalLink: 'Legal notice',
   legalTitle: 'Legal notice',
   legalIntro:
-    'EVE Ledger is a free, open-source third-party tool (MIT license). It is not affiliated with or endorsed by CCP hf.',
+    'IskPulse is a free, open-source third-party tool (MIT license). It is not affiliated with or endorsed by CCP hf.',
   legalData:
-    "It uses ESI and EVE login (SSO) under CCP's Developer License Agreement, with read-only scopes. Your data and tokens stay on this computer: EVE Ledger has no server and collects nothing.",
+    "It uses ESI and EVE login (SSO) under CCP's Developer License Agreement, with read-only scopes. Your data and tokens stay on this computer: IskPulse has no server and collects nothing.",
   legalDataTitle: 'Data and ESI',
   legalCcpTitle: 'CCP notice',
   legalCcpNote: "CCP's original text.",
@@ -1265,7 +1265,7 @@ const en: Messages = {
   apiRunning: 'Is it running? In',
   firstRunTitle: 'Earning or losing ISK? Link a pilot to start',
   firstRunLead:
-    'EVE Ledger brings your pilots’ wallets and assets together into one net figure: what comes in, what goes out, from which activity and where your assets are.',
+    'IskPulse brings your pilots’ wallets and assets together into one net figure: what comes in, what goes out, from which activity and where your assets are.',
   firstRunSteps: 'Getting started',
   step1Title: 'Link a pilot',
   step1: 'You log in with EVE and grant read-only access to their wallet and assets.',
@@ -1628,10 +1628,10 @@ const en: Messages = {
   loginGeneric: 'The EVE login failed.',
   // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Pilot linked",
-  doneLinked: (name) => `${name} is now in EVE Ledger.`,
+  doneLinked: (name) => `${name} is now in IskPulse.`,
   doneClose: "You can close this page.",
   doneFailedTitle: "No pilot was linked",
-  doneRetry: "Go back to EVE Ledger to try again. You can close this page.",
+  doneRetry: "Go back to IskPulse to try again. You can close this page.",
   detail: 'Details:',
   retry: 'Try again',
   linkedOn: 'Linked',
@@ -1701,10 +1701,10 @@ const en: Messages = {
   backupError: (code) =>
     ({
       not_found: 'That backup no longer exists.',
-      not_sqlite: 'The file isn’t an EVE Ledger backup.',
-      not_ledger: 'The file is a database, but not an EVE Ledger one.',
+      not_sqlite: 'The file isn’t an IskPulse backup.',
+      not_ledger: 'The file is a database, but not an IskPulse one.',
       corrupt: 'The backup is damaged: pick another one.',
-      newer: 'The backup comes from a newer version of EVE Ledger: update the app before restoring it.',
+      newer: 'The backup comes from a newer version of IskPulse: update the app before restoring it.',
       busy: 'A sync is running: wait for it to finish and try again.',
       empty: 'Pick a backup file.',
       no_file: 'Pick a backup file.',
@@ -1729,7 +1729,7 @@ const en: Messages = {
 
 const de: Messages = {
   sections: 'Bereiche',
-  heroTagline: 'Konsolidierte Einnahmen, Ausgaben und Inventar deiner Piloten, über ESI',
+  heroTagline: 'Verfolge den Puls deines ISK',
   skipToContent: 'Zum Inhalt springen',
   skipToChart: 'Zum Diagramm springen',
   skipToActivity: 'Zu Nach Aktivität springen',
@@ -1753,9 +1753,9 @@ const de: Messages = {
   legalLink: 'Rechtliche Hinweise',
   legalTitle: 'Rechtliche Hinweise',
   legalIntro:
-    'EVE Ledger ist ein kostenloses Open-Source-Werkzeug eines Drittanbieters (MIT-Lizenz). Es ist weder mit CCP hf. verbunden noch von CCP unterstützt.',
+    'IskPulse ist ein kostenloses Open-Source-Werkzeug eines Drittanbieters (MIT-Lizenz). Es ist weder mit CCP hf. verbunden noch von CCP unterstützt.',
   legalData:
-    'Es nutzt ESI und den EVE-Login (SSO) gemäß der Entwickler-Lizenzvereinbarung von CCP, nur mit Leserechten. Deine Daten und Tokens bleiben auf diesem Computer: EVE Ledger hat keinen Server und sammelt nichts.',
+    'Es nutzt ESI und den EVE-Login (SSO) gemäß der Entwickler-Lizenzvereinbarung von CCP, nur mit Leserechten. Deine Daten und Tokens bleiben auf diesem Computer: IskPulse hat keinen Server und sammelt nichts.',
   legalDataTitle: 'Daten und ESI',
   legalCcpTitle: 'Hinweis von CCP',
   legalCcpNote: 'Originaltext von CCP, auf Englisch.',
@@ -2102,7 +2102,7 @@ const de: Messages = {
   apiRunning: 'Läuft sie? In',
   firstRunTitle: 'Gewinnst oder verlierst du ISK? Verknüpfe einen Piloten',
   firstRunLead:
-    'EVE Ledger fasst Wallets und Inventar deiner Piloten zu einem Nettowert zusammen: was reinkommt, was rausgeht, aus welcher Aktivität und wo dein Inventar liegt.',
+    'IskPulse fasst Wallets und Inventar deiner Piloten zu einem Nettowert zusammen: was reinkommt, was rausgeht, aus welcher Aktivität und wo dein Inventar liegt.',
   firstRunSteps: 'Erste Schritte',
   step1Title: 'Piloten verknüpfen',
   step1: 'Du meldest dich bei EVE an und erlaubst nur das Lesen von Wallet und Inventar.',
@@ -2469,10 +2469,10 @@ const de: Messages = {
   loginGeneric: 'Der EVE-Login ist fehlgeschlagen.',
   // Return from the EVE login in the system browser (desktop app: /vinculado)
   doneTitle: "Pilot verknüpft",
-  doneLinked: (name) => `${name} ist jetzt in EVE Ledger.`,
+  doneLinked: (name) => `${name} ist jetzt in IskPulse.`,
   doneClose: "Du kannst diese Seite schließen.",
   doneFailedTitle: "Es wurde kein Pilot verknüpft",
-  doneRetry: "Geh zurück zu EVE Ledger, um es erneut zu versuchen. Du kannst diese Seite schließen.",
+  doneRetry: "Geh zurück zu IskPulse, um es erneut zu versuchen. Du kannst diese Seite schließen.",
   detail: 'Details:',
   retry: 'Erneut versuchen',
   linkedOn: 'Verknüpft',
@@ -2544,10 +2544,10 @@ const de: Messages = {
   backupError: (code) =>
     ({
       not_found: 'Diese Sicherung gibt es nicht mehr.',
-      not_sqlite: 'Die Datei ist keine EVE-Ledger-Sicherung.',
-      not_ledger: 'Die Datei ist eine Datenbank, aber nicht von EVE Ledger.',
+      not_sqlite: 'Die Datei ist keine IskPulse-Sicherung.',
+      not_ledger: 'Die Datei ist eine Datenbank, aber nicht von IskPulse.',
       corrupt: 'Die Sicherung ist beschädigt: Wähle eine andere.',
-      newer: 'Die Sicherung stammt aus einer neueren Version von EVE Ledger: Aktualisiere die App, bevor du sie wiederherstellst.',
+      newer: 'Die Sicherung stammt aus einer neueren Version von IskPulse: Aktualisiere die App, bevor du sie wiederherstellst.',
       busy: 'Gerade läuft eine Synchronisierung: Warte, bis sie fertig ist, und versuche es erneut.',
       empty: 'Wähle eine Sicherungsdatei.',
       no_file: 'Wähle eine Sicherungsdatei.',

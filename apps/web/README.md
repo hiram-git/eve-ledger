@@ -1,4 +1,4 @@
-# EVE Ledger — Web
+# IskPulse — Web
 
 Dashboard mínimo en Astro (SSR con `@astrojs/node`). Lee `GET /summary` de la API en cada visita.
 

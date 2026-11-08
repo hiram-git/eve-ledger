@@ -69,15 +69,15 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>{title ? `${title} · EVE Ledger` : 'EVE Ledger'}</title>
+    <title>{title ? `${title} · IskPulse` : 'IskPulse'}</title>
   </head>
   <body data-reload={backPath} data-last-run={status?.lastRun?.finishedAt ?? ''} data-now={m.now} data-syncing={m.syncing}>
     <a class="skip-link" href="#contenido">{m.skipToContent}</a>
     {/* More jumps for long pages (the Summary: chart, activities, ships, pilots), also visible only with focus */}
     <slot name="skip" />
     <header class="utility shell">
-      <a class="micro-brand" href="/" aria-label="EVE Ledger">
-        <span class="brand-square" aria-hidden="true">E</span>
+      <a class="micro-brand" href="/" aria-label="IskPulse">
+        <span class="brand-square" aria-hidden="true"><svg class="pulse-mark" viewBox="0 0 48 24" aria-hidden="true" focusable="false"><path d="M1 14h13l5-11 7 19 5-8h16" /></svg></span>
       </a>
       <nav class="sections" aria-label={m.sections}>
         <a href="/" aria-current={section === 'resumen' ? 'page' : undefined}>{m.summary}</a>
@@ -137,11 +137,11 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     </header>
 
     <!-- Brand strip: animated star map behind the title (decorative) -->
-    <section class="hero" aria-label="EVE Ledger">
+    <section class="hero" aria-label="IskPulse">
       <StarMap />
       <div class="hero-lockup shell">
         <div class="hero-title">
-          <p class="hero-name" aria-hidden="true">EVE <span>Ledger</span><i>_</i></p>
+          <p class="hero-name" aria-hidden="true">Isk<span>Pulse</span><svg class="pulse-mark" viewBox="0 0 48 24" aria-hidden="true" focusable="false"><path d="M1 14h13l5-11 7 19 5-8h16" /></svg></p>
           <p class="hero-tagline">{m.heroTagline}</p>
         </div>
       </div>
@@ -162,7 +162,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     </main>
 
     <footer class="shell">
-      <span class="footer-brand">EVE LEDGER · localhost{APP_VERSION && <span class="footer-version"> · v{APP_VERSION}</span>}</span>
+      <span class="footer-brand">ISKPULSE · localhost{APP_VERSION && <span class="footer-version"> · v{APP_VERSION}</span>}</span>
       {/* On a phone the language switch lives here (in the header it took 125 px that the sync status needed) */}
       <nav class="lang-switch footer-lang" aria-label={m.language}>
         {

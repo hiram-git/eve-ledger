@@ -1,11 +1,12 @@
 # Changelog
 
-What changed in each version of the EVE Ledger desktop app. Every version is a [release](../../releases) with installers for Windows, macOS (Apple Silicon) and Linux, and the app updates itself when a new one is published.
+What changed in each version of the IskPulse desktop app. Every version is a [release](../../releases) with installers for Windows, macOS (Apple Silicon) and Linux, and the app updates itself when a new one is published.
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
 ## Unreleased
 
+- **New name: IskPulse** (formerly EVE Ledger), "Follow the pulse of your ISK". New look: a pulse trace replaces the "E" and the blinking cursor in the logo, the favicon, the header, the installer icons and the setup wizard. Nothing changes in your data: your pilots, history, backups and settings stay where they were, and the app still updates itself. The installers are now called `IskPulse_x.y.z_…`. On Windows and Linux (.deb) the first update from the old name may leave the old app installed next to the new one; uninstall "EVE Ledger" when you see it.
 - **Restoring a backup keeps your pilots linked.** EVE replaces a pilot's login on every renewal, so a backup holds logins that no longer work; restoring used to bring them back and every pilot then needed relinking. Now the history comes from the backup and each pilot keeps its current login (a pilot that isn't linked any more, or that changed owner, keeps the backup's).
 - **Sync errors that don't hide or repeat.** A step that failed (for example contracts) now shows in Pilots even when the steps after it finished fine; a courier whose items ESI no longer has (404) doesn't fail the contracts step on every sync; the automatic round and "Sync" pressed at the same time are one round, so neither reports the other's pilots as errors; and the header badge stops saying "N with errors" once those pilots have synced again.
 - **Relink only when it helps.** ESI down or rate limited is retried with "Sync"; "Relink" is offered for an expired or rejected login, a pilot that changed owner or a missing permission.
@@ -24,7 +25,7 @@ When a new version changes the database, the app first saves a copy of it as an 
 
 ## 1.0.0 — 2026-10-19
 
-First stable release. EVE Ledger answers "am I making or losing ISK?" for all your EVE Online pilots, on your own computer: it reads your wallets, assets, losses, contracts, skills and loyalty points through ESI, keeps the history ESI drops after 30 days, and shows it as a Summary (net by activity, today, daily chart, pilots, inventory, market review), Lost ships (what they really cost you), Indicators (Omega for all your accounts, ratting ISK/h, deductions, fees, loyalty points…), Balances (a balance sheet, an income statement and a wallet reconciliation) and Doctrines (who can fly each fit, what it costs, what is missing). Everything stays local: no server, no account, read-only permissions, login with PKCE and no secrets to keep. Spanish, English and German.
+First stable release. IskPulse answers "am I making or losing ISK?" for all your EVE Online pilots, on your own computer: it reads your wallets, assets, losses, contracts, skills and loyalty points through ESI, keeps the history ESI drops after 30 days, and shows it as a Summary (net by activity, today, daily chart, pilots, inventory, market review), Lost ships (what they really cost you), Indicators (Omega for all your accounts, ratting ISK/h, deductions, fees, loyalty points…), Balances (a balance sheet, an income statement and a wallet reconciliation) and Doctrines (who can fly each fit, what it costs, what is missing). Everything stays local: no server, no account, read-only permissions, login with PKCE and no secrets to keep. Spanish, English and German.
 
 Since 0.1.18:
 
@@ -63,13 +64,13 @@ Upgrading from 0.1.x:
 
 - **Indicators → Deductions:** what never reaches your wallet from PvE.
   - **Corporation tax, exact.** What each corporation kept from your bounties, ESS and missions, with its rate. ESI reports it with every payout, already taken out of what you're paid, so your net doesn't change. If the corporation is yours, that ISK is still in its wallet.
-  - **Incursion penalty, estimated.** Bounties in an incursion's constellation pay half. ESI only lists active incursions, so EVE Ledger records them on every sync from this version on; anything earlier can't be known.
+  - **Incursion penalty, estimated.** Bounties in an incursion's constellation pay half. ESI only lists active incursions, so IskPulse records them on every sync from this version on; anything earlier can't be known.
   - **Your ratting ISK/h without deductions**, next to what you actually make.
 - **Ratting by system** tags the systems whose bounties an incursion halved.
 
 ## 0.1.16 — 2026-10-12
 
-- **CCP license agreement.** Requests to ESI now name the app, its source code and the contact you set in Settings. A new **Legal notice** page, linked from the footer, explains what EVE Ledger is and isn't, what it reads from ESI, and includes CCP's notice and the license.
+- **CCP license agreement.** Requests to ESI now name the app, its source code and the contact you set in Settings. A new **Legal notice** page, linked from the footer, explains what IskPulse is and isn't, what it reads from ESI, and includes CCP's notice and the license.
 
 ## 0.1.15 — 2026-10-11
 

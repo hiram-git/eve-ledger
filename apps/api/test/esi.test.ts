@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const API = join(import.meta.dir, '../src');
-Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'eve-ledger-test-')), 'ledger.db');
+Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'iskpulse-test-')), 'ledger.db');
 Bun.env.MIGRATIONS_DIR ||= join(import.meta.dir, '../drizzle');
 Bun.env.ENC_KEY ||= Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
 Bun.env.EVE_CLIENT_ID ||= 'test';

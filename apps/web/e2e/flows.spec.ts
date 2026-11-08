@@ -122,7 +122,7 @@ test('un archivo que no es una copia se rechaza sin tocar nada', async ({ page }
   page.once('dialog', (d) => d.accept());
   await panel.locator('.backup-upload button[type="submit"]').click();
   await expect(page).toHaveURL(/error=not_sqlite/);
-  await expect(panel.locator('.action-notice')).toContainText('no es una copia de EVE Ledger');
+  await expect(panel.locator('.action-notice')).toContainText('no es una copia de IskPulse');
 });
 
 test('el saldo es el del wallet de ESI y Balances concilia lo que el journal aún no da', async ({ page, request }) => {

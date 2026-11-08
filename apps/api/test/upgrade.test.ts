@@ -131,7 +131,7 @@ const results: Record<string, ReturnType<typeof upgrade>> = {};
 
 for (const [version, migrations] of RELEASES) {
   test(`desde la ${version} (${migrations} migraciones)`, () => {
-    const dir = mkdtempSync(join(tmpdir(), `eve-ledger-upgrade-${version}-`));
+    const dir = mkdtempSync(join(tmpdir(), `iskpulse-upgrade-${version}-`));
     const old = oldDatabase(dir, migrations);
     const r = upgrade(old.file);
     results[version] = r;

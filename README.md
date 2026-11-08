@@ -1,15 +1,15 @@
-# EVE Ledger
+# IskPulse
 
-**Are your characters making or losing ISK?** EVE Ledger is a free desktop app that pulls the wallets, assets, lost ships and skills of all your EVE Online characters from ESI and answers that at a glance. It runs entirely on your computer.
+**Are your characters making or losing ISK?** IskPulse is a free desktop app that pulls the wallets, assets, lost ships and skills of all your EVE Online characters from ESI and answers that at a glance. It runs entirely on your computer.
 
 [Español](#español) · [Download](../../releases/latest) · [Changelog](CHANGELOG.md) · Windows · macOS (Apple Silicon) · Linux · English / Español / Deutsch
 
-![EVE Ledger dashboard: net result for the period, today, net by activity and lost ships](docs/brochure/shot-dashboard-en.jpg)
+![IskPulse dashboard: net result for the period, today, net by activity and lost ships](docs/brochure/shot-dashboard-en.jpg)
 
 ## What it does
 
 - **Net by activity.** Income and expenses for all your characters together or one at a time, split into PvE, PvP, trading, logistics and other. PLEX bought for your accounts is kept apart, so it doesn't sink your game result. Transfers between your own characters never count as income.
-- **Lost ships, honestly.** A loss doesn't touch your wallet: you paid for the ship when you bought it. EVE Ledger tracks what it really cost you: the replacement your characters bought afterwards (hull, the same modules or equivalent ones, and cargo), the courier that moved it, and insurance. Anything you never replaced counts too.
+- **Lost ships, honestly.** A loss doesn't touch your wallet: you paid for the ship when you bought it. IskPulse tracks what it really cost you: the replacement your characters bought afterwards (hull, the same modules or equivalent ones, and cargo), the courier that moved it, and insurance. Anything you never replaced counts too.
 - **Doctrines.** Paste a fit in EFT format and an EVEMon plan (`.emp`). You see:
   - who can fly the fit today;
   - what each character is missing and how long it takes to train;
@@ -23,7 +23,7 @@
   - Deductions from what you earn: the corporation tax on bounties, ESS and missions (exact, from the journal) and the bounty penalty in incursion systems (an estimate).
   - Loyalty points by corporation and what they are worth at the best exchange of each LP store (an estimate), with EverMarks apart.
 - **Balances.** Your numbers presented as books: a balance sheet, an income statement and a wallet reconciliation that adds up to the ISK.
-- **Your history, kept.** ESI only serves about 30 days of wallet history, so EVE Ledger stores everything it syncs.
+- **Your history, kept.** ESI only serves about 30 days of wallet history, so IskPulse stores everything it syncs.
   - It runs in the system tray and can start when you sign in, syncing every hour.
   - It makes a daily backup that you can download and restore from **Pilots → Backups**.
 
@@ -54,9 +54,9 @@
    - **Windows:** `.exe` or `.msi`
    - **macOS** (Apple Silicon): `.dmg`
    - **Linux:** `.deb` or `.AppImage`
-2. The installers aren't code-signed: EVE Ledger is a free, open project, and signing certificates cost money every year. They're built in public by GitHub Actions from this repository, and every release lists how to check that a download came from here (SHA-256 sums and GitHub's build attestation). Your system warns you the first time:
+2. The installers aren't code-signed: IskPulse is a free, open project, and signing certificates cost money every year. They're built in public by GitHub Actions from this repository, and every release lists how to check that a download came from here (SHA-256 sums and GitHub's build attestation). Your system warns you the first time:
    - **Windows:** SmartScreen says "Windows protected your PC"; choose **More info → Run anyway**.
-   - **macOS:** if it says the app can't be opened or "is damaged", open **System Settings → Privacy & Security** and choose **Open Anyway** (on older macOS, right-click the app and choose **Open**). If that's not enough, run `xattr -cr "/Applications/EVE Ledger.app"` in Terminal.
+   - **macOS:** if it says the app can't be opened or "is damaged", open **System Settings → Privacy & Security** and choose **Open Anyway** (on older macOS, right-click the app and choose **Open**). If that's not enough, run `xattr -cr "/Applications/IskPulse.app"` in Terminal.
    - **Linux (.AppImage):** make it executable (`chmod +x`) and open it.
    - **Linux:** the tray icon needs AppIndicator. On plain GNOME, install the *AppIndicator and KStatusNotifierItem Support* extension.
 3. On first run, a short setup asks for your preferences:
@@ -120,15 +120,15 @@ Bug reports and ideas are welcome in [Issues](../../issues). To report a bug tha
 
 ## Legal
 
-EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights are reserved worldwide. All other trademarks are the property of their respective owners. EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. CCP hf. has granted permission to EVE Ledger to use EVE Online and all associated logos and designs for promotional and information purposes on its website but does not endorse, and is not in any way affiliated with, EVE Ledger. CCP is in no way responsible for the content on or functioning of this application, nor can it be liable for any damage arising from the use of this application.
+EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights are reserved worldwide. All other trademarks are the property of their respective owners. EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. CCP hf. has granted permission to IskPulse to use EVE Online and all associated logos and designs for promotional and information purposes on its website but does not endorse, and is not in any way affiliated with, IskPulse. CCP is in no way responsible for the content on or functioning of this application, nor can it be liable for any damage arising from the use of this application.
 
-EVE Ledger uses ESI and EVE SSO under CCP's Developer License Agreement. The app shows this notice under **Legal notice** in its footer. The figures in the screenshots are demo data.
+IskPulse uses ESI and EVE SSO under CCP's Developer License Agreement. The app shows this notice under **Legal notice** in its footer. The figures in the screenshots are demo data.
 
 ---
 
 ## Español
 
-EVE Ledger es una app de escritorio gratuita que consolida los wallets, el inventario, las naves perdidas y las skills de todos tus personajes de EVE Online, vía ESI, para responder de un vistazo a la pregunta «¿gano o pierdo ISK?». Corre solo en tu equipo: sin servidor ni cuenta, y con los tokens cifrados.
+IskPulse es una app de escritorio gratuita que consolida los wallets, el inventario, las naves perdidas y las skills de todos tus personajes de EVE Online, vía ESI, para responder de un vistazo a la pregunta «¿gano o pierdo ISK?». Corre solo en tu equipo: sin servidor ni cuenta, y con los tokens cifrados.
 
 - **Descarga:** [Releases](../../releases/latest) (Windows, macOS con Apple Silicon y Linux).
 - **Guía de instalación:** [apps/desktop/INSTALAR.md](apps/desktop/INSTALAR.md).

@@ -1,12 +1,12 @@
-// EVE Ledger desktop wizard and settings. Talks to Rust (src-tauri/src/lib.rs) with invoke().
+// IskPulse desktop wizard and settings. Talks to Rust (src-tauri/src/lib.rs) with invoke().
 // Without Tauri (opening the page in a browser with ?preview) it uses sample data, to review the design.
 
 const T = {
   es: {
-    setupTitle: 'Configura tu EVE Ledger',
+    setupTitle: 'Configura tu IskPulse',
     settingsTitle: 'Configuración',
     settingsLead: 'Los cambios se guardan en tu archivo de configuración y reinician el ledger.',
-    setupLead: "EVE Ledger corre solo en tu equipo: guarda los tokens de EVE cifrados con una clave que se genera aquí y no envía nada a nadie salvo las llamadas a ESI.",
+    setupLead: "IskPulse corre solo en tu equipo: guarda los tokens de EVE cifrados con una clave que se genera aquí y no envía nada a nadie salvo las llamadas a ESI.",
     prefsTitle: 'Preferencias',
     pilotSlots: 'Pilotos que vas a vincular',
     pilotSlotsHint: 'Plazas en la página de pilotos. Puedes vincular más.',
@@ -19,8 +19,8 @@ const T = {
     esiContact: 'Contacto para ESI (opcional)',
     esiContactHint: 'Tu nombre en EVE o un email. CCP lo pide para poder avisar si algo falla.',
     backgroundTitle: 'En segundo plano',
-    backgroundLead: 'ESI solo guarda unos 30 días de wallet: los días que EVE Ledger no está abierto no se pueden recuperar después.',
-    startAtLogin: 'Abrir EVE Ledger al iniciar sesión',
+    backgroundLead: 'ESI solo guarda unos 30 días de wallet: los días que IskPulse no está abierto no se pueden recuperar después.',
+    startAtLogin: 'Abrir IskPulse al iniciar sesión',
     startAtLoginHint: 'Arranca en la bandeja del sistema, sin ventana, y sincroniza aunque no lo abras.',
     closeToTray: 'Al cerrar la ventana, seguir en la bandeja',
     closeToTrayHint: 'Sigue sincronizando. Para salir del todo, «Salir» en su icono de la bandeja o en el menú.',
@@ -46,10 +46,10 @@ const T = {
     err_encKey: 'La clave de cifrado no es válida: regenérala en «Avanzado».',
     err_ports: 'Los puertos tienen que ser distintos y mayores que 1023.',
     err_numbers: 'Los pilotos y los PLEX por mes tienen que ser al menos 1.',
-    startingTitle: 'Arrancando EVE Ledger…',
+    startingTitle: 'Arrancando IskPulse…',
     startingText: 'Preparando la base de datos y el dashboard. Tarda unos segundos.',
-    errorTitle: 'EVE Ledger no pudo arrancar',
-    err_port: (p) => `El puerto ${p} lo está usando otro programa (¿otra copia de EVE Ledger?). Ciérralo o cambia el puerto en Configuración → Avanzado.`,
+    errorTitle: 'IskPulse no pudo arrancar',
+    err_port: (p) => `El puerto ${p} lo está usando otro programa (¿otra copia de IskPulse?). Ciérralo o cambia el puerto en Configuración → Avanzado.`,
     err_exited: (name) => `${name === 'api' ? 'La API' : 'El dashboard'} se cerró al arrancar. Esto dice su registro:`,
     err_timeout: 'Los servicios no respondieron a tiempo. Reintenta o mira los registros.',
     err_other: 'Error inesperado:',
@@ -58,10 +58,10 @@ const T = {
     openLogs: 'Abrir los registros',
   },
   en: {
-    setupTitle: 'Set up your EVE Ledger',
+    setupTitle: 'Set up your IskPulse',
     settingsTitle: 'Settings',
     settingsLead: 'Changes are saved to your settings file and restart the ledger.',
-    setupLead: "EVE Ledger runs only on your computer: it stores your EVE tokens encrypted with a key generated here and sends nothing to anyone except the ESI calls.",
+    setupLead: "IskPulse runs only on your computer: it stores your EVE tokens encrypted with a key generated here and sends nothing to anyone except the ESI calls.",
     prefsTitle: 'Preferences',
     pilotSlots: 'Pilots you will link',
     pilotSlotsHint: 'Slots on the pilots page. You can link more.',
@@ -74,8 +74,8 @@ const T = {
     esiContact: 'Contact for ESI (optional)',
     esiContactHint: 'Your EVE name or an email. CCP asks for it to reach you if something breaks.',
     backgroundTitle: 'In the background',
-    backgroundLead: 'ESI only keeps about 30 days of wallet history: days when EVE Ledger isn’t running can’t be recovered later.',
-    startAtLogin: 'Open EVE Ledger when I sign in',
+    backgroundLead: 'ESI only keeps about 30 days of wallet history: days when IskPulse isn’t running can’t be recovered later.',
+    startAtLogin: 'Open IskPulse when I sign in',
     startAtLoginHint: 'Starts in the system tray, without a window, and syncs even if you don’t open it.',
     closeToTray: 'Keep running in the tray when I close the window',
     closeToTrayHint: 'It keeps syncing. To quit completely, use Quit in its tray icon or in the menu.',
@@ -101,10 +101,10 @@ const T = {
     err_encKey: 'The encryption key is not valid: regenerate it under “Advanced”.',
     err_ports: 'Ports must be different and greater than 1023.',
     err_numbers: 'Pilots and PLEX per month must be at least 1.',
-    startingTitle: 'Starting EVE Ledger…',
+    startingTitle: 'Starting IskPulse…',
     startingText: 'Preparing the database and the dashboard. It takes a few seconds.',
-    errorTitle: 'EVE Ledger could not start',
-    err_port: (p) => `Port ${p} is used by another program (another EVE Ledger?). Close it or change the port in Settings → Advanced.`,
+    errorTitle: 'IskPulse could not start',
+    err_port: (p) => `Port ${p} is used by another program (another IskPulse?). Close it or change the port in Settings → Advanced.`,
     err_exited: (name) => `The ${name === 'api' ? 'API' : 'dashboard'} closed while starting. Its log says:`,
     err_timeout: 'The services did not answer in time. Retry or check the logs.',
     err_other: 'Unexpected error:',
@@ -113,10 +113,10 @@ const T = {
     openLogs: 'Open the logs',
   },
   de: {
-    setupTitle: 'EVE Ledger einrichten',
+    setupTitle: 'IskPulse einrichten',
     settingsTitle: 'Einstellungen',
     settingsLead: 'Änderungen werden in deiner Einstellungsdatei gespeichert und starten den Ledger neu.',
-    setupLead: "EVE Ledger läuft nur auf deinem Rechner: Er speichert deine EVE-Tokens verschlüsselt mit einem hier erzeugten Schlüssel und sendet nichts an andere außer den ESI-Aufrufen.",
+    setupLead: "IskPulse läuft nur auf deinem Rechner: Er speichert deine EVE-Tokens verschlüsselt mit einem hier erzeugten Schlüssel und sendet nichts an andere außer den ESI-Aufrufen.",
     prefsTitle: 'Einstellungen',
     pilotSlots: 'Piloten, die du verknüpfst',
     pilotSlotsHint: 'Plätze auf der Pilotenseite. Du kannst mehr verknüpfen.',
@@ -129,8 +129,8 @@ const T = {
     esiContact: 'Kontakt für ESI (optional)',
     esiContactHint: 'Dein EVE-Name oder eine E-Mail. CCP möchte dich erreichen können, falls etwas schiefgeht.',
     backgroundTitle: 'Im Hintergrund',
-    backgroundLead: 'ESI speichert nur etwa 30 Tage Wallet-Historie: Tage, an denen EVE Ledger nicht läuft, lassen sich später nicht nachholen.',
-    startAtLogin: 'EVE Ledger bei der Anmeldung öffnen',
+    backgroundLead: 'ESI speichert nur etwa 30 Tage Wallet-Historie: Tage, an denen IskPulse nicht läuft, lassen sich später nicht nachholen.',
+    startAtLogin: 'IskPulse bei der Anmeldung öffnen',
     startAtLoginHint: 'Startet im Infobereich, ohne Fenster, und synchronisiert, auch wenn du es nicht öffnest.',
     closeToTray: 'Beim Schließen des Fensters im Infobereich weiterlaufen',
     closeToTrayHint: 'Synchronisiert weiter. Zum vollständigen Beenden: Beenden im Symbol im Infobereich oder im Menü.',
@@ -156,10 +156,10 @@ const T = {
     err_encKey: 'Der Verschlüsselungsschlüssel ist ungültig: unter „Erweitert“ neu erzeugen.',
     err_ports: 'Die Ports müssen verschieden und größer als 1023 sein.',
     err_numbers: 'Piloten und PLEX pro Monat müssen mindestens 1 sein.',
-    startingTitle: 'EVE Ledger startet…',
+    startingTitle: 'IskPulse startet…',
     startingText: 'Datenbank und Dashboard werden vorbereitet. Das dauert ein paar Sekunden.',
-    errorTitle: 'EVE Ledger konnte nicht starten',
-    err_port: (p) => `Port ${p} wird von einem anderen Programm benutzt (ein anderer EVE Ledger?). Schließe es oder ändere den Port unter Einstellungen → Erweitert.`,
+    errorTitle: 'IskPulse konnte nicht starten',
+    err_port: (p) => `Port ${p} wird von einem anderen Programm benutzt (ein anderer IskPulse?). Schließe es oder ändere den Port unter Einstellungen → Erweitert.`,
     err_exited: (name) => `${name === 'api' ? 'Die API' : 'Das Dashboard'} wurde beim Start beendet. Das Protokoll sagt:`,
     err_timeout: 'Die Dienste haben nicht rechtzeitig geantwortet. Erneut versuchen oder die Protokolle ansehen.',
     err_other: 'Unerwarteter Fehler:',
@@ -306,7 +306,7 @@ async function init() {
   $('.lead', form).textContent = firstRun ? t.setupLead : t.settingsLead;
   $('[data-save]').textContent = firstRun ? t.saveFirst : t.save;
   $('[data-cancel]').hidden = !settingsWindow && firstRun;
-  document.title = firstRun ? `EVE Ledger · ${t.setupTitle}` : `EVE Ledger · ${t.settingsTitle}`;
+  document.title = firstRun ? `IskPulse · ${t.setupTitle}` : `IskPulse · ${t.settingsTitle}`;
 
   if (settingsWindow || firstRun || state.status.state === 'setup') show('setup');
   else {

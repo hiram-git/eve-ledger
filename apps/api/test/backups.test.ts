@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 
 const API = join(import.meta.dir, '../src');
-Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'eve-ledger-test-')), 'ledger.db');
+Bun.env.DB_PATH ||= join(mkdtempSync(join(tmpdir(), 'iskpulse-test-')), 'ledger.db');
 Bun.env.MIGRATIONS_DIR ||= join(import.meta.dir, '../drizzle');
 Bun.env.ENC_KEY ||= Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
 Bun.env.EVE_CLIENT_ID ||= 'test';
@@ -21,7 +21,7 @@ runMigrations();
 
 const X = 9101;
 const Y = 9102;
-const tmp = mkdtempSync(join(tmpdir(), 'eve-ledger-backup-test-'));
+const tmp = mkdtempSync(join(tmpdir(), 'iskpulse-backup-test-'));
 
 async function clean() {
   await db.delete(s.walletJournal).where(inArray(s.walletJournal.characterId, [X, Y]));
@@ -95,7 +95,7 @@ test('la diaria se hace una vez y no se repite hasta pasadas 20 h', async () => 
   expect(backups.maybeAutoBackup()).toBeNull();
 });
 
-test('solo restaura bases de EVE Ledger sanas y de esta versión o anteriores', async () => {
+test('solo restaura bases de IskPulse sanas y de esta versión o anteriores', async () => {
   const junk = join(tmp, 'junk.db');
   writeFileSync(junk, 'esto no es una base de datos '.repeat(200));
   expect(() => backups.inspectBackup(junk)).toThrow(expect.objectContaining({ code: 'not_sqlite' }));

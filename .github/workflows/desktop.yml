@@ -1,7 +1,7 @@
-# EVE Ledger desktop installers (apps/desktop) for Windows, macOS and Linux.
+# IskPulse desktop installers (apps/desktop) for Windows, macOS and Linux.
 # Tauri does not cross-compile: each installer is built on its own system.
 # - Automatic: when the version in apps/desktop/src-tauri/tauri.conf.json is bumped and reaches main (merge), all three are built and
-#   a draft release «EVE Ledger x.y.z» is left with the tag desktop-vx.y.z (if that release already exists, it does nothing).
+#   a draft release «IskPulse x.y.z» is left with the tag desktop-vx.y.z (if that release already exists, it does nothing).
 # - Manual: Actions → «Instaladores de escritorio» → Run workflow (the installers are left as artifacts; with the
 #   «release» box checked, also the draft for the current version).
 # - With a desktop-v* tag (e.g. desktop-v0.1.0): same as bumping the version (the tag must match it).
@@ -74,13 +74,13 @@ jobs:
           if [ "$build" = true ] && [ -n "$tag" ] && ! gh release view "$tag" >/dev/null 2>&1; then
             # The notes: this version's section in CHANGELOG.md (from «## x.y.z» to the next «## »)
             awk -v v="$version" 'index($0, "## " v " ") == 1 || $0 == "## " v { f = 1; next } f && /^## / { exit } f' CHANGELOG.md >/tmp/notes.md
-            [ -s /tmp/notes.md ] || echo "Desktop installers for EVE Ledger $version." >/tmp/notes.md
+            [ -s /tmp/notes.md ] || echo "Desktop installers for IskPulse $version." >/tmp/notes.md
             printf '\nInstall guide: %s/%s/blob/main/apps/desktop/INSTALAR.md · Changelog: %s/%s/blob/main/CHANGELOG.md\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" >>/tmp/notes.md
             # No code signing: how to check that an installer came from this repository
             printf '\n**Verify a download.** The installers are built by GitHub Actions from this repository and are not code-signed. Compare the file with `SHA256SUMS-<system>.txt` below, or, with the GitHub CLI: `gh attestation verify <file> --repo %s`\n' \
               "$GITHUB_REPOSITORY" >>/tmp/notes.md
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "EVE Ledger $version" --notes-file /tmp/notes.md
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "IskPulse $version" --notes-file /tmp/notes.md
             echo "::notice::Borrador de la release $tag creado: publícalo cuando estén los tres instaladores"
           fi
           echo "build=$build" >>"$GITHUB_OUTPUT"
@@ -126,10 +126,10 @@ jobs:
             exit 1
           fi
           if [ "$HAS_PRIVATE" = true ] && [ "$HAS_PUBLIC" != true ]; then
-            echo "::error::Falta EVE_LEDGER_UPDATER_PUBKEY (el contenido de eve-ledger.key.pub) como variable o secreto del repositorio: sin ella, estos instaladores no se actualizarían solos."
+            echo "::error::Falta EVE_LEDGER_UPDATER_PUBKEY (el contenido de iskpulse.key.pub) como variable o secreto del repositorio: sin ella, estos instaladores no se actualizarían solos."
             exit 1
           elif [ "$HAS_PRIVATE" != true ] && [ "$HAS_PUBLIC" = true ]; then
-            echo "::error::Falta el secreto del repositorio TAURI_SIGNING_PRIVATE_KEY (el contenido de eve-ledger.key): sin él, estos instaladores no se actualizarían solos."
+            echo "::error::Falta el secreto del repositorio TAURI_SIGNING_PRIVATE_KEY (el contenido de iskpulse.key): sin él, estos instaladores no se actualizarían solos."
             exit 1
           elif [ "$HAS_PRIVATE" != true ]; then
             echo "::notice::Sin claves del actualizador: estos instaladores no buscarán versiones nuevas (ver apps/desktop/README.md)."
@@ -190,8 +190,8 @@ jobs:
           tauriScript: bunx tauri
           args: ${{ env.UPDATER == 'true' && '--config src-tauri/tauri.updater.conf.json' || '' }}
           tagName: ${{ needs.version.outputs.tag }}
-          releaseName: 'EVE Ledger __VERSION__'
-          releaseBody: 'Instaladores de EVE Ledger de escritorio. Guía de instalación: apps/desktop/INSTALAR.md'
+          releaseName: 'IskPulse __VERSION__'
+          releaseBody: 'Instaladores de IskPulse de escritorio. Guía de instalación: apps/desktop/INSTALAR.md'
           # Draft (already created in «version»): installed apps update when you publish it
           releaseDraft: true
 
@@ -233,7 +233,7 @@ jobs:
       - name: Guardar los instaladores
         uses: actions/upload-artifact@v6
         with:
-          name: eve-ledger-${{ matrix.name }}
+          name: iskpulse-${{ matrix.name }}
           path: |
             apps/desktop/src-tauri/target/release/bundle/**/*.exe
             apps/desktop/src-tauri/target/release/bundle/**/*.msi
