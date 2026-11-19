@@ -369,7 +369,7 @@ fn login_notice_script() -> String {
     )
 }
 
-/// Menu texts by system language (the web UI has its own ES/EN/DE selector)
+/// Menu texts by system language (the web UI has its own language selector)
 fn menu_text(key: &str) -> &'static str {
     let lang = sys_locale::get_locale().unwrap_or_default().to_lowercase();
     let lang = if lang.starts_with("de") { "de" } else if lang.starts_with("en") { "en" } else { "es" };

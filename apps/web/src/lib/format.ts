@@ -6,7 +6,7 @@ const LOCALE: Record<Lang, string> = { es: 'es', en: 'en', de: 'de' };
 const num = (digits: number, lang: Lang) =>
   new Intl.NumberFormat(LOCALE[lang], { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-// EVE notation: k / M / B (billion), the same in all three languages because it is the game's
+// EVE notation: k / M / B (billion), the same in every language because it is the game's
 const UNITS: [number, string][] = [
   [1, ''],
   [1e3, '\u00a0k'],

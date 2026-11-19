@@ -10,7 +10,7 @@ import Icon from '../components/Icon.astro';
 import StarMap from '../components/StarMap.astro';
 import type { SyncStatus } from '../lib/api';
 import { ago, until } from '../lib/format';
-import { LANG_NAMES, LANGS, getLang, t } from '../lib/i18n';
+import { LANG_NAMES, LANG_TAGS, LANGS, getLang, t } from '../lib/i18n';
 
 interface Props {
   title?: string;
@@ -61,7 +61,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
 ---
 
 <!doctype html>
-<html lang={lang}>
+<html lang={LANG_TAGS[lang]}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -102,7 +102,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
         <nav class="lang-switch" aria-label={m.language}>
           {
             LANGS.map((l) => (
-              <a href={langHref(l)} hreflang={l} lang={l} title={LANG_NAMES[l]} aria-current={l === lang ? 'true' : undefined}>
+              <a href={langHref(l)} hreflang={LANG_TAGS[l]} lang={LANG_TAGS[l]} title={LANG_NAMES[l]} aria-current={l === lang ? 'true' : undefined}>
                 {l.toUpperCase()}
               </a>
             ))
@@ -167,7 +167,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       <nav class="lang-switch footer-lang" aria-label={m.language}>
         {
           LANGS.map((l) => (
-            <a href={langHref(l)} hreflang={l} lang={l} title={LANG_NAMES[l]} aria-current={l === lang ? 'true' : undefined}>
+            <a href={langHref(l)} hreflang={LANG_TAGS[l]} lang={LANG_TAGS[l]} title={LANG_NAMES[l]} aria-current={l === lang ? 'true' : undefined}>
               {l.toUpperCase()}
             </a>
           ))

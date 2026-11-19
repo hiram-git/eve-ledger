@@ -170,11 +170,11 @@ const T = {
 };
 
 const lang = (() => {
-  const l = (navigator.language || 'es').toLowerCase();
-  return l.startsWith('de') ? 'de' : l.startsWith('en') ? 'en' : 'es';
+  const l = (navigator.language || 'es').slice(0, 2).toLowerCase();
+  return l in T ? l : 'es';
 })();
 const t = T[lang];
-document.documentElement.lang = lang;
+document.documentElement.lang = { pt: 'pt-BR', zh: 'zh-CN' }[lang] ?? lang;
 
 // Tauri or, with ?preview, a stand-in to view the page in a browser
 const preview = !window.__TAURI__;

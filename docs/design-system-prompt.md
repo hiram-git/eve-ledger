@@ -161,7 +161,7 @@ Nada decorativo imita un dato. Transiciones de color de 0,18 s en botones y enla
 ## 11. Voz y textos
 
 - Español neutro, directo, con la terminología del juego: pilotos, wallet, ISK, Saldo, Ingresos y Gastos, PvE, PvP, Trading, Logística, ratting, ESS, killmail, courier, Omega, PLEX, «Hoy (EVE)».
-- Tres idiomas: español (predeterminado), inglés y alemán. Ningún texto fijo en el diseño que no pueda traducirse; los nombres de ESI (ítems, sistemas, pilotos) no se traducen.
+- Seis idiomas: español (predeterminado), inglés, alemán, portugués de Brasil, chino simplificado y ruso (el ruso y el portugués son ~20 % más largos: los rótulos cortos deben caber a 390 px; el chino usa la fuente CJK del sistema). Ningún texto fijo en el diseño que no pueda traducirse; los nombres de ESI (ítems, sistemas, pilotos) no se traducen.
 - Comillas angulares «» en español. Frases que cuantifican en lugar de alarmar: «2 de 4 pilotos al día · hace 12 min», no «¡Atención!». Sin exclamaciones ni emojis.
 - Números y fechas con el formato de cada idioma (`Intl`): «25 sept, 09:47».
 

@@ -1,4 +1,4 @@
-// Every page, in the three languages and at 390 and 1320 px: responds, throws no errors, has a single h1, shows no
+// Every page, in every language and at 390 and 1320 px: responds, throws no errors, has a single h1, shows no
 // «undefined»/«NaN» and doesn't overflow horizontally (what broke most often when the UI changed)
 import { expect, test, type Page } from '@playwright/test';
 import { PILOTS, WEB_URL } from './fixtures';
@@ -15,6 +15,7 @@ const PAGES = [
   { name: 'Aviso legal', path: '/aviso-legal' },
 ];
 const LANGS = ['es', 'en', 'de'] as const;
+const TAGS: Record<string, string> = { pt: 'pt-BR', zh: 'zh-CN' };
 const WIDTHS = [390, 1320];
 
 // Page errors. CCP images (portraits, icons) don't load without network: they don't count
@@ -36,7 +37,7 @@ for (const lang of LANGS) {
         await page.setViewportSize({ width, height: 900 });
         const res = await page.goto(p.path);
         expect(res?.status(), `${p.path} a ${width} px`).toBe(200);
-        await expect(page.locator('html')).toHaveAttribute('lang', lang);
+        await expect(page.locator('html')).toHaveAttribute('lang', TAGS[lang] ?? lang);
         await expect(page.locator('h1')).toHaveCount(1);
         const text = await page.locator('body').innerText();
         expect(text, `texto roto en ${p.path} a ${width} px`).not.toMatch(/\bundefined\b|\bNaN\b|\[object |Infinity/);

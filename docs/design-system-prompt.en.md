@@ -159,7 +159,7 @@ Nothing decorative imitates data. 0.18 s colour transitions on buttons and links
 ## 11. Voice and copy
 
 - Direct, using the game's own terms: pilots, wallet, ISK, Balance, Income and Expenses, PvE, PvP, Trading, Logistics, ratting, ESS, killmail, courier, Omega, PLEX, "Today (EVE)".
-- Three languages: Spanish (default), English and German. No fixed text in the design that cannot be translated; ESI names (items, systems, pilots) are not translated.
+- Six languages: Spanish (default), English, German, Brazilian Portuguese, Simplified Chinese and Russian (Russian and Portuguese run ~20% longer: short labels must fit at 390 px; Chinese uses the system CJK font). No fixed text in the design that cannot be translated; ESI names (items, systems, pilots) are not translated.
 - Angle quotes «» in Spanish. Sentences that quantify instead of alarming: "2 of 4 pilots up to date · 12 min ago", not "Warning!". No exclamation marks or emoji.
 - Numbers and dates in each language's format (`Intl`): "25 sept, 09:47" in Spanish, "25 Sept, 09:47" in English.
 

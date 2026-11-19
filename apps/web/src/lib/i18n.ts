@@ -9,6 +9,8 @@ export type Lang = (typeof LANGS)[number];
 export const DEFAULT_LANG: Lang = 'es';
 export const LANG_COOKIE = 'lang';
 export const LANG_NAMES: Record<Lang, string> = { es: 'Español', en: 'English', de: 'Deutsch' };
+// BCP 47 tag for <html lang>, hreflang and Intl (the region picks Brazilian Portuguese and Simplified Chinese)
+export const LANG_TAGS: Record<Lang, string> = { es: 'es', en: 'en', de: 'de' };
 
 export const isLang = (v: unknown): v is Lang => typeof v === 'string' && (LANGS as readonly string[]).includes(v);
 

@@ -54,6 +54,10 @@
 
   --radius: 10px;
 }
+/* Inter has no CJK glyphs: name the system's Simplified Chinese faces so Windows doesn't fall back to SimSun */
+:root:lang(zh) {
+  --font: 'Inter Variable', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', system-ui, sans-serif;
+}
 
 * {
   box-sizing: border-box;

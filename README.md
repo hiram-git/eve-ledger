@@ -2,7 +2,7 @@
 
 **Are your characters making or losing ISK?** IskPulse is a free desktop app that pulls the wallets, assets, lost ships and skills of all your EVE Online characters from ESI and answers that at a glance. It runs entirely on your computer.
 
-[Español](#español) · [Download](../../releases/latest) · [Changelog](CHANGELOG.md) · Windows · macOS (Apple Silicon) · Linux · English / Español / Deutsch
+[Español](#español) · [Download](../../releases/latest) · [Changelog](CHANGELOG.md) · Windows · macOS (Apple Silicon) · Linux · English / Español / Deutsch / Português (BR) / 中文 / Русский
 
 ![IskPulse dashboard: net result for the period, today, net by activity and lost ships](docs/brochure/shot-dashboard-en.jpg)
 

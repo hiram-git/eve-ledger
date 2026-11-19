@@ -11,7 +11,7 @@ Dashboard mínimo en Astro (SSR con `@astrojs/node`). Lee `GET /summary` de la A
 Producción local: `bun run build && bun run start`.
 
 ## Idiomas
-Español (predeterminado), inglés y alemán, con el selector ES · EN · DE de la barra superior; la elección se guarda en una cookie. Los textos están en `src/lib/i18n.ts`.
+Español (predeterminado), inglés, alemán, portugués de Brasil, chino simplificado y ruso, con el selector ES · EN · DE · PT · ZH · RU de la barra superior; la elección se guarda en una cookie. Los textos están en `src/lib/i18n.ts`.
 
 ## Qué muestra
 - Neto del período (7 / 30 / 90 días) con signo, comparación con el período anterior y la cifra de «Hoy» (hora EVE)

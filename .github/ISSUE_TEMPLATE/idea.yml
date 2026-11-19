@@ -4,7 +4,7 @@ labels: [idea]
 body:
   - type: markdown
     attributes:
-      value: You can write in English, Spanish or German.
+      value: You can write in English, Spanish, German, Portuguese, Chinese or Russian.
   - type: textarea
     id: question
     attributes:

@@ -35,7 +35,7 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["Spanish", "English", "German"],
+        "languages": ["Spanish", "English", "German", "PortugueseBR", "SimpChinese", "Russian"],
         "displayLanguageSelector": true
       }
     }
