@@ -4,6 +4,11 @@ What changed in each version of the IskPulse desktop app. Every version is a [re
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
+## Unreleased
+
+- **Three more languages: Brazilian Portuguese, Simplified Chinese and Russian.** The whole dashboard, the setup wizard, the tray menu, the update dialogs and the Windows installer. The wizard, the tray menu and the update dialogs follow your system language; in the dashboard, pick yours from the language menu (it is remembered).
+- **Language menu.** With six languages the header switch is now a dropdown, each language written in its own script.
+
 ## 1.1.0 — 2026-11-08
 
 - **New name: IskPulse** (formerly EVE Ledger), "Follow the pulse of your ISK". New look: a pulse trace replaces the "E" and the blinking cursor in the logo, the favicon, the header, the installer icons and the setup wizard. Nothing changes in your data: your pilots, history, backups and settings stay where they were, and the app still updates itself. The installers are now called `IskPulse_x.y.z_…`. On Windows and Linux (.deb) the first update from the old name may leave the old app installed next to the new one; uninstall "EVE Ledger" when you see it.

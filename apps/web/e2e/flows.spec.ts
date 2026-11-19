@@ -258,7 +258,8 @@ test('el pie enlaza el aviso legal con el texto original de CCP', async ({ page 
 
 test('el selector de idioma cambia la interfaz y vuelve a la misma página', async ({ page }) => {
   await page.goto('/balances');
-  await page.getByRole('link', { name: 'EN', exact: true }).click();
+  await page.locator('.utility-right .lang-switch summary').click();
+  await page.getByRole('link', { name: 'English', exact: true }).click();
   await expect(page).toHaveURL(/\/balances/);
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('h1')).toContainText('Balance');

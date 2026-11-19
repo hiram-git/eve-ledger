@@ -134,10 +134,15 @@ fn log(app: &AppHandle, line: &str) {
     }
 }
 
+/// UI language from the system locale: one of the six the app is translated into, Spanish otherwise
+pub fn ui_lang() -> &'static str {
+    let locale = sys_locale::get_locale().unwrap_or_default().to_lowercase();
+    ["en", "de", "pt", "zh", "ru"].into_iter().find(|l| locale.starts_with(l)).unwrap_or("es")
+}
+
 /// Notice texts according to the system language, like the menu
 pub fn text(key: &str) -> &'static str {
-    let lang = sys_locale::get_locale().unwrap_or_default().to_lowercase();
-    let lang = if lang.starts_with("de") { "de" } else if lang.starts_with("en") { "en" } else { "es" };
+    let lang = ui_lang();
     match (lang, key) {
         ("en", "title") => "IskPulse update",
         ("en", "ready") => "IskPulse {v} is ready to install (you have {cur}). Your data and settings are kept.",
@@ -151,6 +156,24 @@ pub fn text(key: &str) -> &'static str {
         ("de", "onClose") => "Beim Beenden der App",
         ("de", "upToDate") => "Du hast die neueste Version ({v}).",
         ("de", "checkFailed") => "Nach Updates suchen fehlgeschlagen:",
+        ("pt", "title") => "Atualização do IskPulse",
+        ("pt", "ready") => "O IskPulse {v} está pronto para instalar (você tem a {cur}). Seus dados e suas configurações são mantidos.",
+        ("pt", "restartNow") => "Reiniciar agora",
+        ("pt", "onClose") => "Ao sair do app",
+        ("pt", "upToDate") => "Você tem a versão mais recente ({v}).",
+        ("pt", "checkFailed") => "Não foi possível procurar atualizações:",
+        ("zh", "title") => "IskPulse 更新",
+        ("zh", "ready") => "IskPulse {v} 已可安装（你当前是 {cur}）。你的数据和设置会保留。",
+        ("zh", "restartNow") => "立即重启",
+        ("zh", "onClose") => "退出应用时",
+        ("zh", "upToDate") => "你已是最新版本（{v}）。",
+        ("zh", "checkFailed") => "无法检查更新：",
+        ("ru", "title") => "Обновление IskPulse",
+        ("ru", "ready") => "IskPulse {v} готов к установке (у тебя {cur}). Твои данные и настройки сохранятся.",
+        ("ru", "restartNow") => "Перезапустить сейчас",
+        ("ru", "onClose") => "При выходе из приложения",
+        ("ru", "upToDate") => "У тебя последняя версия ({v}).",
+        ("ru", "checkFailed") => "Не удалось проверить обновления:",
         (_, "title") => "Actualización de IskPulse",
         (_, "ready") => "IskPulse {v} está lista para instalarse (tienes la {cur}). Tus datos y tu configuración se conservan.",
         (_, "restartNow") => "Reiniciar ahora",

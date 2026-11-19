@@ -14,7 +14,7 @@ const PAGES = [
   { name: 'Pilotos', path: '/pilotos' },
   { name: 'Aviso legal', path: '/aviso-legal' },
 ];
-const LANGS = ['es', 'en', 'de'] as const;
+const LANGS = ['es', 'en', 'de', 'pt', 'zh', 'ru'] as const;
 const TAGS: Record<string, string> = { pt: 'pt-BR', zh: 'zh-CN' };
 const WIDTHS = [390, 1320];
 

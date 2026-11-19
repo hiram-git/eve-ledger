@@ -1748,9 +1748,10 @@ const shipIcon = (id: number) => `https://images.evetech.net/types/${id}/icon?si
     .new-doctrine {
       width: 100%;
     }
+    /* Zero basis: the field takes what the button leaves (a longer button, as in Russian, pushed the form out) */
     .new-doctrine input[type='text'] {
       flex: 1;
-      width: auto;
+      width: 0;
     }
     .new-doctrine .secondary-button,
     .plan-form .secondary-button,

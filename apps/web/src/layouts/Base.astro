@@ -99,15 +99,20 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
         </a>
       </nav>
       <div class="utility-right">
-        <nav class="lang-switch" aria-label={m.language}>
-          {
-            LANGS.map((l) => (
-              <a href={langHref(l)} hreflang={LANG_TAGS[l]} lang={LANG_TAGS[l]} title={LANG_NAMES[l]} aria-current={l === lang ? 'true' : undefined}>
-                {l.toUpperCase()}
-              </a>
-            ))
-          }
-        </nav>
+        <details class="lang-switch">
+          <summary title={m.language} aria-label={`${m.language}: ${LANG_NAMES[lang]}`}>{lang.toUpperCase()}</summary>
+          <ul>
+            {
+              LANGS.map((l) => (
+                <li>
+                  <a href={langHref(l)} hreflang={LANG_TAGS[l]} lang={LANG_TAGS[l]} aria-current={l === lang ? 'true' : undefined}>
+                    {LANG_NAMES[l]}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </details>
         {
           cron && (
             <span class:list={['status-badge', cron.cls]} title={cronTitle}>
@@ -163,16 +168,21 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
 
     <footer class="shell">
       <span class="footer-brand">ISKPULSE · localhost{APP_VERSION && <span class="footer-version"> · v{APP_VERSION}</span>}</span>
-      {/* On a phone the language switch lives here (in the header it took 125 px that the sync status needed) */}
-      <nav class="lang-switch footer-lang" aria-label={m.language}>
-        {
-          LANGS.map((l) => (
-            <a href={langHref(l)} hreflang={LANG_TAGS[l]} lang={LANG_TAGS[l]} title={LANG_NAMES[l]} aria-current={l === lang ? 'true' : undefined}>
-              {l.toUpperCase()}
-            </a>
-          ))
-        }
-      </nav>
+      {/* On a phone the language menu lives here (the header row needs the room for the sync status) */}
+      <details class="lang-switch footer-lang">
+        <summary title={m.language} aria-label={`${m.language}: ${LANG_NAMES[lang]}`}>{lang.toUpperCase()}</summary>
+        <ul>
+          {
+            LANGS.map((l) => (
+              <li>
+                <a href={langHref(l)} hreflang={LANG_TAGS[l]} lang={LANG_TAGS[l]} aria-current={l === lang ? 'true' : undefined}>
+                  {LANG_NAMES[l]}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </details>
       <span>
         {m.footer} <a class="footer-link" href="/aviso-legal" aria-current={section === 'legal' ? 'page' : undefined}>{m.legalLink}</a>
       </span>
@@ -218,6 +228,18 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       // API down: retried on the next cycle
     }
   }, 60_000);
+
+  // Language menu: closes on Escape or a click outside it, like a native dropdown
+  for (const menu of document.querySelectorAll<HTMLDetailsElement>('details.lang-switch')) {
+    document.addEventListener('click', (e) => {
+      if (menu.open && !menu.contains(e.target as Node)) menu.open = false;
+    });
+    menu.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !menu.open) return;
+      menu.open = false;
+      menu.querySelector('summary')!.focus();
+    });
+  }
 
   // Loading state on any sync form: it may take a while; prevents double submits
   for (const form of document.querySelectorAll<HTMLFormElement>('form.sync-form')) {
@@ -265,24 +287,73 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
     height: 2px;
     background: var(--cyan);
   }
+  /* Language menu: a dropdown of the six languages, each named in its own language */
   .lang-switch {
+    position: relative;
+  }
+  .lang-switch summary {
     display: flex;
-    padding: 2px;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
     border: 1px solid var(--line);
     border-radius: 6px;
-  }
-  .lang-switch a {
-    padding: 5px 9px;
-    border-radius: 4px;
     font: 500 12px/1.4 var(--mono);
     letter-spacing: 0.04em;
     color: var(--text-muted);
-    text-decoration: none;
+    list-style: none;
+    cursor: pointer;
   }
-  .lang-switch a:hover {
+  .lang-switch summary::-webkit-details-marker {
+    display: none;
+  }
+  .lang-switch summary::after {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+  }
+  .lang-switch[open] summary::after {
+    transform: translateY(1px) rotate(225deg);
+  }
+  .lang-switch summary:hover,
+  .lang-switch[open] summary {
     color: var(--text);
   }
-  .lang-switch a[aria-current='true'] {
+  .lang-switch ul {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    min-width: 176px;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--panel);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    box-shadow: 0 14px 32px -14px #000;
+  }
+  .footer-lang ul {
+    top: auto;
+    bottom: calc(100% + 4px);
+  }
+  .lang-switch li a {
+    display: block;
+    padding: 7px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .lang-switch li a:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+  .lang-switch li a[aria-current='true'] {
     background: #16304070;
     color: #8addee;
   }
@@ -399,7 +470,7 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       display: none;
     }
     .footer-lang {
-      display: flex;
+      display: block;
     }
     .utility-right:has(.status-badge.off, .status-badge.error) .sync-form .label {
       position: absolute;
@@ -417,13 +488,14 @@ const langHref = (to: string) => `/lang?${new URLSearchParams({ to, back: backPa
       margin-left: -7px;
       padding: 7px;
     }
-    .lang-switch a {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 40px;
+    .lang-switch summary {
       min-height: 40px;
       padding: 0 12px;
+    }
+    .lang-switch li a {
+      display: flex;
+      align-items: center;
+      min-height: 40px;
     }
   }
 </style>
