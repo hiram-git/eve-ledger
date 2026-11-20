@@ -4,8 +4,9 @@ What changed in each version of the IskPulse desktop app. Every version is a [re
 
 When a new version changes the database, the app first saves a copy of it as an `update` backup (**Pilots → Backups**), so you can always go back.
 
-## Unreleased
+## 1.2.0 — 2026-11-20
 
+- **Between your pilots, in Balances.** A new section lists everything moved between two of your pilots in the period: donations, direct trades with ISK, item exchange contracts with their items (also the 0 ISK ones, like handing your main the ship your alt bought) and market trades between them, with the items' value at the ESI average price. Moves inside a lost ship's replacement window are tagged with that loss. The wallet reconciliation's "Moved with your other pilots" now breaks down by kind and links to the section, and the section's ISK adds up to it exactly; in the consolidated view it all sums zero. The game's trade window only records the ISK, so a trade of items alone doesn't show.
 - **Three more languages: Brazilian Portuguese, Simplified Chinese and Russian.** The whole dashboard, the setup wizard, the tray menu, the update dialogs and the Windows installer. The wizard, the tray menu and the update dialogs follow your system language; in the dashboard, pick yours from the language menu (it is remembered).
 - **Language menu.** With six languages the header switch is now a dropdown, each language written in its own script.
 

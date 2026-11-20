@@ -230,6 +230,33 @@ export function lossesHeadline(t: Losses['totals']) {
 export const getLosses = (days: number, characterId?: number) =>
   call<Losses>(`/losses?days=${days}${characterId ? `&characterId=${characterId}` : ''}`);
 export const getMap = (characterId?: number) => call<GeoMap>(`/map?${pilotQuery(characterId)}`);
+
+// Balances «Entre tus pilotos»: ISK and items moved between your pilots. giver hands over the items (or the ISK when
+// there are none); the ISK goes iskFrom → iskTo (in an exchange with a price, back from the receiver). items null: an
+// exchange whose items the next sync reads
+export type MoveKind = 'donation' | 'trade' | 'contract' | 'market' | 'other';
+export type InternalMove = {
+  date: string;
+  kind: MoveKind;
+  refType: string;
+  giver: { id: number; name: string | null };
+  receiver: { id: number; name: string | null };
+  isk: number;
+  iskFrom: number;
+  iskTo: number;
+  items: { typeId: number; name: string | null; quantity: number; value: number }[] | null;
+  value: number;
+  contractId: number | null;
+  replacement: { killmailId: number; ship: string | null; pilot: string | null } | null;
+};
+export type InternalMoves = {
+  moves: InternalMove[];
+  totals: { iskReceived: number; iskSent: number; itemsReceived: number; itemsSent: number };
+  byKind: Partial<Record<MoveKind, number>>;
+  unread: number;
+};
+export const getInternalMoves = (days: number, characterId?: number) =>
+  call<InternalMoves>(`/internal-moves?days=${days}${characterId ? `&characterId=${characterId}` : ''}`);
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
 

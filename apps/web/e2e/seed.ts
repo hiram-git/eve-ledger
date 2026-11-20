@@ -70,6 +70,9 @@ export function seed() {
   // Donation from Aria to Kade (between your pilots: neither income nor expense; ESI gives both sides the same id)
   entries.push({ char: aria.id, date: ago(20, 18), ref: 'player_donation', amount: -500_000_000, first: aria.id, second: kade.id });
   entries.push({ char: kade.id, date: ago(20, 18), ref: 'player_donation', amount: 500_000_000, first: aria.id, second: kade.id });
+  // Kade pays Aria 1 M in a direct trade (between your pilots; both sides, with the same id)
+  entries.push({ char: kade.id, date: ago(2, 19), ref: 'player_trading', amount: -1_000_000, first: kade.id, second: aria.id });
+  entries.push({ char: aria.id, date: ago(2, 19), ref: 'player_trading', amount: 1_000_000, first: kade.id, second: aria.id });
   // PLEX for Omega (PLEX / accounts, separate from the game result)
   entries.push({ char: aria.id, date: ago(15, 20), ref: 'market_escrow', amount: -2_400_000_000, first: aria.id, second: aria.id });
   // Kade loses a Rifter 5 days ago; insurance pays and Aria buys another two days later
@@ -91,8 +94,8 @@ export function seed() {
   const journal = entries.map((e) => {
     const b = (balance.get(e.char) ?? 0) + e.amount;
     balance.set(e.char, b);
-    // The donation: the same id in both journals
-    const journalId = e.ref === 'player_donation' ? 999_999 : id++;
+    // The donation and the trade: the same id in both journals
+    const journalId = e.ref === 'player_donation' ? 999_999 : e.ref === 'player_trading' ? 999_998 : id++;
     // As in ESI, a market buy or sell carries its transaction in context_id
     const market = e.ref === 'market_transaction' || e.ref === 'market_escrow';
     const ctx: [number, string] | undefined = market ? [tx++, 'market_transaction_id'] : e.ctx;
@@ -166,6 +169,23 @@ export function seed() {
       shipTypeId: T.rifter,
       items: [],
       attackers: 2,
+    })
+    .run();
+
+  // Aria hands Kade the replacement Rifter in a 0 ISK contract (Balances «Entre tus pilotos»)
+  db.insert(s.contracts)
+    .values({
+      contractId: 130_000_001,
+      characterId: aria.id,
+      issuerId: aria.id,
+      acceptorId: kade.id,
+      type: 'item_exchange',
+      status: 'finished',
+      dateIssued: ago(2, 17),
+      dateCompleted: ago(2, 18),
+      price: 0,
+      items: [{ typeId: T.rifter, quantity: 1 }],
+      updatedAt: new Date(),
     })
     .run();
 

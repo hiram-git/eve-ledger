@@ -329,3 +329,25 @@ test('el detalle por actividad trae el neto de cada fila y el PLEX va aparte en 
   await page.keyboard.press('Tab');
   await expect(page.locator(':focus')).toHaveText('Saltar al gráfico');
 });
+
+test('Balances lista lo movido entre tus pilotos y cuadra con la conciliación', async ({ page, request }) => {
+  const { kade } = PILOTS;
+  await page.goto(`/balances?days=30&pilot=${kade.id}`);
+  const section = page.locator('#entre-pilotos');
+  // The 0 ISK contract with the replacement Rifter, marked as part of Kade's loss, the trade and the donation
+  const contract = section.locator('tr', { hasText: 'Contrato' });
+  await expect(contract).toContainText('Rifter ×1');
+  await expect(contract).toContainText('reposición de Rifter (Kade Morrow)');
+  await expect(section.locator('tr', { hasText: 'Trade' })).toContainText('−1,00 M');
+  await expect(section.locator('tr', { hasText: 'Donación' })).toContainText('+500 M');
+  // The reconciliation's «moved with your other pilots» links here, broken down by kind
+  await expect(page.locator('a[href="#entre-pilotos"]')).toBeVisible();
+  // Same ISK as the summary, against the API
+  const [moves, summary] = await Promise.all([
+    request.get(`${API_URL}/internal-moves?days=30&characterId=${kade.id}`).then((r) => r.json()),
+    request.get(`${API_URL}/summary?days=30&characterId=${kade.id}`).then((r) => r.json()),
+  ]);
+  expect(moves.totals.iskReceived).toBeCloseTo(summary.internalReceived, 2);
+  expect(moves.totals.iskSent).toBeCloseTo(summary.internalSent, 2);
+});
+

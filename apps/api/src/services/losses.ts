@@ -141,7 +141,7 @@ export async function fetchLosses(characterId: number, r: { pages: number; fetch
 // including restoring a backup) or a minute passes (the «pendiente» state depends on the time)
 let cached: { key: string; value: Promise<Awaited<ReturnType<typeof computeLosses>>> } | null = null;
 
-function allLosses(now: Date) {
+export function allLosses(now: Date) {
   const changes = (rawDb().query('select total_changes() as n').get() as { n: number }).n;
   const key = `${changes}|${Math.floor(now.getTime() / 60_000)}`;
   if (cached?.key !== key) {

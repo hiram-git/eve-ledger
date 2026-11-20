@@ -1,6 +1,6 @@
 import { and, between, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
-import { db } from '../db/client';
+import { db, rawDb } from '../db/client';
 import { assets, killmails, loyaltyOffers, loyaltyPoints, names, walletJournal, walletTransactions } from '../db/schema';
 import { EsiError, esiPost } from '../lib/esi';
 
@@ -90,6 +90,15 @@ export async function resolvePendingNames(): Promise<number> {
     // Corporations with loyalty points (Paragon = EverMarks is told apart by name) and what their stores sell
     ...(await missingIds(loyaltyPoints.corporationId, loyaltyPoints)),
     ...(await missingIds(loyaltyOffers.typeId, loyaltyOffers)),
+    // What contracts carry (couriers and exchanges between your pilots)
+    ...(
+      rawDb()
+        .query(
+          `select distinct j.value ->> 'typeId' as id from contracts c, json_each(c.items) j
+           where not exists (select 1 from names n where n.id = j.value ->> 'typeId')`,
+        )
+        .all() as { id: number }[]
+    ).map((r) => r.id),
   ];
   return resolveNames(ids);
 }
