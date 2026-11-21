@@ -4,14 +4,19 @@
 import Icon from './Icon.astro';
 import { loginUrl, type Summary } from '../lib/api';
 import { getLang, t } from '../lib/i18n';
+import type { PilotState } from '../lib/pilot-state';
 
 interface Props {
   pilots: Summary['characters'];
   slots: number;
+  // Same states as the health line: a first sync that failed or never started isn't «en curso»
+  states: Map<number, PilotState>;
 }
-const { pilots, slots } = Astro.props;
+const { pilots, slots, states } = Astro.props;
 const m = t(getLang(Astro));
-const pending = pilots.some((p) => !p.lastSyncAt);
+// Without /characters (the API failed halfway) it falls back to what the summary says
+const kindOf = (p: Props['pilots'][number]) => states.get(p.id)?.kind ?? (p.lastSyncAt ? 'ok' : 'pending');
+const pending = pilots.some((p) => kindOf(p) === 'pending');
 ---
 
 <section class="panel first-sync" aria-labelledby="first-sync-title" data-pending={pending ? '' : undefined}>
@@ -22,10 +27,22 @@ const pending = pilots.some((p) => !p.lastSyncAt);
       pilots.map((p) => (
         <li>
           <span class="name">{p.name}</span>
-          <span class:list={['state', { pending: !p.lastSyncAt }]}>
-            <Icon name={p.lastSyncAt ? 'activity' : 'clock'} />
-            {p.lastSyncAt ? m.waitingEmpty : m.waitingPending}
-          </span>
+          {kindOf(p) === 'pending' ? (
+            <span class="state pending">
+              <Icon name="clock" />
+              {m.waitingPending}
+            </span>
+          ) : kindOf(p) === 'ok' ? (
+            <span class="state">
+              <Icon name="activity" />
+              {m.waitingEmpty}
+            </span>
+          ) : (
+            <span class="state issue" title={states.get(p.id)?.title}>
+              <Icon name="alert" />
+              {states.get(p.id)?.text}
+            </span>
+          )}
         </li>
       ))
     }
@@ -57,7 +74,7 @@ const pending = pilots.some((p) => !p.lastSyncAt);
     if (tries < 8) {
       setTimeout(() => {
         sessionStorage.setItem('first-sync-reload', String(tries + 1));
-        location.reload();
+        location.replace(document.body.dataset.reload!);
       }, 15_000);
     }
   } else {
@@ -118,6 +135,9 @@ const pending = pilots.some((p) => !p.lastSyncAt);
   }
   .state.pending {
     color: var(--cyan);
+  }
+  .state.issue :global(.icon) {
+    color: var(--warning);
   }
   .state :global(.icon) {
     width: 14px;

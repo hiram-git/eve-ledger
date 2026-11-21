@@ -6,7 +6,7 @@ import '@fontsource-variable/inter';
 import '../styles/theme.css';
 import Icon from '../components/Icon.astro';
 import { getPilots } from '../lib/api';
-import { getRequestLang, t } from '../lib/i18n';
+import { LANG_TAGS, getRequestLang, t } from '../lib/i18n';
 
 const lang = getRequestLang(Astro);
 const m = t(lang);
@@ -21,14 +21,14 @@ const detail = ok ? null : q.get('detail');
 const title = ok ? m.doneTitle : m.doneFailedTitle;
 ---
 
-<html lang={lang}>
+<html lang={LANG_TAGS[lang]}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#070c13" />
     <meta name="robots" content="noindex" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>{title} · EVE Ledger</title>
+    <title>{title} · IskPulse</title>
   </head>
   <body>
     <main class="done">

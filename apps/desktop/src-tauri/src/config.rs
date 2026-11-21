@@ -64,9 +64,9 @@ fn user_agent(version: &str, repo: Option<&str>, contact: &str) -> String {
     let contact: String = contact.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string();
     let parts: Vec<String> = repo.map(|r| format!("+{r}")).into_iter().chain((!contact.is_empty()).then_some(contact)).collect();
     if parts.is_empty() {
-        format!("eve-ledger-desktop/{version}")
+        format!("iskpulse-desktop/{version}")
     } else {
-        format!("eve-ledger-desktop/{version} ({})", parts.join("; "))
+        format!("iskpulse-desktop/{version} ({})", parts.join("; "))
     }
 }
 
@@ -157,7 +157,7 @@ impl Config {
 
     pub fn to_env(&self) -> String {
         format!(
-            "# EVE Ledger: configuración (la escribe la app; se puede editar desde «Configuración…»)\n\
+            "# IskPulse: configuración (la escribe la app; se puede editar desde «Configuración…»)\n\
              # App de EVE: la incluida en el instalador (no hace falta tocarla). Callback: {callback}\n\
              # Solo el Client ID: el login usa PKCE (sin Secret Key)\n\
              EVE_CLIENT_ID={}\n\
@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(env["EVE_CALLBACK_URL"], format!("http://127.0.0.1:{DEFAULT_API_PORT}/auth/callback"));
         assert_eq!(env["HOST"], "127.0.0.1");
         assert_eq!(env["AUTH_DONE_PAGE"], "1");
-        assert!(env["ESI_USER_AGENT"].starts_with("eve-ledger-desktop/0.1.0"));
+        assert!(env["ESI_USER_AGENT"].starts_with("iskpulse-desktop/0.1.0"));
         assert_eq!(env["WEB_URL"], format!("http://127.0.0.1:{DEFAULT_WEB_PORT}"));
         let web: BTreeMap<_, _> = valid().web_env("0.1.0").into_iter().collect();
         assert_eq!(web["APP_VERSION"], "0.1.0");
@@ -327,22 +327,22 @@ mod tests {
 
     #[test]
     fn el_user_agent_lleva_el_repositorio_y_el_contacto() {
-        let repo = repo_url(Some("dueno/eve-ledger"));
-        assert_eq!(repo.as_deref(), Some("https://github.com/dueno/eve-ledger"));
+        let repo = repo_url(Some("dueno/iskpulse"));
+        assert_eq!(repo.as_deref(), Some("https://github.com/dueno/iskpulse"));
         assert_eq!(repo_url(Some("dueno/eve ledger\r\nX: y")), None);
         assert_eq!(repo_url(Some("solo-un-nombre")), None);
         assert_eq!(repo_url(None), None);
         assert_eq!(
             user_agent("0.1.16", repo.as_deref(), " Piloto Uno\r\n"),
-            "eve-ledger-desktop/0.1.16 (+https://github.com/dueno/eve-ledger; Piloto Uno)"
+            "iskpulse-desktop/0.1.16 (+https://github.com/dueno/iskpulse; Piloto Uno)"
         );
-        assert_eq!(user_agent("0.1.16", repo.as_deref(), ""), "eve-ledger-desktop/0.1.16 (+https://github.com/dueno/eve-ledger)");
-        assert_eq!(user_agent("0.1.16", None, "yo@example.com"), "eve-ledger-desktop/0.1.16 (yo@example.com)");
-        assert_eq!(user_agent("0.1.16", None, "  "), "eve-ledger-desktop/0.1.16");
+        assert_eq!(user_agent("0.1.16", repo.as_deref(), ""), "iskpulse-desktop/0.1.16 (+https://github.com/dueno/iskpulse)");
+        assert_eq!(user_agent("0.1.16", None, "yo@example.com"), "iskpulse-desktop/0.1.16 (yo@example.com)");
+        assert_eq!(user_agent("0.1.16", None, "  "), "iskpulse-desktop/0.1.16");
     }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("eve-ledger-config-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("iskpulse-config-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d

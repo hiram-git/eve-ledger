@@ -19,12 +19,16 @@ const fmt = (v: number, o: { sign?: boolean } = {}) => isk(v, { ...o, lang });
 const full = (v: number) => iskFull(v, lang);
 
 
+const nodes = mode === 'gains' ? map.nodes.filter((n) => n.earnedToday > 0) : map.nodes;
+// Today's map with one or two systems: a strip with the dot and its label, not a box with a dot in the middle (and no
+// «size = ISK» legend: there's nothing to compare)
+const strip = mode === 'gains' && nodes.length <= 2;
+
 // The viewBox is almost the same size as the card on desktop (~430 px): 12 px labels come out at ~11.5 px
 const W = width;
-const H = height;
-const PAD = mode === 'gains' ? 24 : 40; // margin so the labels aren't cut off
+const H = strip ? 52 : height;
+const PAD = strip ? 18 : mode === 'gains' ? 24 : 40; // margin so the labels aren't cut off
 
-const nodes = mode === 'gains' ? map.nodes.filter((n) => n.earnedToday > 0) : map.nodes;
 const xs = nodes.map((n) => n.x);
 const zs = nodes.map((n) => n.z);
 const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
@@ -146,7 +150,7 @@ const summary = mode === 'gains' ? m.mapSummaryToday(earnCount) : m.mapSummary(i
         <ul class="node-list">
           {nodes.map((n) => (
             <li>
-              <span class="n-name">{n.name}</span>
+              <span class="n-name">{n.name}</span>{' '}
               <span class="n-val">
                 {mode === 'gains' ? (
                   <span class="gain">{m.mapToday(fmt(n.earnedToday))}</span>
@@ -163,17 +167,19 @@ const summary = mode === 'gains' ? m.mapSummaryToday(earnCount) : m.mapSummary(i
       </>
     )
   }
-  <figcaption>
-    {mode === 'all' && <span class="legend-key"><i class="held" />{m.mapLegendInventory}</span>}
-    {earnCount > 0 && <span class="legend-key"><i class="earned" />{mode === 'gains' ? m.mapLegendTodaySize : m.mapLegendToday}</span>}
-    {
-      mode === 'all' && map.unplaced.value > 0 && (
-        <span class="unplaced" title={m.mapUnplacedTitle}>
-          {m.mapUnplaced(fmt(map.unplaced.value), map.unplaced.locations)}
-        </span>
-      )
-    }
-  </figcaption>
+  {!strip && (
+    <figcaption>
+      {mode === 'all' && <span class="legend-key"><i class="held" />{m.mapLegendInventory}</span>}
+      {earnCount > 0 && <span class="legend-key"><i class="earned" />{mode === 'gains' ? m.mapLegendTodaySize : m.mapLegendToday}</span>}
+      {
+        mode === 'all' && map.unplaced.value > 0 && (
+          <span class="unplaced" title={m.mapUnplacedTitle}>
+            {m.mapUnplaced(fmt(map.unplaced.value), map.unplaced.locations)}
+          </span>
+        )
+      }
+    </figcaption>
+  )}
 </figure>
 
 <style>

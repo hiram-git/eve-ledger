@@ -1,10 +1,10 @@
-# EVE Ledger de escritorio (Tauri)
+# IskPulse de escritorio (Tauri)
 
 Empaqueta el ledger personal (`apps/api` + `apps/web`) como una app de escritorio con instalador, para compartirlo (por ejemplo, con la corp). Guía para quien lo instala: [INSTALAR.md](INSTALAR.md).
 
 ## Cómo funciona
 
-- **Tauri 2** (Rust) abre una ventana. En el primer arranque muestra el asistente (`ui/`, páginas locales en ES/EN/DE), que crea `ledger.env` en la carpeta de configuración del usuario. Lleva las mismas claves que los `.env` de `apps/api` y `apps/web`.
+- **Tauri 2** (Rust) abre una ventana. En el primer arranque muestra el asistente (`ui/`, páginas locales en ES/EN/DE/PT/ZH/RU), que crea `ledger.env` en la carpeta de configuración del usuario. Lleva las mismas claves que los `.env` de `apps/api` y `apps/web`.
 - Con la configuración válida, `src-tauri/src/services.rs` copia el servidor de los recursos a la carpeta de datos local del usuario (`server/<versión-huella>`, una vez por compilación). En Windows, Bun no puede leer archivos en `C:\Program Files` («EPERM reading»). Después arranca dos procesos con **Bun como sidecar**:
   - la API (`resources/server/api/api.js`), con `DB_PATH` en la carpeta de datos del usuario y `MIGRATIONS_DIR` en los recursos;
   - la web (Astro SSR, `resources/server/web/server/entry.js`), con `API_URL` y `PILOT_SLOTS` leídos al arrancar.
@@ -41,7 +41,7 @@ Quien instala no crea ninguna app en el portal de desarrolladores de EVE (decisi
 
 Quien configuró su propia app en una versión anterior conserva su Client ID: `ledger.env` lo guarda y el asistente no lo toca. Desde la 0.1.13 la Secret Key no se usa: si `ledger.env` traía `EVE_CLIENT_SECRET`, se ignora y desaparece al guardar la configuración, y los pilotos que se vincularon con ella salen como «Token caducado» y hay que revincularlos (ahora con PKCE).
 
-Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) los compila en GitHub Actions. Se lanza solo cuando una versión nueva de `src-tauri/tauri.conf.json` llega a `main` (merge): compila los tres instaladores y deja un borrador de release «EVE Ledger x.y.z» con la etiqueta `desktop-vx.y.z` (si esa release ya existe, no hace nada: hay que subir la versión). También a mano (Actions → «Instaladores de escritorio» → Run workflow: los instaladores quedan como artefactos y, con la casilla «release», también el borrador) o con una etiqueta `desktop-v0.1.0` que coincida con la versión.
+Para los tres sistemas sin tenerlos todos: el workflow [`.github/workflows/desktop.yml`](../../.github/workflows/desktop.yml) los compila en GitHub Actions. Se lanza solo cuando una versión nueva de `src-tauri/tauri.conf.json` llega a `main` (merge): compila los tres instaladores y deja un borrador de release «IskPulse x.y.z» con la etiqueta `desktop-vx.y.z` (si esa release ya existe, no hace nada: hay que subir la versión). También a mano (Actions → «Instaladores de escritorio» → Run workflow: los instaladores quedan como artefactos y, con la casilla «release», también el borrador) o con una etiqueta `desktop-v0.1.0` que coincida con la versión.
 
 ## Actualizaciones automáticas
 
@@ -53,13 +53,13 @@ Cada versión va firmada; la app solo acepta lo firmado con tu clave. Solo se ac
 1. Genera el par de claves en tu equipo (te pide una contraseña):
    ```sh
    cd apps/desktop
-   bunx tauri signer generate -w ~/.tauri/eve-ledger.key      # Windows: -w %USERPROFILE%\.tauri\eve-ledger.key
+   bunx tauri signer generate -w ~/.tauri/iskpulse.key      # Windows: -w %USERPROFILE%\.tauri\iskpulse.key
    ```
 2. En GitHub → Settings → Secrets and variables → Actions:
-   - **Secrets:** `TAURI_SIGNING_PRIVATE_KEY` = el contenido de `eve-ledger.key` y `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = su contraseña.
-   - **Variables:** `EVE_LEDGER_UPDATER_PUBKEY` = el contenido de `eve-ledger.key.pub` (no es secreta: va dentro de la app; como secreto también vale).
+   - **Secrets:** `TAURI_SIGNING_PRIVATE_KEY` = el contenido de `iskpulse.key` y `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = su contraseña.
+   - **Variables:** `EVE_LEDGER_UPDATER_PUBKEY` = el contenido de `iskpulse.key.pub` (no es secreta: va dentro de la app; como secreto también vale).
    - Todo a nivel de repositorio, no en un environment. Con solo una de las dos claves el workflow falla (la release saldría sin `latest.json`); sin ninguna, avisa y compila sin actualizaciones.
-3. Guarda `eve-ledger.key` y la contraseña en un sitio seguro y no la subas al repositorio. Si la pierdes, las apps instaladas ya no aceptarán versiones nuevas y habrá que reinstalar a mano con una clave nueva.
+3. Guarda `iskpulse.key` y la contraseña en un sitio seguro y no la subas al repositorio. Si la pierdes, las apps instaladas ya no aceptarán versiones nuevas y habrá que reinstalar a mano con una clave nueva.
 
 **Cada versión:**
 1. Sube la versión en `src-tauri/tauri.conf.json` y `src-tauri/Cargo.toml` (la app solo se actualiza a una versión mayor).

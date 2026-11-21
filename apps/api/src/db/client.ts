@@ -66,6 +66,11 @@ export function replaceDatabase(file: string) {
       sqlite.query("select name from main.sqlite_master where type = 'table' and name not like 'sqlite_%'").all() as { name: string }[]
     ).map((t) => t.name);
     sqlite.transaction(() => {
+      // The backup's refresh tokens were already rotated (and so revoked) by EVE: keep each pilot's current link
+      sqlite.exec('DROP TABLE IF EXISTS temp.keep_link');
+      sqlite.exec(
+        'CREATE TEMP TABLE keep_link AS SELECT id, owner_hash, scopes, refresh_token, auth_method, access_token, token_expires_at, linked_at FROM main.characters',
+      );
       for (const table of tables) {
         const inSource = new Set(columns('src', table));
         const shared = columns('main', table).filter((c) => inSource.has(c));
@@ -74,6 +79,10 @@ export function replaceDatabase(file: string) {
         const list = shared.map(quote).join(', ');
         sqlite.exec(`INSERT INTO main.${quote(table)} (${list}) SELECT ${list} FROM src.${quote(table)}`);
       }
+      sqlite.exec(`UPDATE main.characters SET scopes = k.scopes, refresh_token = k.refresh_token, auth_method = k.auth_method,
+        access_token = k.access_token, token_expires_at = k.token_expires_at, linked_at = k.linked_at
+        FROM temp.keep_link k WHERE k.id = characters.id AND k.owner_hash = characters.owner_hash`);
+      sqlite.exec('DROP TABLE temp.keep_link');
     })();
   } finally {
     sqlite.exec('DETACH DATABASE src');

@@ -1,7 +1,7 @@
-import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { contracts } from '../db/schema';
-import { esiGet } from '../lib/esi';
+import { EsiError, esiGet } from '../lib/esi';
 
 export const CONTRACTS_SCOPE = 'esi-contracts.read_character_contracts.v1';
 
@@ -75,15 +75,40 @@ export async function fetchContracts(characterId: number, r: { pages: number; fe
   });
   r.inserted = rows.length;
 
-  // What each courier issued by this pilot carries (items do not change: only once)
+  // What each courier issued by this pilot carries, and what an item exchange between two of your pilots
+  // passed (Balances, «Entre tus pilotos»). Items do not change: only once
+  const linked = sql`(select id from characters)`;
   const pending = await db
     .select({ id: contracts.contractId })
     .from(contracts)
-    .where(and(eq(contracts.issuerId, characterId), eq(contracts.type, 'courier'), isNull(contracts.items)))
+    .where(
+      and(
+        isNull(contracts.items),
+        or(
+          and(eq(contracts.issuerId, characterId), eq(contracts.type, 'courier')),
+          and(
+            eq(contracts.characterId, characterId),
+            eq(contracts.type, 'item_exchange'),
+            eq(contracts.status, 'finished'),
+            sql`${contracts.issuerId} in ${linked}`,
+            sql`coalesce(${contracts.acceptorId}, ${contracts.assigneeId}) in ${linked}`,
+            sql`coalesce(${contracts.acceptorId}, ${contracts.assigneeId}) <> ${contracts.issuerId}`,
+          ),
+        ),
+      ),
+    )
     .limit(MAX_ITEMS);
   for (const { id } of pending) {
-    const { data } = await esiGet<EsiContractItem[]>(`/characters/${characterId}/contracts/${id}/items`, characterId);
-    const items = data.filter((i) => i.is_included).map((i) => ({ typeId: i.type_id, quantity: i.quantity }));
+    let items: { typeId: number; quantity: number }[] = [];
+    try {
+      const { data } = await esiGet<EsiContractItem[]>(`/characters/${characterId}/contracts/${id}/items`, characterId);
+      // shortcut: only what the issuer hands over (is_included); items asked from the acceptor in return are left out,
+      // rare between your own pilots, upgrade if an exchange in both directions shows up
+      items = data.filter((i) => i.is_included).map((i) => ({ typeId: i.type_id, quantity: i.quantity }));
+    } catch (err) {
+      // ESI no longer has it (deleted contract): stored empty, or it would fail the contracts step on every sync
+      if (!(err instanceof EsiError && err.status === 404)) throw err;
+    }
     await db.update(contracts).set({ items }).where(eq(contracts.contractId, id));
   }
 }

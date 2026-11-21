@@ -50,6 +50,9 @@ export type Summary = {
     internalReceived: number;
     internalSent: number;
     walletChange: number;
+    // The PLEX part of income and expenses (the accounts' cost): hatched in the pilots' donuts
+    plexIncome: number;
+    plexExpenses: number;
   })[];
   // Gross per activity (totals is gross too); the trading net is its margin
   byActivity: (Flow & { activity: Activity; count: number; refTypes: (Flow & { refType: string; count: number })[] })[];
@@ -102,6 +105,7 @@ export type SyncStatus = {
   running: boolean;
   nextRunAt: string | null;
   lastRun: { startedAt: string; finishedAt: string; inserted: number; errors: number; characters: number } | null;
+  lastSyncAt: string | null;
 };
 
 export class ApiError extends Error {
@@ -204,9 +208,55 @@ export type Losses = {
   historyFrom: string | null;
   losses: Loss[];
 };
+// Game result (the Net card's headline and Balances): the wallet net without PLEX / accounts (kept apart) and minus the
+// lost ships that didn't come back or are still to be replaced (estimated). One formula for both pages
+export const gameResult = (summary: Summary, losses?: Losses | null) =>
+  summary.totals.net -
+  (summary.byActivity.find((a) => a.activity === 'accounts')?.net ?? 0) -
+  (losses?.totals.unreplaced ?? 0) -
+  (losses?.totals.toReplace ?? 0);
+
+// Capsules (and the Genolution one) can't be insured: «sin seguro» only where there could have been insurance
+export const CAPSULES = new Set([670, 33328]);
+
+// Headline of the lost ships (panel, the Net card's foot): the firm cost. Insurance arrives within the hour and the
+// replacement days later: until then the firm part is positive, and it read «te costaron +400 k» in green. While
+// something is still to replace and nothing firm costs yet, the figure is the estimate (firm − to replace), in grey
+export function lossesHeadline(t: Losses['totals']) {
+  const estimate = t.toReplace >= 0.5 && t.firmCost > -0.5;
+  return { value: estimate ? t.cost : t.firmCost, estimate };
+}
+
 export const getLosses = (days: number, characterId?: number) =>
   call<Losses>(`/losses?days=${days}${characterId ? `&characterId=${characterId}` : ''}`);
 export const getMap = (characterId?: number) => call<GeoMap>(`/map?${pilotQuery(characterId)}`);
+
+// Balances «Entre tus pilotos»: ISK and items moved between your pilots. giver hands over the items (or the ISK when
+// there are none); the ISK goes iskFrom → iskTo (in an exchange with a price, back from the receiver). items null: an
+// exchange whose items the next sync reads
+export type MoveKind = 'donation' | 'trade' | 'contract' | 'market' | 'other';
+export type InternalMove = {
+  date: string;
+  kind: MoveKind;
+  refType: string;
+  giver: { id: number; name: string | null };
+  receiver: { id: number; name: string | null };
+  isk: number;
+  iskFrom: number;
+  iskTo: number;
+  items: { typeId: number; name: string | null; quantity: number; value: number }[] | null;
+  value: number;
+  contractId: number | null;
+  replacement: { killmailId: number; ship: string | null; pilot: string | null } | null;
+};
+export type InternalMoves = {
+  moves: InternalMove[];
+  totals: { iskReceived: number; iskSent: number; itemsReceived: number; itemsSent: number };
+  byKind: Partial<Record<MoveKind, number>>;
+  unread: number;
+};
+export const getInternalMoves = (days: number, characterId?: number) =>
+  call<InternalMoves>(`/internal-moves?days=${days}${characterId ? `&characterId=${characterId}` : ''}`);
 export const getSyncStatus = () => call<SyncStatus>('/sync/status');
 export const syncAll = () => call<SyncAllResult>('/sync/all', { method: 'POST' });
 
@@ -479,7 +529,7 @@ export const setClone = (characterId: number, clone: 'omega' | 'alpha') =>
 // Database backups (apps/api/src/services/backups.ts)
 export type BackupKind = 'auto' | 'manual' | 'restore' | 'update';
 export type Backup = { name: string; kind: BackupKind; createdAt: string; size: number };
-export type BackupsView = { dir: string; keep: Record<BackupKind, number>; backups: Backup[]; busy: boolean };
+export type BackupsView = { dir: string; keep: Record<BackupKind, number>; backups: Backup[] };
 export type BackupInfo = { pilots: number; entries: number; firstEntryAt: string | null; lastEntryAt: string | null };
 export type Restored = { info: BackupInfo; safety: Backup | null };
 // Only names in the backup format: the same the API accepts

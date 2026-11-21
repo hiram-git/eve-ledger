@@ -2,9 +2,9 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { marketQuotes } from '../db/schema';
 import { esiGet } from '../lib/esi';
+import { PLEX_TYPE_ID } from '../lib/activities';
 
-// PLEX (type 44992) trades on its own global market, not in Jita
-export const PLEX_TYPE_ID = 44992;
+// PLEX trades on its own global market, not in Jita
 const PLEX_REGION_ID = 19000001;
 const MAX_PAGES = 5;
 // A syncAll calls syncCharacter for each pilot: with this the price is fetched only once per round

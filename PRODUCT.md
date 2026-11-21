@@ -17,9 +17,9 @@ Lo consulta en dos momentos:
 
 ## Product Purpose
 
-EVE Ledger consolida los wallets y el inventario de los 5 personajes en una sola economía y responde, antes que nada, **«¿gano o pierdo ISK?»**: el neto del período, de dónde viene el ISK y en qué se va.
+IskPulse consolida los wallets y el inventario de los 5 personajes en una sola economía y responde, antes que nada, **«¿gano o pierdo ISK?»**: el neto del período, de dónde viene el ISK y en qué se va.
 
-Existe porque el juego no consolida entre personajes y porque ESI solo retiene unos 30 días del wallet journal: EVE Ledger sincroniza cada hora y acumula el historial localmente, así que el valor crece con el tiempo que lleva funcionando.
+Existe porque el juego no consolida entre personajes y porque ESI solo retiene unos 30 días del wallet journal: IskPulse sincroniza cada hora y acumula el historial localmente, así que el valor crece con el tiempo que lleva funcionando.
 
 Éxito: de un vistazo se sabe si el período va en positivo o en negativo y qué lo explica; en la revisión se puede ver el detalle por actividad, piloto e ítem, y el patrimonio total (saldo + inventario).
 
@@ -58,7 +58,7 @@ Decisiones abiertas (no inventar):
 
 ## Brand Commitments
 
-- Nombre: **EVE Ledger**.
+- Nombre: **IskPulse** («Sigue el pulso de tu ISK»).
 - Voz: español neutro, directo, con la terminología del juego.
 - El usuario pidió un estilo oscuro, futurista y de ciencia ficción, inspirado en una hoja de estilos de referencia (fondo azul noche, acentos cian). La implementación actual vive en `apps/web/src/styles/theme.css`.
 - EVE Online y sus marcas son de CCP hf.: no usar logos de CCP como identidad propia; mantener el aviso de marcas en el pie.

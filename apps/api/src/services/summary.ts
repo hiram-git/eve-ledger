@@ -2,10 +2,10 @@ import { and, asc, desc, eq, gte, inArray, lt, min, sql, type SQL } from 'drizzl
 import { db } from '../db/client';
 import { characters, walletJournal, walletTransactions } from '../db/schema';
 import { ACTIVITIES, activityOf, PLEX_TYPE_ID, refKindOf } from '../lib/activities';
+import { DAY_MS, periodFrom } from '../lib/period';
 import { REPLACEMENT_DAYS, shipLosses } from './losses';
 import { marketReview } from './transactions';
 
-const DAY_MS = 86_400_000;
 
 // The market transaction of a journal entry (same pilot, journal_ref_id = journal_id): its
 // counterparty (client_id) and its id, which both sides of a trade between your pilots share
@@ -15,6 +15,8 @@ const linkedTx = (col: string) =>
   );
 const txClient = linkedTx('client_id');
 const txId = linkedTx('transaction_id');
+const txType = linkedTx('type_id');
+const txQuantity = linkedTx('quantity');
 
 // Transfers between my own characters: they cancel out in the consolidated view
 // (one leaves a wallet and enters another), so they count as neither income nor expense.
@@ -33,6 +35,56 @@ export const isInternal = sql<number>`(case
       and abs(t.quantity * t.unit_price + ${walletJournal.amount}) < 0.01
   ) then 1
   else 0 end)`;
+
+// Each transfer between two of your pilots since an instant, once: who sent and who received it. ESI gives both
+// sides the same id and one is enough to know (the sign says who pays; the other party is the other pilot), so it
+// also adds up with movements from before the journal stored both sides (migration 0007). In a market trade the key
+// is the transaction id (the buyer's escrow and the seller's market_transaction have different journal ids), and it
+// carries the item. The summary's «between your pilots» and the Balances section «Entre tus pilotos» both use it
+export async function internalTransfers(from: Date) {
+  const rows = await db
+    .select({
+      journalId: walletJournal.journalId,
+      characterId: walletJournal.characterId,
+      amount: walletJournal.amount,
+      date: walletJournal.date,
+      refType: walletJournal.refType,
+      contextId: walletJournal.contextId,
+      contextIdType: walletJournal.contextIdType,
+      firstPartyId: walletJournal.firstPartyId,
+      secondPartyId: walletJournal.secondPartyId,
+      txClient: sql<number | null>`${txClient}`,
+      txId: sql<number | null>`${txId}`,
+      txType: sql<number | null>`${txType}`,
+      txQuantity: sql<number | null>`${txQuantity}`,
+    })
+    .from(walletJournal)
+    .where(and(gte(walletJournal.date, from), eq(isInternal, 1)))
+    .orderBy(asc(walletJournal.date));
+  const transfers = new Map<
+    string,
+    { from: number; to: number; amount: number; date: Date; refType: string; contractId: number | null; typeId: number | null; quantity: number | null }
+  >();
+  for (const r of rows) {
+    const key = r.txId !== null ? `tx${r.txId}` : `j${r.journalId}`;
+    if (transfers.has(key) || !r.amount) continue;
+    // The other party: the one that is not this pilot; in the buyer's escrow (him on both sides), the transaction's client
+    const other =
+      r.firstPartyId !== r.characterId ? r.firstPartyId! : r.secondPartyId !== r.characterId ? r.secondPartyId! : r.txClient!;
+    const [sender, receiver] = r.amount < 0 ? [r.characterId, other] : [other, r.characterId];
+    transfers.set(key, {
+      from: sender,
+      to: receiver,
+      amount: Math.abs(r.amount),
+      date: r.date,
+      refType: r.txId !== null ? 'market_transaction' : r.refType,
+      contractId: r.contextIdType === 'contract_id' ? r.contextId : null,
+      typeId: r.txType,
+      quantity: r.txQuantity,
+    });
+  }
+  return [...transfers.values()];
+}
 
 const income = sql<number>`coalesce(sum(case when ${walletJournal.amount} > 0 then ${walletJournal.amount} end), 0)`;
 const expenses = sql<number>`coalesce(sum(case when ${walletJournal.amount} < 0 then -${walletJournal.amount} end), 0)`;
@@ -75,8 +127,7 @@ async function flowBetween(pilot: SQL | undefined, from: Date, to?: Date, withou
 export async function dailyNetRate(characterId: number, lastSyncAt: Date | null, days: number) {
   if (!lastSyncAt) return null;
   const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const windowFrom = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+  const windowFrom = periodFrom(days, now);
   const [first] = await db
     .select({ at: min(walletJournal.date) })
     .from(walletJournal)
@@ -155,9 +206,8 @@ export async function lastBalance(characterId: number) {
 
 export async function getSummary(days: number, characterId?: number) {
   const now = new Date();
-  // From the start of the UTC day, so the first day of the series is complete
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const from = new Date(todayStart.getTime() - (days - 1) * DAY_MS);
+  const todayStart = periodFrom(1, now);
+  const from = periodFrom(days, now);
   const pilot = characterId ? eq(walletJournal.characterId, characterId) : undefined;
   const allPilots = and(gte(walletJournal.date, from), eq(isInternal, 0));
   const inPeriod = and(allPilots, pilot);
@@ -202,41 +252,14 @@ export async function getSummary(days: number, characterId?: number) {
   // The previous period is only comparable if history covers it entirely
   const previousComplete = !!firstEntryAt && firstEntryAt <= previousFrom;
 
-  // Moved between your pilots in the period: who sent and who received each
-  // transfer. ESI gives both sides the same id and one is enough to know (the sign says who pays; the other
-  // party is the other pilot), so it also adds up with movements from before the journal stored both
-  // sides (migration 0007). They count in no net (user's decision: a pilot's net is what was earned in
+  // Moved between your pilots in the period. They count in no net (user's decision: a pilot's net is what was earned in
   // game; moving ISK is not earning it). Kept apart for the reconciliation: opening balance + net + between your pilots = balance
-  const internalRows = await db
-    .select({
-      journalId: walletJournal.journalId,
-      characterId: walletJournal.characterId,
-      amount: walletJournal.amount,
-      date: walletJournal.date,
-      firstPartyId: walletJournal.firstPartyId,
-      secondPartyId: walletJournal.secondPartyId,
-      txClient: sql<number | null>`${txClient}`,
-      txId: sql<number | null>`${txId}`,
-    })
-    .from(walletJournal)
-    .where(and(gte(walletJournal.date, from), eq(isInternal, 1)));
-  // One transfer per key: the transaction id in a market trade (the buyer's escrow
-  // and the seller's market_transaction have different journal ids), the journal id otherwise
-  const transfers = new Map<string, { from: number; to: number; amount: number; date: Date }>();
-  for (const r of internalRows) {
-    const key = r.txId !== null ? `tx${r.txId}` : `j${r.journalId}`;
-    if (transfers.has(key) || !r.amount) continue;
-    // The other party: the one that is not this pilot; in the buyer's escrow (him on both sides), the transaction's client
-    const other =
-      r.firstPartyId !== r.characterId ? r.firstPartyId! : r.secondPartyId !== r.characterId ? r.secondPartyId! : r.txClient!;
-    const [sender, receiver] = r.amount < 0 ? [r.characterId, other] : [other, r.characterId];
-    transfers.set(key, { from: sender, to: receiver, amount: Math.abs(r.amount), date: r.date });
-  }
+  const transfers = await internalTransfers(from);
   // Received and sent by a pilot (or moved among all) between two instants
   const internalBetween = (id: number | undefined, a: Date, b?: Date) => {
     let received = 0;
     let sent = 0;
-    for (const t of transfers.values()) {
+    for (const t of transfers) {
       if (t.date < a || (b && t.date >= b)) continue;
       if (id === undefined) received += t.amount;
       else {
@@ -248,7 +271,7 @@ export async function getSummary(days: number, characterId?: number) {
   };
   const internal = internalBetween(characterId, from);
   const internalByCharacter = new Map<number, { received: number; sent: number }>();
-  for (const t of transfers.values()) {
+  for (const t of transfers) {
     if (t.date < from) continue;
     const s = internalByCharacter.get(t.from) ?? { received: 0, sent: 0 };
     s.sent += t.amount;
@@ -260,7 +283,7 @@ export async function getSummary(days: number, characterId?: number) {
   // Single-pilot view: what was moved with your other pilots each day (for the chart; not in the day's net)
   const internalDay = new Map<string, number>();
   if (characterId) {
-    for (const x of transfers.values()) {
+    for (const x of transfers) {
       if (x.date < from) continue;
       const d = isoDay(x.date);
       const signed = (x.to === characterId ? x.amount : 0) - (x.from === characterId ? x.amount : 0);
@@ -269,7 +292,14 @@ export async function getSummary(days: number, characterId?: number) {
   }
 
   const byCharacter = await db
-    .select({ characterId: walletJournal.characterId, income, expenses })
+    .select({
+      characterId: walletJournal.characterId,
+      income,
+      expenses,
+      // The PLEX part of each one's income and expenses (the accounts' cost, apart from the game): hatched in the donuts
+      plexIncome: sql<number>`coalesce(sum(case when ${activity} = 'accounts' and ${walletJournal.amount} > 0 then ${walletJournal.amount} end), 0)`,
+      plexExpenses: sql<number>`coalesce(sum(case when ${activity} = 'accounts' and ${walletJournal.amount} < 0 then -${walletJournal.amount} end), 0)`,
+    })
     .from(walletJournal)
     .where(allPilots)
     .groupBy(walletJournal.characterId);
@@ -378,6 +408,10 @@ export async function getSummary(days: number, characterId?: number) {
     chars.map(async (c) => {
       const last = await lastBalance(c.id);
       const opening = await openingBalance(c.id, from);
+      // A pilot with no journal at all (an alt that moved no ISK in the ~30 days ESI keeps) but with its ESI wallet:
+      // nothing moved, so that balance is its opening and its journal balance (before, both were null and the
+      // reconciliation of the Summary and Balances came short by its whole wallet)
+      const idle = last?.journalBalance == null && opening.balance == null && last?.balance != null;
       const agg = charMap.get(c.id);
       const internalReceived = internalByCharacter.get(c.id)?.received ?? 0;
       const internalSent = internalByCharacter.get(c.id)?.sent ?? 0;
@@ -389,14 +423,16 @@ export async function getSummary(days: number, characterId?: number) {
         lastSyncAt: c.lastSyncAt,
         balance: last?.balance ?? null,
         balanceAt: last?.date ?? null,
-        journalBalance: last?.journalBalance ?? null,
-        openingBalance: opening.balance,
+        journalBalance: idle ? last!.balance : (last?.journalBalance ?? null),
+        openingBalance: idle ? last!.balance : opening.balance,
         openingAt: opening.at,
-        openingPartial: opening.partial,
+        openingPartial: idle ? false : opening.partial,
         income,
         expenses,
         internalReceived,
         internalSent,
+        plexIncome: agg?.plexIncome ?? 0,
+        plexExpenses: agg?.plexExpenses ?? 0,
         // A pilot's net is what was earned in game (user's decision): the sum of the pilots is the consolidated total.
         // What changed its wallet also adds what was moved with your other pilots (opening balance + walletChange = balance)
         net: income - expenses,

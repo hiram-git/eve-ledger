@@ -1,15 +1,15 @@
 name: Idea
-description: Something EVE Ledger could answer or do.
+description: Something IskPulse could answer or do.
 labels: [idea]
 body:
   - type: markdown
     attributes:
-      value: You can write in English, Spanish or German.
+      value: You can write in English, Spanish, German, Portuguese, Chinese or Russian.
   - type: textarea
     id: question
     attributes:
       label: What do you want to know?
-      description: The question you'd like EVE Ledger to answer, in game terms. For example, "How much do my alts cost me each month?"
+      description: The question you'd like IskPulse to answer, in game terms. For example, "How much do my alts cost me each month?"
     validations:
       required: true
   - type: dropdown

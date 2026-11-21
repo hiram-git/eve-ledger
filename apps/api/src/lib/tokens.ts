@@ -32,9 +32,10 @@ async function freshAccessToken(characterId: number): Promise<string> {
   // EVE rotates the refresh token (without a secret, the used one stops working instantly): the new one is saved before
   // anything that can fail, or a validation failure (e.g. no network for EVE's keys) would lose it and the pilot
   // would be left with an expired token until relinked. Only if nobody changed it in the meantime (relinking)
+  const refreshToken = await encrypt(tokens.refresh_token);
   const saved = await db
     .update(characters)
-    .set({ refreshToken: await encrypt(tokens.refresh_token), accessToken: null, tokenExpiresAt: null })
+    .set({ refreshToken, accessToken: null, tokenExpiresAt: null })
     .where(and(eq(characters.id, characterId), eq(characters.refreshToken, ch.refreshToken)))
     .returning({ id: characters.id });
   if (!saved.length) {
@@ -51,11 +52,12 @@ async function freshAccessToken(characterId: number): Promise<string> {
     throw new Error(`El personaje ${ch.name} cambió de dueño; vuelve a vincularlo`);
   }
 
-  // The access token, only once validated (without it, the next call refreshes again with the stored refresh token)
+  // The access token, only once validated (without it, the next call refreshes again with the stored refresh token),
+  // and only over the grant it belongs to: a relink during the validation wrote its own, which must not be replaced
   await db
     .update(characters)
     .set({ accessToken: await encrypt(tokens.access_token), tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000) })
-    .where(eq(characters.id, characterId));
+    .where(and(eq(characters.id, characterId), eq(characters.refreshToken, refreshToken)));
 
   return tokens.access_token;
 }

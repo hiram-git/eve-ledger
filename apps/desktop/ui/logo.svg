@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <title>EVE Ledger</title>
-  <!-- Emblema de la marca: la E del logotipo con el cursor cian de «EVE LEDGER_» sobre el fondo azul noche -->
+  <title>IskPulse</title>
+  <!-- Brand emblem: the cyan pulse trace of the «ISKPULSE» wordmark on the night-blue square -->
   <rect x="2" y="2" width="60" height="60" rx="12" fill="#0a131d" stroke="#3b7f94" stroke-width="3"/>
-  <path fill="#e6eef5" d="M13 15h22v8H21v5h12v8H21v5h14v8H13z"/>
-  <rect x="39" y="45" width="12" height="4" fill="#61cce5"/>
+  <path d="M8 35h13l6-19 9 31 6-12h14" fill="none" stroke="#61cce5" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -1,4 +1,4 @@
-/* EVE Ledger desktop: the same dark HUD theme as the dashboard (apps/web/src/styles/theme.css) */
+/* IskPulse desktop: the same dark HUD theme as the dashboard (apps/web/src/styles/theme.css) */
 @font-face {
   font-family: 'Inter Variable';
   font-weight: 100 900;
@@ -71,9 +71,6 @@ body {
   letter-spacing: 0.06em;
 }
 
-.cursor {
-  color: var(--cyan);
-}
 
 .version {
   margin-left: auto;

@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const dir = mkdtempSync(join(tmpdir(), 'eve-ledger-e2e-'));
+const dir = mkdtempSync(join(tmpdir(), 'iskpulse-e2e-'));
 Object.assign(Bun.env, {
   DB_PATH: join(dir, 'ledger.db'),
   MIGRATIONS_DIR: join(import.meta.dir, '../../api/drizzle'),

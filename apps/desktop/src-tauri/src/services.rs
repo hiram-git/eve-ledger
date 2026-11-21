@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn copia_el_servidor_una_vez_por_huella_y_borra_las_viejas() {
-        let tmp = std::env::temp_dir().join(format!("eve-ledger-test-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("iskpulse-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&tmp);
         let src = tmp.join("recursos");
         for (f, body) in [("launch.js", "l"), ("api/api.js", "a"), ("api/drizzle/0000.sql", "s"), ("web/server/entry.js", "w"), ("web/client/x.css", "c")] {
@@ -283,9 +283,9 @@ mod tests {
 
     #[test]
     fn quita_el_prefijo_verbatim_de_windows() {
-        assert_eq!(strip_verbatim(r"\\?\C:\Program Files\EVE Ledger\server"), r"C:\Program Files\EVE Ledger\server");
-        assert_eq!(strip_verbatim(r"\\?\UNC\nas\juegos\EVE Ledger"), r"\\nas\juegos\EVE Ledger");
+        assert_eq!(strip_verbatim(r"\\?\C:\Program Files\IskPulse\server"), r"C:\Program Files\IskPulse\server");
+        assert_eq!(strip_verbatim(r"\\?\UNC\nas\juegos\IskPulse"), r"\\nas\juegos\IskPulse");
         assert_eq!(strip_verbatim(r"C:\Users\Piloto\AppData"), r"C:\Users\Piloto\AppData");
-        assert_eq!(strip_verbatim("/usr/lib/EVE Ledger/server"), "/usr/lib/EVE Ledger/server");
+        assert_eq!(strip_verbatim("/usr/lib/IskPulse/server"), "/usr/lib/IskPulse/server");
     }
 }

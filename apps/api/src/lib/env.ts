@@ -17,7 +17,7 @@ export const env = {
   callbackUrl: required('EVE_CALLBACK_URL'),
   encKey: required('ENC_KEY'),
   esiCompatDate: Bun.env.ESI_COMPAT_DATE ?? '2025-12-16',
-  esiUserAgent: Bun.env.ESI_USER_AGENT ?? 'eve-ledger/0.1',
+  esiUserAgent: Bun.env.ESI_USER_AGENT ?? 'iskpulse/0.1',
   port: Number(Bun.env.PORT ?? 3000),
   // This machine only: the API serves the wallet without login, it must not be visible from the local network
   host: Bun.env.HOST || '127.0.0.1',

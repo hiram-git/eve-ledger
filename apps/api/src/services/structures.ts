@@ -6,6 +6,7 @@ import { and, eq, gt, inArray, isNull, lt, notInArray, or, sql } from 'drizzle-o
 import { db } from '../db/client';
 import { assets, characters, contracts, names, stationSystems, structureLookups, walletTransactions } from '../db/schema';
 import { EsiError, esiGet } from '../lib/esi';
+import { getAccessToken } from '../lib/tokens';
 
 export const STRUCTURES_SCOPE = 'esi-universe.read_structures.v1';
 // Player structures have IDs above 1e12 (NPC stations, 60–64 million)
@@ -81,10 +82,16 @@ async function mark(id: number, status: 'ok' | 'forbidden' | 'missing') {
   await db.insert(structureLookups).values(row).onConflictDoUpdate({ target: structureLookups.id, set: row });
 }
 
-export async function resolvePendingStructures(fetch: FetchStructure = fetchStructure) {
+// A pilot whose token can't be renewed (expired, or linked with a Client Secret before 0.1.13) throws a plain Error,
+// which aborted the whole pass every sync and left every citadel without a name: such pilots are left out first
+const tokenWorks = (id: number) => getAccessToken(id).then(() => true, () => false);
+
+export async function resolvePendingStructures(fetch: FetchStructure = fetchStructure, tokenOk: (id: number) => Promise<boolean> = tokenWorks) {
   const result = { resolved: 0, forbidden: 0, missing: 0 };
   const pilots = await db.select({ id: characters.id, scopes: characters.scopes }).from(characters);
-  const withScope = pilots.filter((p) => p.scopes.split(' ').includes(STRUCTURES_SCOPE)).map((p) => p.id);
+  const scoped = pilots.filter((p) => p.scopes.split(' ').includes(STRUCTURES_SCOPE)).map((p) => p.id);
+  const usable = await Promise.all(scoped.map(tokenOk));
+  const withScope = scoped.filter((_, i) => usable[i]);
   if (!withScope.length) return result;
 
   let lookups = 0;

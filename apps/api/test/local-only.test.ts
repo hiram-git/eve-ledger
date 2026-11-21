@@ -1,4 +1,4 @@
-// This machine only: local Host and, for non-GET requests, no foreign Origin (DNS rebinding and forms from other websites)
+// This machine only: local Host and, for non-GET requests, no Origin (DNS rebinding and forms from other websites)
 import { expect, test } from 'bun:test';
 import { allowedHosts, localOnly } from '../src/lib/local-only';
 
@@ -20,10 +20,10 @@ test('rechaza un Host ajeno (DNS rebinding) o sin Host', () => {
   expect(status(req(null))).toBe(403);
 });
 
-test('rechaza un POST desde otra web y acepta el de la propia web o sin Origin', () => {
+test('rechaza un POST con Origin (de otra web o de otro puerto local) y acepta el que no lo trae', () => {
   expect(status(req('127.0.0.1:47300', 'POST', 'https://evil.example'))).toBe(403);
   expect(status(req('127.0.0.1:47300', 'POST', 'null'))).toBe(403);
-  expect(status(req('127.0.0.1:47300', 'POST', 'http://127.0.0.1:47321'))).toBe(200);
+  expect(status(req('127.0.0.1:47300', 'POST', 'http://127.0.0.1:8080'))).toBe(403);
   expect(status(req('127.0.0.1:47300', 'POST'))).toBe(200);
   // A GET with a foreign Origin changes nothing: the browser won't let it read the response without CORS
   expect(status(req('127.0.0.1:47300', 'GET', 'https://evil.example'))).toBe(200);

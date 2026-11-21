@@ -4,23 +4,25 @@
 // statement for the period (income and expenses by activity and entry type, wallet result, adjustments to the
 // game result) with the wallet reconciliation (opening balance + change = current balance)
 import Base from '../layouts/Base.astro';
-import Icon from '../components/Icon.astro';
 import {
   getIndicators,
+  gameResult,
+  getInternalMoves,
   getInventory,
   getLosses,
   getPilots,
   getSummary,
   getSyncStatus,
   type Indicators,
+  type InternalMoves,
   type Inventory,
   type Losses,
   type Pilot,
   type Summary,
   type SyncStatus,
 } from '../lib/api';
-import { hasIssue, pilotState } from '../lib/pilot-state';
-import { ago, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
+import { countIssues } from '../lib/pilot-state';
+import { ago, approx, isk, iskFull, refTypeLabel, shortDate } from '../lib/format';
 import { getLang, t } from '../lib/i18n';
 import { shareOf } from '../lib/shares';
 
@@ -44,6 +46,7 @@ let summary: Summary | undefined;
 let losses: Losses | undefined;
 let inventory: Inventory | undefined;
 let indicators: Indicators | undefined;
+let moves: InternalMoves | undefined;
 let status: SyncStatus | undefined;
 let pilots: Pilot[] = [];
 let apiError: string | undefined;
@@ -52,19 +55,19 @@ try {
   // A link to an unlinked pilot falls back to the consolidated view
   if (pilotId && !pilots.some((p) => p.id === pilotId)) pilotId = undefined;
   if (pilots.length > 0) {
-    [summary, losses, inventory, indicators] = await Promise.all([
+    [summary, losses, inventory, indicators, moves] = await Promise.all([
       getSummary(days, pilotId),
       getLosses(days, pilotId),
       getInventory(pilotId).catch(() => undefined),
       getIndicators().catch(() => undefined),
+      getInternalMoves(days, pilotId).catch(() => undefined),
     ]);
   }
 } catch (err) {
   apiError = err instanceof Error ? err.message : String(err);
 }
 
-const staleAfterMs = 2 * (status?.enabled ? status.intervalMin : 60) * 60_000;
-const pilotIssues = pilots.filter((p) => hasIssue(p, pilotState(p, m, staleAfterMs, status?.running))).length;
+const pilotIssues = countIssues(pilots, m, status);
 
 const chars = summary?.characters ?? [];
 const selected = pilotId ? chars.find((c) => c.id === pilotId) : undefined;
@@ -103,7 +106,7 @@ const internal = selected ? (summary?.internalReceived ?? 0) - (summary?.interna
 const walletChange = walletResult + internal;
 const accountsNet = acts.find((a) => a.activity === 'accounts')?.net ?? 0;
 const unreplaced = losses?.totals.unreplaced ?? 0;
-const gameResult = walletResult - accountsNet - unreplaced - toReplace;
+const result = summary ? gameResult(summary, losses) : 0;
 const prev = summary?.previous;
 
 // ---- Wallet reconciliation ----
@@ -113,6 +116,25 @@ const journalWallets = recRows.reduce((n, c) => n + (c.journalBalance ?? 0), 0);
 const recWallets = recRows.reduce((n, c) => n + (c.balance ?? 0), 0);
 const pending = recWallets - journalWallets;
 const gap = openingKnown ? journalWallets - opening - walletChange : 0;
+// ---- Between your pilots ----
+// The reconciliation's «moved with your other pilots», broken down by kind (donations, trades, contracts, market)
+const internalByKind = Object.entries(moves?.byKind ?? {})
+  .filter(([, v]) => Math.abs(v ?? 0) >= 0.5)
+  .map(([k, v]) => `${m.moveKindsLower[k as keyof typeof m.moveKindsLower]} ${fmt(v!, { sign: true })}`)
+  .join(' · ');
+// «500 M ISK and items worth ~1,05 M», without the items when there are none
+const moved = (iskV: number, items: number) => (items >= 0.5 ? m.movesWithItems(fmt(iskV), fmt(items)) : m.movesIskOnly(fmt(iskV)));
+const nameOrId = (p: { id: number; name: string | null }) => p.name ?? `#${p.id}`;
+// What an item move carried: the first three, then «and N more»
+const itemsText = (items: NonNullable<InternalMoves['moves'][number]['items']>) =>
+  [
+    ...items.slice(0, 3).map((i) => `${i.name ?? `#${i.typeId}`} ×${qty.format(i.quantity)}`),
+    ...(items.length > 3 ? [m.moveMore(items.length - 3)] : []),
+  ].join(', ');
+// ISK of a move from the view's side: what the pilot got (+) or paid (−); in the consolidated, what moved
+const iskFor = (mv: InternalMoves['moves'][number]) =>
+  !selected ? mv.isk : (mv.iskTo === selected.id ? mv.isk : 0) - (mv.iskFrom === selected.id ? mv.isk : 0);
+
 const partialAt = recRows
   .filter((c) => c.openingPartial && c.openingAt)
   .map((c) => c.openingAt!)
@@ -127,7 +149,6 @@ const partialAt = recRows
         <div class="nav-tabs">
           {PERIODS.map((p) => (
             <a class="nav-tab" href={href(p, pilotId)} aria-current={p === days ? 'true' : undefined}>
-              <Icon name="clock" />
               {m.days(p)}
             </a>
           ))}
@@ -207,7 +228,11 @@ const partialAt = recRows
                     <tr class={selected ? undefined : 'sub'}>
                       <th scope="row">
                         {selected ? m.bsWallets : m.bsWallet(c.name)}
-                        {c.openingBalance !== null && <span class="row-meta">{m.bsBefore(days, fmt(c.openingBalance))}</span>}
+                        {c.openingBalance !== null && (
+                          <span class="row-meta">
+                            {c.openingPartial && c.openingAt ? `${m.recOpeningPartial(date(c.openingAt))}: ${fmt(c.openingBalance)}` : m.bsBefore(days, fmt(c.openingBalance))}
+                          </span>
+                        )}
                       </th>
                       <td class="op" aria-hidden="true" />
                       <td title={c.balance === null ? m.noEntries : full(c.balance)}>{c.balance === null ? '—' : fmt(c.balance)}</td>
@@ -280,7 +305,7 @@ const partialAt = recRows
                     <tr class="estimate">
                       <th scope="row">{m.bsToReplace}</th>
                       <td class="op" aria-hidden="true" />
-                      <td title={full(toReplace)}>~{fmt(toReplace)}</td>
+                      <td title={full(toReplace)}>{approx(fmt(toReplace))}</td>
                     </tr>
                   )}
                   {(selected || !o) && toReplace === 0 && (
@@ -443,7 +468,7 @@ const partialAt = recRows
                             <span aria-hidden="true">−</span>
                             <span class="sr-only">{m.opMinus}</span>
                           </td>
-                          <td title={full(toReplace)}>~{fmt(toReplace)}</td>
+                          <td title={full(toReplace)}>{approx(fmt(toReplace))}</td>
                           <td class="share" />
                         </tr>
                       )}
@@ -453,8 +478,8 @@ const partialAt = recRows
                           <span aria-hidden="true">=</span>
                           <span class="sr-only">{m.opEquals}</span>
                         </td>
-                        <td class:list={[toReplace > 0 ? 'estimate' : sign(gameResult)]} title={fullNet(gameResult)}>
-                          {toReplace > 0 ? `~ ${fmt(gameResult, { sign: true })}` : fmt(gameResult, { sign: true })}
+                        <td class:list={[toReplace > 0 ? 'estimate' : sign(result)]} title={fullNet(result)}>
+                          {toReplace > 0 ? approx(fmt(result, { sign: true })) : fmt(result, { sign: true })}
                         </td>
                         <td class="share" />
                       </tr>
@@ -498,6 +523,11 @@ const partialAt = recRows
                       <th scope="row">
                         {m.isInternal}
                         <span class="row-meta">{m.isInternalMeta(fmt(summary.internalReceived), fmt(summary.internalSent))}</span>
+                        {internalByKind && (
+                          <span class="row-meta">
+                            {internalByKind} · <a href="#entre-pilotos">{m.movesSee}</a>
+                          </span>
+                        )}
                       </th>
                       <td class="op">
                         <span aria-hidden="true">{internal < 0 ? '−' : '+'}</span>
@@ -545,6 +575,74 @@ const partialAt = recRows
               <p class="panel-note">{m.recNote}</p>
             </section>
           </div>
+        )}
+        {summary && moves && (
+          <section id="entre-pilotos" class="panel moves" aria-labelledby="moves-title">
+            <div class="panel-heading">
+              <h2 id="moves-title">{m.movesTitle}</h2>
+              <span class="meta">{selected ? m.acctPilot(selected.name) : m.periodDays(days)}</span>
+            </div>
+            <div class="panel-body">
+              {moves.moves.length === 0 ? (
+                <p class="moves-sum">{m.movesNone}</p>
+              ) : (
+                <>
+                  <p class="moves-sum">
+                    {selected
+                      ? m.movesSumPilot(moved(moves.totals.iskReceived, moves.totals.itemsReceived), moved(moves.totals.iskSent, moves.totals.itemsSent))
+                      : m.movesSumAll(moved(moves.totals.iskReceived, moves.totals.itemsReceived))}
+                  </p>
+                  {selected && <p class="panel-note">{m.movesWhere}</p>}
+                  <div class="table-scroll" role="group" aria-label={m.movesLabel} tabindex="0">
+                    <table class="moves-table">
+                      <caption class="sr-only">{m.movesLabel}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">{m.movesColDate}</th>
+                          <th scope="col">{m.movesColWho}</th>
+                          <th scope="col">{m.movesColWhat}</th>
+                          <th scope="col" class="num">ISK</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {moves.moves.map((mv) => (
+                          <tr>
+                            <td class="mv-when">{date(mv.date)}</td>
+                            <td class="mv-who">
+                              {nameOrId(mv.giver)} → {nameOrId(mv.receiver)}
+                            </td>
+                            <td class="mv-what">
+                              {m.moveKinds[mv.kind]}
+                              {mv.items === null ? (
+                                <span class="row-meta">{m.moveUnreadItems}</span>
+                              ) : (
+                                mv.items.length > 0 && (
+                                  <span class="row-meta">
+                                    {itemsText(mv.items)}
+                                    {mv.value >= 0.5 && <span title={full(mv.value)}> · {approx(fmt(mv.value))}</span>}
+                                  </span>
+                                )
+                              )}
+                              {mv.replacement && (
+                                <span class="move-tag">{m.moveReplacement(mv.replacement.ship ?? '—', mv.replacement.pilot ?? '—')}</span>
+                              )}
+                            </td>
+                            <td
+                              class="num"
+                              title={mv.isk ? `${full(mv.isk)} · ${m.moveIskDir(nameOrId(mv.iskFrom === mv.giver.id ? mv.giver : mv.receiver), nameOrId(mv.iskTo === mv.giver.id ? mv.giver : mv.receiver))}` : undefined}
+                            >
+                              {mv.isk ? fmt(iskFor(mv), { sign: !!selected }) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+              {moves.unread > 0 && <p class="panel-note">{m.movesUnread(moves.unread)}</p>}
+            </div>
+          </section>
         )}
       </>
     )
@@ -754,5 +852,99 @@ const partialAt = recRows
     .statement td {
       font-size: 13px;
     }
+  }
+  /* Between your pilots: no green/red (moving ISK isn't a net), the replacement a move belongs to as a quiet tag */
+  .moves {
+    margin-top: 20px;
+  }
+  .moves-sum {
+    margin: 0 0 6px;
+    color: var(--text-secondary);
+  }
+  .moves .table-scroll {
+    position: relative;
+    margin-top: 12px;
+    overflow-x: auto;
+  }
+  .moves-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .moves-table th,
+  .moves-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: top;
+  }
+  .moves-table thead th {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .moves-table .mv-what {
+    font-weight: 500;
+    color: var(--text);
+  }
+  .moves-table .mv-what .row-meta {
+    display: block;
+    font-weight: 400;
+  }
+  .moves-table .mv-when,
+  .moves-table .num {
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+  .moves-table .num {
+    text-align: right;
+  }
+  .moves-table .mv-who,
+  .moves-table .mv-what {
+    font-family: var(--font);
+    white-space: normal;
+  }
+  .moves-table .mv-who {
+    color: var(--text-secondary);
+  }
+  /* Phone: one block per move (date and ISK on top, who and what below) instead of a table wider than the screen */
+  @media (max-width: 600px) {
+    .moves-table thead {
+      display: none;
+    }
+    .moves-table tr {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      column-gap: 12px;
+      row-gap: 2px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .moves-table td {
+      padding: 0;
+      border: 0;
+    }
+    .moves-table .mv-when {
+      color: var(--text-muted);
+    }
+    .moves-table .num {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .moves-table .mv-who,
+    .moves-table .mv-what {
+      grid-column: 1 / -1;
+    }
+  }
+  .move-tag {
+    display: block;
+    width: fit-content;
+    margin-top: 4px;
+    padding: 1px 7px;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
   }
 </style>
