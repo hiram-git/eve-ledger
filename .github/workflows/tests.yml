@@ -9,7 +9,9 @@ on:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    # shortcut: pinned because ubuntu-latest moved to 26.04, which Playwright 1.56.1 can't install Chromium on;
+    # move it forward together with Playwright when the pinned version supports the newer image
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
